@@ -151,6 +151,8 @@ interface Ctx {
   setTools: (t: ToolStatus) => void
   /** Run a backend call that may reject; shows an error toast and returns undefined on failure. */
   attempt: <T>(p: Promise<T>) => Promise<T | undefined>
+  /** Copy text to the clipboard; the toast says whether it worked. */
+  copy: (text: string, done: string) => Promise<void>
   /** Install or update yt-dlp, reporting the outcome with a toast. */
   updateYtdlp: () => Promise<UpdateResult>
   setUpdateAvailable: (i: UpdateInfo | null) => void
@@ -231,6 +233,18 @@ export function AppProvider({children}: {children: ReactNode}) {
     [toast],
   )
 
+  const copy = useCallback(
+    async (text: string, done: string) => {
+      try {
+        await api.copyText(text)
+        toast('success', done)
+      } catch (e) {
+        toast('error', `Couldn't copy to the clipboard: ${errMessage(e)}`)
+      }
+    },
+    [toast],
+  )
+
   const updateYtdlp = useCallback(async (): Promise<UpdateResult> => {
     dispatch({type: 'toolProgress', p: {done: 0, total: 0}})
     try {
@@ -261,10 +275,11 @@ export function AppProvider({children}: {children: ReactNode}) {
       setSettings: (settings) => dispatch({type: 'settings', settings}),
       setTools: (tools) => dispatch({type: 'tools', tools}),
       attempt,
+      copy,
       updateYtdlp,
       setUpdateAvailable: (info) => dispatch({type: 'updateAvailable', info}),
     }),
-    [dispatch, toast, attempt, updateYtdlp],
+    [dispatch, toast, attempt, copy, updateYtdlp],
   )
   const ctx = useMemo<Ctx>(() => ({state, ...actions}), [state, actions])
 

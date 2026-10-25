@@ -560,6 +560,27 @@ func TestProbeToleratesFractionalNumbers(t *testing.T) {
 	}
 }
 
+func TestProbeToleratesMistypedFields(t *testing.T) {
+	// One field of an unexpected type must not lose the rest of the answer or a playlist entry.
+	res, err := ParseProbe([]byte(`{"_type":"video","id":12345,"title":"t","duration":10,
+		"thumbnails":[{"url":"https://i/a.jpg","width":1280.0}],"formats":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Video.Title != "t" || res.Video.Duration != 10 || res.Video.Thumbnail != "https://i/a.jpg" {
+		t.Fatalf("%+v", res.Video)
+	}
+	res, err = ParseProbe([]byte(`{"_type":"playlist","title":"p","entries":[
+		{"_type":"url","id":1,"title":"one","url":"https://example.com/1"},
+		{"_type":"url","id":"2","title":"two","url":"https://example.com/2"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(res.Playlist.Entries); n != 2 {
+		t.Fatalf("got %d entries, want 2", n)
+	}
+}
+
 func TestParseProbeRejectsGarbage(t *testing.T) {
 	if _, err := ParseProbe([]byte("not json")); err == nil {
 		t.Fatal("expected an error")
@@ -567,6 +588,14 @@ func TestParseProbeRejectsGarbage(t *testing.T) {
 }
 
 // ---- cookies ----
+
+func TestInspectCountsEmptyValueCookies(t *testing.T) {
+	// A cookie with an empty value ends in a tab; trimming it left six fields and skipped it.
+	data := "# Netscape HTTP Cookie File\r\n.youtube.com\tTRUE\t/\tTRUE\t0\tPREF\t\r\n"
+	if info := inspect([]byte(data), time.Unix(2_000_000_000, 0)); info.Count != 1 || info.Problem != "" {
+		t.Fatalf("%+v", info)
+	}
+}
 
 func TestInspectCookies(t *testing.T) {
 	now := time.Unix(2_000_000_000, 0)
@@ -690,6 +719,41 @@ func TestBestPremiumComesFromTheDefaultChoice(t *testing.T) {
 		}
 		if res.Video.BestPremium != want {
 			t.Errorf("%s: bestPremium = %v, want %v", res.Video.ID, res.Video.BestPremium, want)
+		}
+	}
+}
+
+func TestTagFromLocation(t *testing.T) {
+	cases := map[string]string{
+		"https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.21":                       "2026.10.21",
+		"https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/tag/2026.10.25.232749": "2026.10.25.232749",
+		"https://github.com/yt-dlp/yt-dlp/releases":                                      "",
+		"https://github.com/yt-dlp/yt-dlp/releases/tag/../../evil/x":                     "",
+		"": "",
+	}
+	for loc, want := range cases {
+		if got := tagFromLocation(loc); got != want {
+			t.Errorf("%q: got %q, want %q", loc, got, want)
+		}
+	}
+}
+
+func TestUpdateAvailable(t *testing.T) {
+	cases := []struct {
+		current, latest, channel string
+		want                     bool
+	}{
+		{"", "2026.10.21", "stable", true},
+		{"2026.09.01", "2026.10.21", "stable", true},
+		{"2026.10.21", "2026.10.21", "stable", false},
+		// Back on stable after a nightly: the nightly compares newer but stable is still on offer.
+		{"2026.10.25.232749", "2026.10.21", "stable", true},
+		{"2026.10.25.232749", "2026.10.24.101010", "nightly", false},
+		{"2026.10.21", "2026.10.25.232749", "nightly", true},
+	}
+	for _, c := range cases {
+		if got := UpdateAvailable(c.current, c.latest, c.channel); got != c.want {
+			t.Errorf("%+v: got %v", c, got)
 		}
 	}
 }

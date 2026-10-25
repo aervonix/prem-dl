@@ -1,4 +1,3 @@
-import {api} from '../api'
 import {Icon} from '../icons'
 import {useApp} from '../store'
 import type {AppError} from '../types'
@@ -22,17 +21,8 @@ export function ErrorPanel({
   onDetails?: () => void
   compact?: boolean
 }) {
-  const {go, updateYtdlp, toast, state} = useApp()
+  const {go, updateYtdlp, copy, state} = useApp()
   const updating = state.toolProgress !== null
-
-  const copy = async () => {
-    try {
-      await api.copyText(`${error.title}\n${error.message}\n\n${error.detail}`)
-      toast('success', 'Error details copied')
-    } catch {
-      toast('error', 'Could not copy to the clipboard')
-    }
-  }
 
   return (
     <div className={`errpanel${compact ? ' compact' : ''}`} role="alert">
@@ -70,8 +60,7 @@ export function ErrorPanel({
               variant="primary"
               icon="copy"
               onClick={() => {
-                void api.copyText(FFMPEG_INSTALL_CMD)
-                toast('info', `Copied “${FFMPEG_INSTALL_CMD}”. Run it in a terminal, then restart the app.`)
+                void copy(FFMPEG_INSTALL_CMD, `Copied “${FFMPEG_INSTALL_CMD}”. Run it in a terminal, then restart the app.`)
               }}>
               Copy install command
             </Button>
@@ -91,7 +80,7 @@ export function ErrorPanel({
           </Button>
         )}
         {error.detail && (
-          <Button size="sm" variant="ghost" icon="copy" onClick={() => void copy()}>
+          <Button size="sm" variant="ghost" icon="copy" onClick={() => void copy(`${error.title}\n${error.message}\n\n${error.detail}`, 'Error details copied')}>
             Copy details
           </Button>
         )}

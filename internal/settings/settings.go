@@ -122,7 +122,9 @@ var (
 	langRe      = regexp.MustCompile(`^[A-Za-z0-9_.*\-\[\]()|?+^$]+$`)
 	sponsorCats = map[string]bool{
 		"sponsor": true, "intro": true, "outro": true, "selfpromo": true, "preview": true,
-		"filler": true, "interaction": true, "music_offtopic": true, "poi_highlight": true, "chapter": true,
+		"filler": true, "interaction": true, "music_offtopic": true,
+		// poi_highlight and chapter are SponsorBlock categories too, but --sponsorblock-remove
+		// refuses them and every download would fail.
 	}
 	oneOf = func(v string, allowed ...string) bool {
 		for _, a := range allowed {

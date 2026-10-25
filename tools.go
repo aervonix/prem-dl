@@ -204,7 +204,7 @@ func (a *App) checkUpdate(ctx context.Context) UpdateInfo {
 		return info
 	}
 	info.Latest = latest
-	info.Available = info.Current == "" || ytdlp.CompareVersions(info.Current, latest) < 0
+	info.Available = ytdlp.UpdateAvailable(info.Current, latest, s.UpdateChannel)
 	_, _ = a.updateSettings(func(v *settings.Settings) { v.LastUpdateCheck = time.Now() })
 	return info
 }

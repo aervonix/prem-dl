@@ -200,6 +200,19 @@ func nodeNewEnough(ctx context.Context, path string) bool {
 
 // ---- versions, install and update ----
 
+// UpdateAvailable reports whether installing the channel's latest release would change anything.
+// A nightly or master build ends in a build time (2026.10.25.232749) and so compares newer than
+// the stable release it followed; after switching back to stable, any difference is an update.
+func UpdateAvailable(current, latest, channel string) bool {
+	if current == "" {
+		return true
+	}
+	if channel == "stable" && current != latest && len(strings.Split(current, ".")) > 3 {
+		return true
+	}
+	return CompareVersions(current, latest) < 0
+}
+
 // CompareVersions compares yt-dlp version strings such as 2026.10.21 or 2026.10.25.232749.
 // It returns -1, 0 or 1.
 func CompareVersions(a, b string) int {
@@ -310,13 +323,48 @@ func parseChecksum(sums []byte, name string) (string, bool) {
 	return "", false
 }
 
+var tagRe = regexp.MustCompile(`/releases/tag/([A-Za-z0-9._-]+)$`)
+
+// releaseBase is the download URL of the newest release, pinned to its tag. A ".../latest/download/"
+// URL is resolved on every request, so a release published between fetching the checksums and the
+// binary (nightly and master builds ship often) would make them disagree. The tag is read from the
+// redirect GitHub answers "latest" with, which isn't rate-limited like the API; if that fails the
+// unpinned URL is used.
+func releaseBase(ctx context.Context, client *http.Client, repo string) string {
+	latest := "https://github.com/" + repo + "/releases/latest/download/"
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, "https://github.com/"+repo+"/releases/latest", nil)
+	if err != nil {
+		return latest
+	}
+	req.Header.Set("User-Agent", "Prem-dl")
+	noFollow := *client
+	noFollow.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := noFollow.Do(req)
+	if err != nil {
+		return latest
+	}
+	resp.Body.Close()
+	tag := tagFromLocation(resp.Header.Get("Location"))
+	if tag == "" {
+		return latest
+	}
+	return "https://github.com/" + repo + "/releases/download/" + tag + "/"
+}
+
+func tagFromLocation(loc string) string {
+	if m := tagRe.FindStringSubmatch(loc); m != nil && !strings.Contains(m[1], "..") {
+		return m[1]
+	}
+	return ""
+}
+
 // Install downloads the newest yt-dlp for the channel to dest, verifying its SHA-256 against the
 // release's checksum file and running it once before swapping it in. A previous file at dest is
 // replaced atomically where the OS allows and restored if anything fails.
 func Install(ctx context.Context, client *http.Client, channel, dest string, progress ProgressFunc) (string, error) {
 	repo := channelRepo(channel)
 	name := assetName()
-	base := "https://github.com/" + repo + "/releases/latest/download/"
+	base := releaseBase(ctx, client, repo)
 
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return "", err

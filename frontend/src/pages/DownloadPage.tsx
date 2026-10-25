@@ -163,6 +163,10 @@ export function DownloadPage() {
         }
         setResult(res.result)
         if (res.result.kind === 'playlist' && res.result.playlist) {
+          // "Show the whole playlist" keeps the link, so a format picked for the one video would
+          // otherwise be applied to every entry (and fail where they don't have it).
+          const d = defaultsRef.current
+          if (d) setOpts((o) => (o ? forNewVideo(o, d) : o))
           setSelected(new Set(res.result.playlist.entries.filter((e) => !e.unavailable && !e.isPlaylist).map((e) => e.index)))
           setFilter('')
           setRangeFrom('')

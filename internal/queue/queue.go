@@ -334,6 +334,9 @@ func (m *Manager) Retry(id string) error {
 			j.Stage = "Waiting"
 			j.Error = nil
 			j.Percent = 0
+			j.Downloaded = 0 // the new run reports its own sizes
+			j.Total = 0
+			j.OutputFile = ""
 			j.Speed = 0
 			j.ETA = -1
 			j.Note = ""
@@ -587,6 +590,7 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, e *entry) 
 		m.finish(e, ctx, fmt.Errorf("starting yt-dlp: %w", err), nil)
 		return
 	}
+	sys.Contain(cmd)
 
 	h := &lineHandler{m: m, e: e}
 	h.tracker.Cut = job.Options.SectionStart != "" || job.Options.SectionEnd != ""

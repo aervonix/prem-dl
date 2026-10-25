@@ -127,7 +127,7 @@ function LogModal({job, onClose}: {job: Job; onClose: () => void}) {
   const [lines, setLines] = useState<string[]>([])
   const box = useRef<HTMLDivElement>(null)
   const stick = useRef(true)
-  const {toast} = useApp()
+  const {copy} = useApp()
 
   useEffect(() => {
     let alive = true
@@ -152,18 +152,13 @@ function LogModal({job, onClose}: {job: Job; onClose: () => void}) {
     if (el && stick.current) el.scrollTop = el.scrollHeight
   }, [lines])
 
-  const copy = async () => {
-    await api.copyText(`${job.url}\n\n${lines.join('\n')}`)
-    toast('success', 'Log copied')
-  }
-
   return (
     <Modal
       title={`Log: ${job.title}`}
       onClose={onClose}
       footer={
         <>
-          <Button icon="copy" onClick={() => void copy()}>
+          <Button icon="copy" onClick={() => void copy(`${job.url}\n\n${lines.join('\n')}`, 'Log copied')}>
             Copy log
           </Button>
           <Button variant="primary" onClick={onClose}>

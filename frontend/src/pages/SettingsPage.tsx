@@ -83,7 +83,7 @@ function PasteCookiesModal({onClose, onImport}: {onClose: () => void; onImport: 
 }
 
 export function SettingsPage() {
-  const {state, setSettings, toast, attempt, updateYtdlp, setTools, setUpdateAvailable} = useApp()
+  const {state, setSettings, toast, attempt, copy, updateYtdlp, setTools, setUpdateAvailable} = useApp()
   const saved = state.settings
   const [draft, setDraft] = useState<Settings | null>(saved)
   const [saving, setSaving] = useState(false)
@@ -575,8 +575,7 @@ export function SettingsPage() {
                         <span className="badge warn">Not found</span>{' '}
                         <a
                           onClick={() => {
-                            void api.copyText(FFMPEG_INSTALL_CMD)
-                            toast('info', `Copied “${FFMPEG_INSTALL_CMD}”`)
+                            void copy(FFMPEG_INSTALL_CMD, `Copied “${FFMPEG_INSTALL_CMD}”`)
                           }}>
                           copy install command
                         </a>

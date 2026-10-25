@@ -206,7 +206,16 @@ var rules = []rule{
 			Action:  ActionUpdate,
 		}
 	}),
-	r(`live event will begin|premieres in|this live event|will begin in`, func() AppError {
+	r(`live event has ended`, func() AppError {
+		return AppError{
+			Code:      "live_ended",
+			Title:     "The stream has ended",
+			Message:   "This live stream is over and no recording is available yet.",
+			Hint:      "If it was recorded, the replay usually appears a while after the stream ends. Retry later.",
+			Retryable: true,
+		}
+	}),
+	r(`live event will begin|premieres in|will begin in`, func() AppError {
 		return AppError{
 			Code:      "upcoming",
 			Title:     "Not live yet",

@@ -57,9 +57,10 @@ func inspect(data []byte, now time.Time) CookieInfo {
 
 	perDomain := map[string]int{}
 	for _, l := range lines {
-		l = strings.TrimSpace(l)
+		// Only the line ending is trimmed: a cookie with an empty value ends in a tab.
+		l = strings.TrimLeft(strings.TrimRight(l, "\r"), " ")
 		l = strings.TrimPrefix(l, "#HttpOnly_")
-		if l == "" || strings.HasPrefix(l, "#") {
+		if strings.TrimSpace(l) == "" || strings.HasPrefix(l, "#") {
 			continue
 		}
 		f := strings.Split(l, "\t")

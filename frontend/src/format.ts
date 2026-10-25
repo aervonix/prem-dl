@@ -2,7 +2,9 @@ const UNITS = ['B', 'KB', 'MB', 'GB', 'TB']
 
 export function bytes(n: number, digits = 1): string {
   if (!isFinite(n) || n <= 0) return '0 B'
-  const i = Math.min(UNITS.length - 1, Math.floor(Math.log(n) / Math.log(1024)))
+  let i = Math.min(UNITS.length - 1, Math.floor(Math.log(n) / Math.log(1024)))
+  // 1023.6 KB would print as "1024 KB"; show it as the next unit instead.
+  if (i < UNITS.length - 1 && n / Math.pow(1024, i) >= 1023.5) i++
   const v = n / Math.pow(1024, i)
   return `${v >= 100 || i === 0 ? v.toFixed(0) : v.toFixed(digits)} ${UNITS[i]}`
 }
@@ -25,9 +27,11 @@ export function duration(sec: number): string {
 /** Remaining time as a short phrase; '' when unknown (negative). */
 export function eta(sec: number): string {
   if (sec < 0 || !isFinite(sec)) return ''
-  if (sec < 60) return `${Math.max(1, Math.round(sec))}s left`
-  if (sec < 3600) return `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s left`
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m left`
+  // Round once, up front: rounding the seconds part alone gave "1m 60s" for 119.6.
+  const s = Math.max(1, Math.round(sec))
+  if (s < 60) return `${s}s left`
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s left`
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m left`
 }
 
 /** "20261021" → "21 Oct 2026" */

@@ -24,7 +24,7 @@ function Banner({tone, icon, title, children, actions}: {tone: 'warn' | 'bad' | 
 
 /** Status notices that sit above every page: missing tools, updates, interrupted downloads. */
 export function Banners() {
-  const {state, dismiss, updateYtdlp, go, toast, setUpdateAvailable} = useApp()
+  const {state, dismiss, updateYtdlp, go, copy, setUpdateAvailable} = useApp()
   const jobs = useJobs()
   const {tools, dismissed, toolProgress, updateAvailable, autoUpdated} = state
   const ready = !tools.checking
@@ -159,8 +159,7 @@ export function Banners() {
               size="sm"
               icon="copy"
               onClick={() => {
-                void api.copyText(FFMPEG_INSTALL_CMD)
-                toast('info', `Copied “${FFMPEG_INSTALL_CMD}”. Run it in a terminal, then restart the app.`)
+                void copy(FFMPEG_INSTALL_CMD, `Copied “${FFMPEG_INSTALL_CMD}”. Run it in a terminal, then restart the app.`)
               }}>
               Copy install command
             </Button>

@@ -20,6 +20,9 @@ func KillTree(pid int) {
 	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
+// Contain is a no-op here: the process group from Quiet is enough for KillTree.
+func Contain(cmd *exec.Cmd) {}
+
 func opener() string {
 	if runtime.GOOS == "darwin" {
 		return "open"

@@ -32,6 +32,17 @@ func TestClassify(t *testing.T) {
 			action: ActionCookies,
 		},
 		{
+			name:  "scheduled stream (YouTube's wording)",
+			lines: []string{"ERROR: [youtube] abcdefghijk: This live event will begin in a few moments."},
+			code:  "upcoming",
+		},
+		{
+			// "this live event" used to match this too, telling the user to wait for it to start.
+			name:  "ended stream (YouTube's wording)",
+			lines: []string{"ERROR: [youtube] abcdefghijk: This live event has ended."},
+			code:  "live_ended",
+		},
+		{
 			name:   "connection refused (observed)",
 			lines:  []string{"ERROR: [generic] 127.0.0: Unable to download webpage: HTTPConnection(host='127.0.0.1', port=1): Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it"},
 			code:   "network",

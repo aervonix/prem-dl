@@ -118,8 +118,8 @@ func NormalizeURL(raw string) (string, error) {
 }
 
 type rawThumb struct {
-	URL   string `json:"url"`
-	Width int    `json:"width"`
+	URL   string  `json:"url"`
+	Width float64 `json:"width"`
 }
 
 type rawSub struct {
@@ -182,7 +182,7 @@ func pickThumb(r *rawInfo) string {
 	if r.Thumbnail != "" {
 		return r.Thumbnail
 	}
-	best, bestW := "", 0
+	best, bestW := "", 0.0
 	for _, t := range r.Thumbnails {
 		if t.URL == "" {
 			continue
@@ -199,10 +199,22 @@ func pickThumb(r *rawInfo) string {
 	return best
 }
 
+// decodeInfo tolerates fields of an unexpected type, which vary by extractor (a numeric id, a
+// width of 1280.0): encoding/json still fills in everything else and only reports the mismatch,
+// which must not cost the whole answer.
+func decodeInfo(data []byte, r *rawInfo) error {
+	err := json.Unmarshal(data, r)
+	var te *json.UnmarshalTypeError
+	if errors.As(err, &te) {
+		return nil
+	}
+	return err
+}
+
 // ParseProbe turns the JSON printed by `yt-dlp -J --flat-playlist` into a ProbeResult.
 func ParseProbe(data []byte) (*ProbeResult, error) {
 	var raw rawInfo
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := decodeInfo(data, &raw); err != nil {
 		return nil, fmt.Errorf("couldn't read yt-dlp's answer: %w", err)
 	}
 	if raw.Type == "playlist" || raw.Type == "multi_video" || (raw.Type == "" && len(raw.Entries) > 0) {
@@ -224,7 +236,7 @@ func collectEntries(entries []json.RawMessage, group string, depth int, out *[]P
 		var r rawInfo
 		// A null entry is how yt-dlp marks an item it could not list. Unmarshalling null into a
 		// struct succeeds and leaves it zeroed, so it has to be checked for explicitly.
-		if bytes.Equal(bytes.TrimSpace(e), []byte("null")) || json.Unmarshal(e, &r) != nil {
+		if bytes.Equal(bytes.TrimSpace(e), []byte("null")) || decodeInfo(e, &r) != nil {
 			continue
 		}
 		if len(r.Entries) > 0 && depth < 3 {
@@ -366,7 +378,11 @@ func Probe(ctx context.Context, env Env, rawURL string, noPlaylist bool) (*Probe
 	cmd.Env = childEnv()
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	runErr := cmd.Run()
+	runErr := cmd.Start()
+	if runErr == nil {
+		sys.Contain(cmd)
+		runErr = cmd.Wait()
+	}
 
 	if ctx.Err() != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
