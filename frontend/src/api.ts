@@ -71,6 +71,7 @@ export const api = {
     cast<T.EnqueueResponse>(App.Enqueue(items as unknown as queue.NewJob[], opts as unknown as settings.DownloadOptions)),
   enqueueLinks: (links: string[], opts: T.DownloadOptions) =>
     cast<T.BulkResponse>(App.EnqueueLinks(links, opts as unknown as settings.DownloadOptions)),
+  cancelBulk: App.CancelBulk,
 
   pauseJob: App.PauseJob,
   resumeJob: App.ResumeJob,
@@ -112,6 +113,7 @@ export interface BackendEvents {
   'jobs:remove': string[]
   'tools:status': T.ToolStatus
   'tools:progress': {done: number; total: number}
+  'bulk:progress': {done: number; total: number}
   'tools:update-available': T.UpdateInfo
   'tools:auto-updated': T.UpdateResult
   'settings:changed': T.Settings

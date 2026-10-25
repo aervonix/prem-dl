@@ -50,6 +50,9 @@ type App struct {
 	probeMu     sync.Mutex
 	probeCancel context.CancelFunc
 
+	bulkMu     sync.Mutex
+	bulkCancel context.CancelFunc // set while EnqueueLinks runs
+
 	chromeMu     sync.Mutex
 	chromeCancel context.CancelFunc // set while GetChromeCookies waits for the user
 }
@@ -323,44 +326,123 @@ type BulkResponse struct {
 	Skipped int           `json:"skipped"`
 	Failed  []LinkFailure `json:"failed"`
 	Error   string        `json:"error"`
+	// Cancelled is set when CancelBulk stopped the run; the links not queued are in Failed.
+	Cancelled bool `json:"cancelled"`
+}
+
+// bulkWorkers is how many links a bulk add analyses at once. Each is a yt-dlp process that
+// mostly waits on the network, so a few in parallel cut the wait several times over.
+const bulkWorkers = 4
+
+// BulkProgress is sent as "bulk:progress" while a bulk add works through its links.
+type BulkProgress struct {
+	Done  int `json:"done"`
+	Total int `json:"total"`
 }
 
 // EnqueueLinks analyses each link, expands playlists in full, and queues everything. It is meant
-// for pasting a batch of links without reviewing each one.
+// for pasting a batch of links without reviewing each one. Links are analysed a few at a time and
+// queued in the order given, each as soon as it and the ones before it are ready.
 func (a *App) EnqueueLinks(links []string, opts settings.DownloadOptions) BulkResponse {
 	out := BulkResponse{Failed: []LinkFailure{}}
 	if err := settings.ValidateOptions(&opts); err != nil {
 		out.Error = err.Error()
 		return out
 	}
-	ctx := a.root
+	var clean []string
 	for _, l := range links {
-		l = strings.TrimSpace(l)
-		if l == "" {
-			continue
+		if l = strings.TrimSpace(l); l != "" {
+			clean = append(clean, l)
 		}
-		items, failed, err := a.bulkItems(ctx, l, false)
-		out.Failed = append(out.Failed, failed...)
-		if err != nil {
-			out.Failed = append(out.Failed, LinkFailure{URL: l, Error: toAppError(err)})
-			continue
+	}
+
+	ctx, cancel := context.WithCancel(a.root)
+	defer cancel()
+	a.bulkMu.Lock()
+	if a.bulkCancel != nil {
+		a.bulkCancel()
+	}
+	a.bulkCancel = cancel
+	a.bulkMu.Unlock()
+
+	type result struct {
+		items  []queue.NewJob
+		failed []LinkFailure
+		err    error
+	}
+	a.emit("bulk:progress", BulkProgress{Total: len(clean)})
+	inOrder(len(clean), bulkWorkers, func(i int) result {
+		if ctx.Err() != nil {
+			return result{err: ctx.Err()}
 		}
-		if len(items) == 0 {
-			if len(failed) == 0 {
+		items, failed, err := a.bulkItems(ctx, clean[i], false)
+		return result{items, failed, err}
+	}, func(i int, r result) {
+		defer a.emit("bulk:progress", BulkProgress{Done: i + 1, Total: len(clean)})
+		l := clean[i]
+		if ctx.Err() != nil {
+			// Cancelled: the links not yet queued stay in the box to be added later.
+			out.Cancelled = true
+			out.Failed = append(out.Failed, LinkFailure{URL: l, Error: apperr.New("cancelled", "Not added",
+				"The bulk add was cancelled before this link was queued.", "", apperr.ActionNone)})
+			return
+		}
+		out.Failed = append(out.Failed, r.failed...)
+		if r.err != nil {
+			out.Failed = append(out.Failed, LinkFailure{URL: l, Error: toAppError(r.err)})
+			return
+		}
+		if len(r.items) == 0 {
+			if len(r.failed) == 0 {
 				out.Failed = append(out.Failed, LinkFailure{URL: l, Error: apperr.New("empty", "Nothing to download",
 					"This link has no videos that can be downloaded (they may all be private or deleted).", "", apperr.ActionNone)})
 			}
-			continue
+			return
 		}
-		jobs, skipped, err := a.q.Add(items, opts)
+		jobs, skipped, err := a.q.Add(r.items, opts)
 		if err != nil {
 			out.Failed = append(out.Failed, LinkFailure{URL: l, Error: apperr.Classify(nil, err)})
-			continue
+			return
 		}
 		out.Added += len(jobs)
 		out.Skipped += skipped
-	}
+	})
 	return out
+}
+
+// CancelBulk stops a running EnqueueLinks. Links already queued stay queued.
+func (a *App) CancelBulk() {
+	a.bulkMu.Lock()
+	defer a.bulkMu.Unlock()
+	if a.bulkCancel != nil {
+		a.bulkCancel()
+		a.bulkCancel = nil
+	}
+}
+
+// inOrder runs work for inputs 0..n-1, at most limit at a time, and passes each result to use in
+// input order, as soon as it and every earlier one are done. use runs on the calling goroutine.
+func inOrder[T any](n, limit int, work func(i int) T, use func(i int, r T)) {
+	results := make([]T, n)
+	ready := make([]chan struct{}, n)
+	for i := range ready {
+		ready[i] = make(chan struct{})
+	}
+	slots := make(chan struct{}, limit)
+	go func() {
+		for i := 0; i < n; i++ {
+			slots <- struct{}{}
+			go func(i int) {
+				defer func() { <-slots }()
+				results[i] = work(i)
+				close(ready[i])
+			}(i)
+		}
+	}()
+	for i := 0; i < n; i++ {
+		<-ready[i]
+		use(i, results[i])
+	}
 }
 
 // bulkItems analyses one link and returns what to queue. Playlists listed inside it (a
@@ -383,7 +465,7 @@ func (a *App) bulkItems(ctx context.Context, link string, nested bool) (items []
 		if u == "" {
 			u = link
 		}
-		items = append(items, queue.NewJob{URL: u, Title: v.Title, Uploader: v.Uploader, Thumbnail: v.Thumbnail, Duration: v.Duration})
+		items = append(items, queue.NewJob{URL: u, Title: v.Title, Uploader: v.Uploader, Thumbnail: v.ThumbnailSmall, Duration: v.Duration})
 	case "playlist":
 		pl := res.Playlist
 		for _, e := range pl.Entries {

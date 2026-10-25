@@ -581,6 +581,29 @@ func TestProbeToleratesMistypedFields(t *testing.T) {
 	}
 }
 
+func TestThumbnailSizes(t *testing.T) {
+	// Shape of a real YouTube answer (dQw4w9WgXcQ, trimmed): "thumbnail" is the 1920px WebP,
+	// which costs megabytes per queue row once decoded.
+	res, err := ParseProbe([]byte(`{"_type":"video","id":"x","title":"t",
+		"thumbnail":"https://i/maxresdefault.webp",
+		"thumbnails":[{"url":"https://i/3.jpg"},
+			{"url":"https://i/mqdefault.jpg","width":320,"height":180},
+			{"url":"https://i/hqdefault-168.jpg","width":168},{"url":"https://i/hqdefault-246.jpg","width":246},
+			{"url":"https://i/hq720.jpg","width":1280},{"url":"https://i/maxresdefault.webp","width":1920}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := res.Video; v.Thumbnail != "https://i/hq720.jpg" || v.ThumbnailSmall != "https://i/hqdefault-246.jpg" {
+		t.Fatalf("large %q, small %q", v.Thumbnail, v.ThumbnailSmall)
+	}
+	// Nothing listed is big enough: yt-dlp's own choice beats a tiny one.
+	res, _ = ParseProbe([]byte(`{"_type":"video","id":"x","title":"t","thumbnail":"https://i/best.jpg",
+		"thumbnails":[{"url":"https://i/small.jpg","width":120}]}`))
+	if res.Video.Thumbnail != "https://i/best.jpg" {
+		t.Fatalf("fallback %q", res.Video.Thumbnail)
+	}
+}
+
 func TestParseProbeRejectsGarbage(t *testing.T) {
 	if _, err := ParseProbe([]byte("not json")); err == nil {
 		t.Fatal("expected an error")

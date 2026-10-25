@@ -42,20 +42,21 @@ type SubtitleTrack struct {
 
 // VideoInfo describes a single video.
 type VideoInfo struct {
-	ID           string          `json:"id"`
-	Title        string          `json:"title"`
-	URL          string          `json:"url"`
-	Uploader     string          `json:"uploader"`
-	Thumbnail    string          `json:"thumbnail"`
-	Duration     float64         `json:"duration"`
-	UploadDate   string          `json:"uploadDate"`
-	ViewCount    int64           `json:"viewCount"`
-	IsLive       bool            `json:"isLive"`
-	Extractor    string          `json:"extractor"`
-	Formats      []FormatInfo    `json:"formats"`
-	Heights      []int           `json:"heights"`
-	Subtitles    []SubtitleTrack `json:"subtitles"`
-	AutoCaptions []SubtitleTrack `json:"autoCaptions"`
+	ID             string          `json:"id"`
+	Title          string          `json:"title"`
+	URL            string          `json:"url"`
+	Uploader       string          `json:"uploader"`
+	Thumbnail      string          `json:"thumbnail"`
+	ThumbnailSmall string          `json:"thumbnailSmall"` // for list rows
+	Duration       float64         `json:"duration"`
+	UploadDate     string          `json:"uploadDate"`
+	ViewCount      int64           `json:"viewCount"`
+	IsLive         bool            `json:"isLive"`
+	Extractor      string          `json:"extractor"`
+	Formats        []FormatInfo    `json:"formats"`
+	Heights        []int           `json:"heights"`
+	Subtitles      []SubtitleTrack `json:"subtitles"`
+	AutoCaptions   []SubtitleTrack `json:"autoCaptions"`
 	// BestPremium is set when the default format choice, which the "Best" preset uses, picks a
 	// YouTube Premium video stream (format_note "Premium").
 	BestPremium bool `json:"bestPremium"`
@@ -177,26 +178,42 @@ func (r *rawInfo) uploader() string {
 	return r.Channel
 }
 
-// pickThumb prefers the smallest thumbnail that is still at least 240px wide.
-func pickThumb(r *rawInfo) string {
-	if r.Thumbnail != "" {
-		return r.Thumbnail
-	}
-	best, bestW := "", 0.0
+// Thumbnail widths to aim for: the review card shows one up to 360px wide, a queue or playlist
+// row 124px; both doubled for high-DPI screens.
+const (
+	thumbLarge = 640
+	thumbSmall = 240
+)
+
+// pickThumb returns the smallest thumbnail of known width that is at least minWidth wide.
+// yt-dlp's own choice (r.Thumbnail) is the largest there is, 1920px for most YouTube videos,
+// which costs megabytes of decoded image per row; it is the fallback when nothing listed is
+// big enough, and then the widest listed one, then any.
+func pickThumb(r *rawInfo, minWidth float64) string {
+	best, bestW, widest, widestW, first := "", 0.0, "", 0.0, ""
 	for _, t := range r.Thumbnails {
 		if t.URL == "" {
 			continue
 		}
-		switch {
-		case best == "":
-			best, bestW = t.URL, t.Width
-		case bestW < 240 && t.Width > bestW:
-			best, bestW = t.URL, t.Width
-		case t.Width >= 240 && t.Width < bestW:
+		if first == "" {
+			first = t.URL
+		}
+		if t.Width > widestW {
+			widest, widestW = t.URL, t.Width
+		}
+		if t.Width >= minWidth && (best == "" || t.Width < bestW) {
 			best, bestW = t.URL, t.Width
 		}
 	}
-	return best
+	switch {
+	case best != "":
+		return best
+	case r.Thumbnail != "":
+		return r.Thumbnail
+	case widest != "":
+		return widest
+	}
+	return first
 }
 
 // decodeInfo tolerates fields of an unexpected type, which vary by extractor (a numeric id, a
@@ -253,7 +270,7 @@ func collectEntries(entries []json.RawMessage, group string, depth int, out *[]P
 		}
 		entry := PlaylistEntry{
 			ID: r.ID, Title: r.Title, URL: u, Uploader: r.uploader(),
-			Thumbnail: pickThumb(&r), Duration: r.Duration, Group: group,
+			Thumbnail: pickThumb(&r, thumbSmall), Duration: r.Duration, Group: group,
 			IsPlaylist: isCollection(&r, u),
 		}
 		if entry.Title == "" {
@@ -294,7 +311,7 @@ func isCollection(r *rawInfo, link string) bool {
 
 func buildVideo(r *rawInfo) *VideoInfo {
 	v := &VideoInfo{
-		ID: r.ID, Title: r.Title, URL: r.WebpageURL, Uploader: r.uploader(), Thumbnail: pickThumb(r),
+		ID: r.ID, Title: r.Title, URL: r.WebpageURL, Uploader: r.uploader(), Thumbnail: pickThumb(r, thumbLarge), ThumbnailSmall: pickThumb(r, thumbSmall),
 		Duration: r.Duration, UploadDate: r.UploadDate, ViewCount: int64(r.ViewCount), IsLive: r.IsLive,
 		Extractor: r.Extractor,
 		Formats:   []FormatInfo{}, Heights: []int{}, Subtitles: []SubtitleTrack{}, AutoCaptions: []SubtitleTrack{},

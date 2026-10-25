@@ -144,6 +144,7 @@ export namespace main {
 	    skipped: number;
 	    failed: LinkFailure[];
 	    error: string;
+	    cancelled: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new BulkResponse(source);
@@ -155,6 +156,7 @@ export namespace main {
 	        this.skipped = source["skipped"];
 	        this.failed = this.convertValues(source["failed"], LinkFailure);
 	        this.error = source["error"];
+	        this.cancelled = source["cancelled"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -886,6 +888,7 @@ export namespace ytdlp {
 	    url: string;
 	    uploader: string;
 	    thumbnail: string;
+	    thumbnailSmall: string;
 	    duration: number;
 	    uploadDate: string;
 	    viewCount: number;
@@ -908,6 +911,7 @@ export namespace ytdlp {
 	        this.url = source["url"];
 	        this.uploader = source["uploader"];
 	        this.thumbnail = source["thumbnail"];
+	        this.thumbnailSmall = source["thumbnailSmall"];
 	        this.duration = source["duration"];
 	        this.uploadDate = source["uploadDate"];
 	        this.viewCount = source["viewCount"];

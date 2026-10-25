@@ -1,5 +1,5 @@
 import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react'
-import {api, errMessage} from '../api'
+import {api, errMessage, on} from '../api'
 import {ErrorPanel} from '../components/ErrorPanel'
 import {OptionsPanel, optionsProblem} from '../components/OptionsPanel'
 import {Thumb} from '../components/Thumb'
@@ -106,6 +106,7 @@ export function DownloadPage() {
   const [rangeFrom, setRangeFrom] = useState('')
   const [rangeTo, setRangeTo] = useState('')
   const [adding, setAdding] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<{done: number; total: number} | null>(null)
   const [clip, setClip] = useState('')
   const requestId = useRef(0)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -233,24 +234,29 @@ export function DownloadPage() {
     const problem = optionsProblem(opts)
     if (problem) return toast('error', problem)
     setAdding(true)
+    setBulkProgress({done: 0, total: links.length})
+    const off = on('bulk:progress', setBulkProgress)
     try {
       const res = await api.enqueueLinks(links, {...opts, sectionStart: '', sectionEnd: ''})
       if (res.error) return toast('error', res.error)
       if (res.added > 0) {
         toast('success', `Added ${plural(res.added, 'download')}${res.skipped ? ` (${res.skipped} already queued)` : ''}`, {label: 'View queue', run: () => go('queue')})
       }
-      if (res.failed.length > 0) {
-        const first = res.failed[0]
-        toast('error', `${plural(res.failed.length, 'link')} couldn't be added. ${hostOf(first.url)}: ${first.error.title}`)
-        // Keep only the failed links in the box so they can be fixed and retried.
-        setText(res.failed.map((f) => f.url).join('\n'))
-      } else {
-        setText('')
+      // Keep only the links that weren't queued in the box, so they can be fixed and retried.
+      setText(res.failed.map((f) => f.url).join('\n'))
+      const failed = res.failed.filter((f) => f.error.code !== 'cancelled')
+      if (res.cancelled) {
+        toast('info', `Stopped. The ${plural(res.failed.length, 'link')} not added ${res.failed.length === 1 ? 'is' : 'are'} still in the box.`)
+      } else if (failed.length > 0) {
+        const first = failed[0]
+        toast('error', `${plural(failed.length, 'link')} couldn't be added. ${hostOf(first.url)}: ${first.error.title}`)
       }
     } catch (e) {
       toast('error', errMessage(e))
     } finally {
+      off()
       setAdding(false)
+      setBulkProgress(null)
     }
   }, [adding, analyze, go, links, opts, toast])
 
@@ -306,7 +312,7 @@ export function DownloadPage() {
     let items: NewJob[] = []
     let options = opts
     if (video) {
-      items = [{url: video.url || probedUrl, title: video.title, uploader: video.uploader, thumbnail: video.thumbnail, duration: video.duration, playlistTitle: '', playlistIndex: 0, playlistCount: 0}]
+      items = [{url: video.url || probedUrl, title: video.title, uploader: video.uploader, thumbnail: video.thumbnailSmall || video.thumbnail, duration: video.duration, playlistTitle: '', playlistIndex: 0, playlistCount: 0}]
     } else if (playlist) {
       options = {...opts, sectionStart: '', sectionEnd: ''}
       items = selectedEntries.map((e) => ({
@@ -406,6 +412,17 @@ export function DownloadPage() {
         {!bulk && links.length === 1 && phase === 'idle' && <div className="hint" style={{marginTop: 8}}>Press Enter to analyze · Shift+Enter adds another link</div>}
       </Card>
 
+      {bulkProgress && (
+        <div className="row" style={{padding: '28px 4px', color: 'var(--muted)'}}>
+          <Spinner />
+          <span>
+            Checking links: {bulkProgress.done} of {bulkProgress.total} done. Each one is queued as soon as it's checked.
+          </span>
+          <Button size="sm" variant="ghost" onClick={() => void api.cancelBulk()}>
+            Cancel
+          </Button>
+        </div>
+      )}
       {phase === 'analyzing' && (
         <div className="row" style={{padding: '28px 4px', color: 'var(--muted)'}}>
           <Spinner /> <span>Reading {hostOf(probedUrl)}… large playlists and channels can take a minute.</span>

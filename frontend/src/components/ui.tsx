@@ -144,7 +144,7 @@ export function Progress({percent, state, label}: {percent: number; state?: 'bus
   const cls = ['progress', state && state !== 'active' ? state : '', unknown ? 'indeterminate' : ''].join(' ').trim()
   return (
     <div className={cls} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={unknown ? undefined : Math.round(percent)}>
-      <i style={{width: unknown ? undefined : `${Math.min(100, Math.max(0, percent))}%`}} />
+      <i style={unknown ? undefined : {transform: `scaleX(${Math.min(100, Math.max(0, percent)) / 100})`}} />
     </div>
   )
 }

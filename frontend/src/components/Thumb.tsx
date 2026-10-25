@@ -8,7 +8,7 @@ export function Thumb({src, seconds, className, style}: {src?: string; seconds?:
   useEffect(() => setFailed(false), [src])
   return (
     <div className={className ?? 'thumb'} style={style}>
-      {src && !failed ? <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} /> : <Icon name="film" size={28} />}
+      {src && !failed ? <img src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} /> : <Icon name="film" size={28} />}
       {seconds ? <span className="dur">{duration(seconds)}</span> : null}
     </div>
   )

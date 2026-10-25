@@ -5,6 +5,8 @@ import {queue} from '../models';
 import {settings} from '../models';
 import {ytdlp} from '../models';
 
+export function CancelBulk():Promise<void>;
+
 export function CancelChromeCookies():Promise<void>;
 
 export function CancelJob(arg1:string):Promise<void>;

@@ -181,6 +181,8 @@ export interface VideoInfo {
   url: string
   uploader: string
   thumbnail: string
+  /** A smaller picture for list rows (the queue). */
+  thumbnailSmall: string
   duration: number
   uploadDate: string
   viewCount: number
@@ -244,6 +246,7 @@ export interface BulkResponse {
   skipped: number
   failed: LinkFailure[]
   error: string
+  cancelled: boolean
 }
 
 export interface SettingsResponse {

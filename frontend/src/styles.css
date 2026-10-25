@@ -755,11 +755,14 @@ input[type='checkbox'] {
   overflow: hidden;
   position: relative;
 }
+/* The fill is scaled, not resized: transform animates on the compositor without re-laying
+   out the page on every frame. */
 .progress > i {
   position: absolute;
-  inset: 0 auto 0 0;
+  inset: 0;
   background: var(--accent);
-  transition: width 0.25s linear;
+  transform-origin: left;
+  transition: transform 0.25s linear;
 }
 .progress.done > i {
   background: var(--ok);
@@ -774,16 +777,18 @@ input[type='checkbox'] {
   background: var(--muted);
 }
 .progress.indeterminate > i {
-  width: 35% !important;
+  right: auto;
+  width: 35%;
   animation: slide 1.2s ease-in-out infinite;
   transition: none;
 }
+/* Percentages are of the 35%-wide fill: -100% starts just off the left edge, 286% ends past the right. */
 @keyframes slide {
   from {
-    left: -35%;
+    transform: translateX(-100%);
   }
   to {
-    left: 100%;
+    transform: translateX(286%);
   }
 }
 
@@ -1095,6 +1100,9 @@ input[type='checkbox'] {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   align-items: center;
+  /* Off-screen rows skip layout and paint; a long queue scrolls like a short one. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 96px;
 }
 .job + .job {
   margin-top: 8px;
