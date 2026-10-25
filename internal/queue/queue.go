@@ -150,6 +150,7 @@ type Manager struct {
 	nextSave time.Time
 	noSave   bool
 	saveGen  int64 // snapshots taken
+	held     bool  // nothing new starts (yt-dlp is being replaced); see Hold
 
 	// saveMu serialises writes to queue.json, which happen without mu held. savedGen is the
 	// snapshot on disk, so an older one finishing late can't replace a newer one.
@@ -454,6 +455,29 @@ func (m *Manager) ActiveCount() int {
 	return n
 }
 
+// Hold stops new downloads from starting, and reports how many are running, which a caller
+// that needs none (replacing the yt-dlp binary) must wait for or refuse. Release resumes
+// scheduling.
+func (m *Manager) Hold() (active int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.held = true
+	for _, e := range m.entries {
+		if e.job.Status.active() {
+			active++
+		}
+	}
+	return active
+}
+
+// Release undoes Hold and starts whatever has queued up meanwhile.
+func (m *Manager) Release() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.held = false
+	m.scheduleLocked()
+}
+
 // Kick re-evaluates the schedule, e.g. after the concurrency setting changed.
 func (m *Manager) Kick() {
 	m.mu.Lock()
@@ -496,7 +520,7 @@ var (
 // ---- scheduling and running ----
 
 func (m *Manager) scheduleLocked() {
-	if m.ctx.Err() != nil {
+	if m.ctx.Err() != nil || m.held {
 		return
 	}
 	limit := m.deps.Settings().MaxConcurrent
@@ -617,6 +641,11 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, e *entry) 
 	rw.Wait()
 	close(readersDone)
 	waitErr := cmd.Wait()
+	if cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		// yt-dlp exited 0 just before a pause or cancel killed it. Wait still reports the
+		// cancelled context, but the file is complete.
+		waitErr = nil
+	}
 
 	m.finish(e, ctx, waitErr, h)
 }

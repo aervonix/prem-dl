@@ -216,7 +216,11 @@ func (a *App) installOrUpdate(ctx context.Context) UpdateResult {
 	}
 	defer a.updating.Store(false)
 
-	if n := a.q.ActiveCount(); n > 0 {
+	// Nothing new may start while the binary is swapped: a run starting between the renames
+	// would find no yt-dlp, and one holding the old file open would leave it behind.
+	n := a.q.Hold()
+	defer a.q.Release()
+	if n > 0 {
 		return UpdateResult{Error: apperr.New("busy", "Downloads are running",
 			fmt.Sprintf("%d download(s) are using yt-dlp, which can't be replaced while it runs.", n),
 			"Pause or finish the active downloads, then update.", apperr.ActionNone)}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -59,6 +60,15 @@ func fakeYtdlp(url string) {
 			p(`YTGUI_P {"status":"downloading","downloaded_bytes":1,"total_bytes":10,"filename":"l.mp4"}`)
 		}
 		p("YTGUI_FILE\t" + filepath.Join(os.TempDir(), "long.mp4"))
+	case strings.HasSuffix(url, "/exit0"):
+		// Succeeds at once, but a child keeps the output pipes open for a while, so the run is
+		// still "downloading" after yt-dlp itself has exited 0.
+		p(`YTGUI_P {"status":"downloading","downloaded_bytes":1,"total_bytes":10,"filename":"e.mp4"}`)
+		child := exec.Command(os.Args[0], "https://fake.test/hold")
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		_ = child.Start()
+	case strings.HasSuffix(url, "/hold"):
+		time.Sleep(1500 * time.Millisecond)
 	case strings.HasSuffix(url, "/already"):
 		p("[download] " + filepath.Join(os.TempDir(), "old.mp4") + " has already been downloaded")
 	case strings.HasSuffix(url, "/slow"):
@@ -521,6 +531,35 @@ func TestRemovalIsEmittedAfterPendingUpdates(t *testing.T) {
 	if last := order[len(order)-1]; last != "remove:"+id {
 		t.Errorf("an update arrived after the removal, which would recreate the row: %v", order)
 	}
+}
+
+func TestPauseAfterYtdlpExitedStillCompletes(t *testing.T) {
+	// cmd.Wait reports the cancelled context even when the process had already exited 0.
+	h := newHarness(t, 1)
+	j := h.add(t, "/exit0")
+	waitFor(t, "download", func() bool { return h.status(j.ID) == StatusDownloading })
+	time.Sleep(300 * time.Millisecond) // yt-dlp has exited; its child still holds the pipes
+	if err := h.m.Pause(j.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the run to end", func() bool { return !h.status(j.ID).active() })
+	if st := h.status(j.ID); st != StatusCompleted {
+		t.Fatalf("a download that exited 0 must count as completed, was %s", st)
+	}
+}
+
+func TestHoldKeepsNewJobsWaiting(t *testing.T) {
+	h := newHarness(t, 2)
+	if n := h.m.Hold(); n != 0 {
+		t.Fatalf("active = %d", n)
+	}
+	j := h.add(t, "/ok")
+	time.Sleep(300 * time.Millisecond)
+	if st := h.status(j.ID); st != StatusQueued {
+		t.Fatalf("nothing may start while held, was %s", st)
+	}
+	h.m.Release()
+	waitFor(t, "completion after release", func() bool { return h.status(j.ID) == StatusCompleted })
 }
 
 func TestFinishingAsPauseArrivesStillCompletes(t *testing.T) {
