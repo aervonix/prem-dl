@@ -34,7 +34,12 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
 
 ## Getting started
 
-1. Get `Prem-dl.exe` by building it (see below) and put it in a folder of its own.
+1. Download `Prem-dl.exe` from the [latest release](https://github.com/aervonix/prem-dl/releases/latest)
+   and put it in a folder of its own. (Or build it yourself, see below.)
+
+   The exe isn't code-signed, so Windows SmartScreen may say it's from an unknown publisher the
+   first time. Click **More info**, then **Run anyway**. The release notes list its SHA-256 if you
+   want to check the file first.
 2. Start it. If yt-dlp isn't found, the app offers to download it for you. You can also drop
    `yt-dlp.exe` next to `Prem-dl.exe` yourself.
 3. Install ffmpeg if you don't have it. Without it, video and audio can't be merged, so you'd
