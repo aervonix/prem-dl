@@ -54,6 +54,8 @@ type DownloadOptions struct {
 	OutputDir         string `json:"outputDir"` // "" uses Settings.DownloadDir
 	PlaylistFolder    bool   `json:"playlistFolder"`
 	PlaylistNumbering bool   `json:"playlistNumbering"`
+	// IgnoreArchive downloads the video even when the download archive lists it.
+	IgnoreArchive bool `json:"ignoreArchive"`
 }
 
 // Cookies describes where yt-dlp should read login cookies from.

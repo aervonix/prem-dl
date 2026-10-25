@@ -111,6 +111,22 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ArchiveInfo {
+	    path: string;
+	    count: number;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ArchiveInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.count = source["count"];
+	        this.error = source["error"];
+	    }
+	}
 	export class LinkFailure {
 	    url: string;
 	    error?: apperr.AppError;
@@ -552,6 +568,7 @@ export namespace settings {
 	    outputDir: string;
 	    playlistFolder: boolean;
 	    playlistNumbering: boolean;
+	    ignoreArchive: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new DownloadOptions(source);
@@ -577,6 +594,7 @@ export namespace settings {
 	        this.outputDir = source["outputDir"];
 	        this.playlistFolder = source["playlistFolder"];
 	        this.playlistNumbering = source["playlistNumbering"];
+	        this.ignoreArchive = source["ignoreArchive"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

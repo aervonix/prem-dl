@@ -17,6 +17,8 @@ export function CheckUpdate():Promise<main.UpdateInfo>;
 
 export function ChromeHelperSetup():Promise<main.ChromeHelperInfo>;
 
+export function ClearArchive():Promise<main.ArchiveInfo>;
+
 export function ClearFinished(arg1:boolean):Promise<Array<string>>;
 
 export function CopyText(arg1:string):Promise<void>;
@@ -24,6 +26,8 @@ export function CopyText(arg1:string):Promise<void>;
 export function Enqueue(arg1:Array<queue.NewJob>,arg2:settings.DownloadOptions):Promise<main.EnqueueResponse>;
 
 export function EnqueueLinks(arg1:Array<string>,arg2:settings.DownloadOptions):Promise<main.BulkResponse>;
+
+export function GetArchiveInfo():Promise<main.ArchiveInfo>;
 
 export function GetChromeCookies():Promise<main.CookieResponse>;
 
@@ -76,6 +80,8 @@ export function ResumeJob(arg1:string):Promise<void>;
 export function RetryFailed():Promise<number>;
 
 export function RetryJob(arg1:string):Promise<void>;
+
+export function RevealArchive():Promise<void>;
 
 export function RevealFile(arg1:string):Promise<void>;
 

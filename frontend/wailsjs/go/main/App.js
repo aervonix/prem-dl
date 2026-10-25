@@ -26,6 +26,10 @@ export function ChromeHelperSetup() {
   return window['go']['main']['App']['ChromeHelperSetup']();
 }
 
+export function ClearArchive() {
+  return window['go']['main']['App']['ClearArchive']();
+}
+
 export function ClearFinished(arg1) {
   return window['go']['main']['App']['ClearFinished'](arg1);
 }
@@ -40,6 +44,10 @@ export function Enqueue(arg1, arg2) {
 
 export function EnqueueLinks(arg1, arg2) {
   return window['go']['main']['App']['EnqueueLinks'](arg1, arg2);
+}
+
+export function GetArchiveInfo() {
+  return window['go']['main']['App']['GetArchiveInfo']();
 }
 
 export function GetChromeCookies() {
@@ -144,6 +152,10 @@ export function RetryFailed() {
 
 export function RetryJob(arg1) {
   return window['go']['main']['App']['RetryJob'](arg1);
+}
+
+export function RevealArchive() {
+  return window['go']['main']['App']['RevealArchive']();
 }
 
 export function RevealFile(arg1) {

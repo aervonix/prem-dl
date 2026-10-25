@@ -47,12 +47,13 @@ function isVideoInPlaylist(link: string): boolean {
 }
 
 /**
- * Drops choices that belong to the video they were made on: a time range, and a format picked
- * from its list ("custom" is only offered once a video is analysed, so it never makes a default).
+ * Drops choices that belong to the video they were made on: a time range, "download again", and
+ * a format picked from its list ("custom" is only offered once a video is analysed, so it never
+ * makes a default).
  */
 function forNewVideo(o: DownloadOptions, defaults: DownloadOptions): DownloadOptions {
   const fallback = defaults.preset === 'custom' ? {preset: 'best' as const, formatId: ''} : {preset: defaults.preset, formatId: defaults.formatId}
-  return {...o, sectionStart: '', sectionEnd: '', ...(o.preset === 'custom' ? fallback : {})}
+  return {...o, sectionStart: '', sectionEnd: '', ignoreArchive: false, ...(o.preset === 'custom' ? fallback : {})}
 }
 
 const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}: {entry: PlaylistEntry; checked: boolean; onToggle: (index: number) => void; onOpen: (url: string) => void}) {
@@ -468,7 +469,7 @@ export function DownloadPage() {
 
       {bulk && opts && phase !== 'analyzing' && (
         <Card title={`${links.length} links`} sub="Each link is checked and queued. Playlists are expanded and queued in full. Use the options below for all of them.">
-          <OptionsPanel value={opts} onChange={setOpts} playlist mode="download" />
+          <OptionsPanel value={opts} onChange={setOpts} playlist mode="download" archiveOn={settings?.useArchive} />
           <div className="divider" />
           <Button variant="ghost" icon="save" onClick={() => void saveAsDefaults()}>
             Save these options as my defaults
@@ -575,7 +576,7 @@ export function DownloadPage() {
           )}
 
           <Card title="Options">
-            <OptionsPanel value={opts} onChange={setOpts} video={video} playlist={!!playlist} mode="download" />
+            <OptionsPanel value={opts} onChange={setOpts} video={video} playlist={!!playlist} mode="download" archiveOn={settings?.useArchive} />
             <div className="divider" />
             <Button variant="ghost" icon="save" onClick={() => void saveAsDefaults()}>
               Save these options as my defaults

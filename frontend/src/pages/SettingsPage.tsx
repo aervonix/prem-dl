@@ -7,7 +7,7 @@ import {Button, Card, Field, Modal, Progress, Switch} from '../components/ui'
 import {bytes, plural} from '../format'
 import {Icon} from '../icons'
 import {useApp} from '../store'
-import type {CookieInfo, CookieTest, Settings, UpdateInfo} from '../types'
+import type {ArchiveInfo, CookieInfo, CookieTest, Settings, UpdateInfo} from '../types'
 
 const SECTIONS = [
   {id: 'general', label: 'General'},
@@ -48,6 +48,54 @@ const SOURCE_LABEL: Record<string, string> = {
 }
 
 const COOKIE_FAQ = 'https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp'
+
+/** How many videos "Remember downloaded videos" knows, with the file and a way to forget them. */
+function ArchiveRow() {
+  const {state, toast} = useApp()
+  const [info, setInfo] = useState<ArchiveInfo | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  // Downloads add to it, so it's read again whenever Settings is opened.
+  const visible = state.page === 'settings'
+  useEffect(() => {
+    if (visible) api.getArchiveInfo().then(setInfo).catch(() => setInfo(null))
+  }, [visible])
+  useEffect(() => {
+    if (!confirming) return
+    const t = window.setTimeout(() => setConfirming(false), 4000)
+    return () => window.clearTimeout(t)
+  }, [confirming])
+  if (!info) return null
+
+  const clear = async () => {
+    if (!confirming) return setConfirming(true)
+    setConfirming(false)
+    try {
+      const res = await api.clearArchive()
+      setInfo(res)
+      if (res.error) toast('error', res.error)
+      else toast('success', 'Forgot every downloaded video. They can all be downloaded again.')
+    } catch (e) {
+      toast('error', errMessage(e))
+    }
+  }
+  return (
+    <div className="hint" style={{marginTop: 10}}>
+      {info.count === 0 ? 'No videos remembered yet.' : `${plural(info.count, 'video')} remembered.`}
+      {info.count > 0 && (
+        <>
+          {' '}
+          <button type="button" className="link" onClick={() => api.revealArchive().catch((e) => toast('error', errMessage(e)))}>
+            Show file
+          </button>
+          {' · '}
+          <button type="button" className="link" onClick={() => void clear()}>
+            {confirming ? 'Click again to forget them all' : 'Clear'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
 
 function PasteCookiesModal({onClose, onImport}: {onClose: () => void; onImport: (text: string) => Promise<boolean>}) {
   const [text, setText] = useState('')
@@ -319,6 +367,7 @@ export function SettingsPage() {
                     description="Skips videos you've already downloaded, even if you moved or deleted the file. Handy for re-running a playlist."
                   />
                 </div>
+                {draft.useArchive && <ArchiveRow />}
                 <div className="grid2">
                   <Switch
                     checked={draft.notifyPopup}

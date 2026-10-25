@@ -49,12 +49,15 @@ export function OptionsPanel({
   video,
   playlist,
   mode,
+  archiveOn,
 }: {
   value: DownloadOptions
   onChange: (v: DownloadOptions) => void
   video?: VideoInfo | null
   playlist?: boolean
   mode: 'download' | 'defaults'
+  /** "Remember downloaded videos" is on, so this download can choose to ignore it. */
+  archiveOn?: boolean
 }) {
   const set = <K extends keyof DownloadOptions>(k: K, v: DownloadOptions[K]) => onChange({...value, [k]: v})
   const [extrasOpen, setExtrasOpen] = useState(mode === 'defaults')
@@ -399,6 +402,14 @@ export function OptionsPanel({
                   )}
                 </div>
               </Field>
+            )}
+            {mode === 'download' && archiveOn && (
+              <Switch
+                checked={value.ignoreArchive}
+                onChange={(v) => set('ignoreArchive', v)}
+                label="Download again even if already downloaded"
+                description="“Remember downloaded videos” is on, so videos downloaded before are skipped. This downloads them anyway."
+              />
             )}
           </div>
         )}

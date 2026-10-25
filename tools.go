@@ -176,7 +176,7 @@ func (a *App) buildEnv(ctx context.Context) (ytdlp.Env, func(), error) {
 		env.FFmpeg = tools.FFmpeg.Path
 	}
 	if s.UseArchive {
-		env.ArchiveFile = filepath.Join(a.dataDir, "archive.txt")
+		env.ArchiveFile = a.archivePath()
 	}
 	cleanup := func() {}
 	if s.Cookies.Mode == "file" {

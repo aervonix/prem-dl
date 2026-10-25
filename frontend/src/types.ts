@@ -41,6 +41,8 @@ export interface DownloadOptions {
   outputDir: string
   playlistFolder: boolean
   playlistNumbering: boolean
+  /** Download even when the download archive lists the video. */
+  ignoreArchive: boolean
 }
 
 export interface Cookies {
@@ -315,4 +317,11 @@ export interface UpdateResult {
   path: string
   message: string
   error: AppError | null
+}
+
+export interface ArchiveInfo {
+  path: string
+  /** Videos the download archive lists. */
+  count: number
+  error: string
 }

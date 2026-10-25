@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -555,6 +556,60 @@ func (a *App) OpenDownloadFolder() error {
 
 // OpenDataFolder opens the folder holding settings and the queue file.
 func (a *App) OpenDataFolder() error { return sys.Open(a.dataDir) }
+
+// ---- download archive ----
+
+func (a *App) archivePath() string { return filepath.Join(a.dataDir, "archive.txt") }
+
+// ArchiveInfo describes the download archive behind "Remember downloaded videos".
+type ArchiveInfo struct {
+	Path  string `json:"path"`
+	Count int    `json:"count"` // videos it lists
+	Error string `json:"error"`
+}
+
+// GetArchiveInfo counts the videos in the download archive (one "extractor id" per line).
+func (a *App) GetArchiveInfo() ArchiveInfo {
+	info := ArchiveInfo{Path: a.archivePath()}
+	raw, err := settings.ReadFileRetry(info.Path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		info.Error = err.Error()
+	default:
+		for _, l := range strings.Split(string(raw), "\n") {
+			if strings.TrimSpace(l) != "" {
+				info.Count++
+			}
+		}
+	}
+	return info
+}
+
+// ClearArchive forgets every downloaded video, so they can all be downloaded again. Downloads
+// already running keep their own handle on the file, so it is refused while any run.
+func (a *App) ClearArchive() ArchiveInfo {
+	if n := a.q.ActiveCount(); n > 0 {
+		info := a.GetArchiveInfo()
+		info.Error = "Downloads are running. Pause or finish them first, then clear the list."
+		return info
+	}
+	if err := os.Remove(a.archivePath()); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		info := a.GetArchiveInfo()
+		info.Error = err.Error()
+		return info
+	}
+	return a.GetArchiveInfo()
+}
+
+// RevealArchive shows the archive file in Explorer.
+func (a *App) RevealArchive() error {
+	p := a.archivePath()
+	if _, err := os.Stat(p); err != nil {
+		return errors.New("no videos have been remembered yet")
+	}
+	return sys.Reveal(p)
+}
 
 // ready reports whether Wails has handed us its runtime context. The wails runtime helpers call
 // log.Fatal when given a bad context — which would kill the whole app — so every method that

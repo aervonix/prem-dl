@@ -150,7 +150,7 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 		"--retries="+strconv.Itoa(s.Retries),
 		"--fragment-retries="+strconv.Itoa(s.Retries),
 	)
-	if s.UseArchive && e.ArchiveFile != "" {
+	if s.UseArchive && e.ArchiveFile != "" && !o.IgnoreArchive {
 		a = append(a, "--download-archive="+e.ArchiveFile)
 	}
 

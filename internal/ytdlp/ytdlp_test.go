@@ -254,6 +254,22 @@ func TestNoThumbnailEmbedInWebM(t *testing.T) {
 	}
 }
 
+func TestIgnoreArchive(t *testing.T) {
+	e := testEnv()
+	e.Settings.UseArchive = true
+	e.ArchiveFile = `C:\data\archive.txt`
+	o := e.Settings.Defaults
+	if !has(e.DownloadArgs(o, Target{URL: "https://example.com/v"}), `--download-archive=C:\data\archive.txt`) {
+		t.Fatal("the archive should be used when remembering downloads")
+	}
+	o.IgnoreArchive = true
+	for _, a := range e.DownloadArgs(o, Target{URL: "https://example.com/v"}) {
+		if strings.HasPrefix(a, "--download-archive") {
+			t.Fatalf("\"download again\" must not pass the archive: %s", a)
+		}
+	}
+}
+
 func TestChaptersOffWithMetadataOn(t *testing.T) {
 	// --embed-metadata embeds chapters (and an .info.json) by itself unless told not to.
 	e := testEnv()
