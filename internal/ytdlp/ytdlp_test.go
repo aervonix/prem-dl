@@ -254,6 +254,35 @@ func TestNoThumbnailEmbedInWebM(t *testing.T) {
 	}
 }
 
+func TestMoreDownloadOptions(t *testing.T) {
+	e := testEnv()
+	o := e.Settings.Defaults
+	target := Target{URL: "https://example.com/v"}
+	o.SponsorBlock = []string{"sponsor", "intro"}
+	if args := e.DownloadArgs(o, target); !has(args, "--sponsorblock-remove=sponsor,intro") {
+		t.Errorf("cutting is the default: %v", args)
+	}
+	o.SponsorBlockMark = true
+	if args := e.DownloadArgs(o, target); !has(args, "--sponsorblock-mark=sponsor,intro") || has(args, "--sponsorblock-remove=sponsor,intro") {
+		t.Errorf("marking replaces cutting: %v", args)
+	}
+
+	o.SplitChapters, o.LiveFromStart = true, true
+	args := e.DownloadArgs(o, Target{URL: "https://example.com/v", PlaylistTitle: "My: List", PlaylistIndex: 2, PlaylistCount: 9})
+	if !has(args, "--split-chapters") || !has(args, "--output=chapter:My_ List/%(title)s [%(id)s]/%(section_number)02d - %(section_title)s.%(ext)s") {
+		t.Errorf("chapters go into a folder per video inside the playlist folder: %v", args)
+	}
+	if !has(args, "--live-from-start") {
+		t.Error("--live-from-start missing")
+	}
+
+	e.Settings.SleepRequests, e.Settings.SleepInterval = 1.5, 10
+	args = e.DownloadArgs(e.Settings.Defaults, target)
+	if !has(args, "--sleep-requests=1.5") || !has(args, "--sleep-interval=10") {
+		t.Errorf("sleep flags: %v", args)
+	}
+}
+
 func TestIgnoreArchive(t *testing.T) {
 	e := testEnv()
 	e.Settings.UseArchive = true

@@ -53,7 +53,7 @@ function isVideoInPlaylist(link: string): boolean {
  */
 function forNewVideo(o: DownloadOptions, defaults: DownloadOptions): DownloadOptions {
   const fallback = defaults.preset === 'custom' ? {preset: 'best' as const, formatId: ''} : {preset: defaults.preset, formatId: defaults.formatId}
-  return {...o, sectionStart: '', sectionEnd: '', ignoreArchive: false, ...(o.preset === 'custom' ? fallback : {})}
+  return {...o, sectionStart: '', sectionEnd: '', ignoreArchive: false, liveFromStart: false, ...(o.preset === 'custom' ? fallback : {})}
 }
 
 const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}: {entry: PlaylistEntry; checked: boolean; onToggle: (index: number) => void; onOpen: (url: string) => void}) {

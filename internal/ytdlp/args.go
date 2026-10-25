@@ -129,7 +129,17 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 		a = append(a, "--write-info-json")
 	}
 	if len(o.SponsorBlock) > 0 {
-		a = append(a, "--sponsorblock-remove="+strings.Join(o.SponsorBlock, ","))
+		if o.SponsorBlockMark {
+			a = append(a, "--sponsorblock-mark="+strings.Join(o.SponsorBlock, ","))
+		} else {
+			a = append(a, "--sponsorblock-remove="+strings.Join(o.SponsorBlock, ","))
+		}
+	}
+	if o.SplitChapters {
+		a = append(a, "--split-chapters", "--output=chapter:"+ChapterTemplate(o, t))
+	}
+	if o.LiveFromStart {
+		a = append(a, "--live-from-start")
 	}
 	if o.SectionStart != "" || o.SectionEnd != "" {
 		start, end := o.SectionStart, o.SectionEnd
@@ -150,6 +160,12 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 		"--retries="+strconv.Itoa(s.Retries),
 		"--fragment-retries="+strconv.Itoa(s.Retries),
 	)
+	if s.SleepRequests > 0 {
+		a = append(a, "--sleep-requests="+strconv.FormatFloat(s.SleepRequests, 'f', -1, 64))
+	}
+	if s.SleepInterval > 0 {
+		a = append(a, "--sleep-interval="+strconv.FormatFloat(s.SleepInterval, 'f', -1, 64))
+	}
 	if s.UseArchive && e.ArchiveFile != "" && !o.IgnoreArchive {
 		a = append(a, "--download-archive="+e.ArchiveFile)
 	}
@@ -252,6 +268,16 @@ func OutputTemplate(base string, o settings.DownloadOptions, t Target) string {
 		prefix += fmt.Sprintf("%0*d - ", width, t.PlaylistIndex)
 	}
 	return prefix + base
+}
+
+// ChapterTemplate names the files --split-chapters writes: a folder named like the video (inside
+// the playlist folder, if any) holding "01 - Chapter title.ext" files.
+func ChapterTemplate(o settings.DownloadOptions, t Target) string {
+	prefix := ""
+	if t.PlaylistTitle != "" && o.PlaylistFolder {
+		prefix = sanitizeSegment(t.PlaylistTitle) + "/"
+	}
+	return prefix + "%(title)s [%(id)s]/%(section_number)02d - %(section_title)s.%(ext)s"
 }
 
 var reservedNames = map[string]bool{

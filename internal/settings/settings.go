@@ -56,6 +56,12 @@ type DownloadOptions struct {
 	PlaylistNumbering bool   `json:"playlistNumbering"`
 	// IgnoreArchive downloads the video even when the download archive lists it.
 	IgnoreArchive bool `json:"ignoreArchive"`
+	// SponsorBlockMark marks the SponsorBlock segments as chapters instead of cutting them out.
+	SponsorBlockMark bool `json:"sponsorBlockMark"`
+	// SplitChapters also saves each chapter as its own file, in a folder named after the video.
+	SplitChapters bool `json:"splitChapters"`
+	// LiveFromStart records a live stream from its beginning rather than from now.
+	LiveFromStart bool `json:"liveFromStart"`
 }
 
 // Cookies describes where yt-dlp should read login cookies from.
@@ -75,8 +81,10 @@ type Settings struct {
 	RateLimit           string          `json:"rateLimit"` // e.g. 2M, 500K; empty = unlimited
 	Proxy               string          `json:"proxy"`
 	Retries             int             `json:"retries"`
-	AutoRetry           bool            `json:"autoRetry"`  // retry downloads that failed with a passing problem
-	UseArchive          bool            `json:"useArchive"` // skip videos already downloaded before
+	AutoRetry           bool            `json:"autoRetry"`     // retry downloads that failed with a passing problem
+	SleepRequests       float64         `json:"sleepRequests"` // seconds between requests while a download reads the site
+	SleepInterval       float64         `json:"sleepInterval"` // seconds to wait before each download starts
+	UseArchive          bool            `json:"useArchive"`    // skip videos already downloaded before
 	Cookies             Cookies         `json:"cookies"`
 	AutoUpdate          bool            `json:"autoUpdate"`
 	UpdateChannel       string          `json:"updateChannel"` // stable | nightly | master
@@ -239,6 +247,9 @@ func (s *Settings) Validate() error {
 	}
 	if s.Retries < 0 || s.Retries > 50 {
 		return errors.New("retries must be between 0 and 50")
+	}
+	if s.SleepRequests < 0 || s.SleepRequests > 300 || s.SleepInterval < 0 || s.SleepInterval > 3600 {
+		return errors.New("pauses must be between 0 and 300 seconds between requests, and 0 and 3600 before a download")
 	}
 	s.RateLimit = strings.TrimSpace(s.RateLimit)
 	if s.RateLimit != "" && !rateLimitRe.MatchString(s.RateLimit) {

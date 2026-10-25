@@ -340,9 +340,41 @@ export function OptionsPanel({
                   </Chip>
                 ))}
               </div>
+              {value.sponsorBlock.length > 0 && (
+                <div style={{marginTop: 8}}>
+                  <Segmented
+                    label="What to do with them"
+                    value={value.sponsorBlockMark ? 'mark' : 'cut'}
+                    onChange={(v) => set('sponsorBlockMark', v === 'mark')}
+                    options={[
+                      {value: 'cut', label: 'Cut out'},
+                      {value: 'mark', label: 'Mark as chapters'},
+                    ]}
+                  />
+                </div>
+              )}
               <div className="hint" style={{marginTop: 6}}>
-                Cuts the selected segments out of the video. YouTube only; needs ffmpeg and re-encodes at cut points.
+                {value.sponsorBlockMark
+                  ? 'Adds the selected segments as chapters, so players can skip them; the video stays whole. YouTube only.'
+                  : 'Cuts the selected segments out of the video. YouTube only; needs ffmpeg and re-encodes at cut points.'}
               </div>
+            </div>
+
+            <div className="grid2">
+              <Switch
+                checked={value.splitChapters}
+                onChange={(v) => set('splitChapters', v)}
+                label="Also save each chapter as its own file"
+                description="In a folder named after the video, as “01 - Chapter title”. Needs ffmpeg."
+              />
+              {mode === 'download' && video?.isLive && (
+                <Switch
+                  checked={value.liveFromStart}
+                  onChange={(v) => set('liveFromStart', v)}
+                  label="Record from the start"
+                  description="Downloads the stream from its beginning instead of from now."
+                />
+              )}
             </div>
 
             {mode === 'download' && !playlist && (

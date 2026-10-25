@@ -616,6 +616,14 @@ export function SettingsPage() {
                 label="Retry failed downloads automatically"
                 description="When a download fails with a problem that usually passes (a dropped connection, a 403, rate limiting), try it again after 30 seconds, 2 minutes and 10 minutes (longer when rate-limited)."
               />
+              <div className="grid2" style={{marginTop: 14}}>
+                <Field label="Pause between requests (seconds)" hint="Slows how fast a download reads the site. 1–2 helps if YouTube keeps rate-limiting you. 0 = no pause.">
+                  <input type="number" min={0} max={300} step={0.5} value={draft.sleepRequests} onChange={(e) => upd({sleepRequests: Number(e.target.value)})} />
+                </Field>
+                <Field label="Wait before each download (seconds)" hint="A gap before every download starts, for long playlists. 0 = no wait.">
+                  <input type="number" min={0} max={3600} value={draft.sleepInterval} onChange={(e) => upd({sleepInterval: Number(e.target.value)})} />
+                </Field>
+              </div>
             </Card>
           )}
 

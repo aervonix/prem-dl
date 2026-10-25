@@ -43,6 +43,12 @@ export interface DownloadOptions {
   playlistNumbering: boolean
   /** Download even when the download archive lists the video. */
   ignoreArchive: boolean
+  /** Mark the SponsorBlock segments as chapters instead of cutting them out. */
+  sponsorBlockMark: boolean
+  /** Also save each chapter as its own file. */
+  splitChapters: boolean
+  /** Record a live stream from its beginning. */
+  liveFromStart: boolean
 }
 
 export interface Cookies {
@@ -62,6 +68,10 @@ export interface Settings {
   retries: number
   /** Retry downloads that failed with a passing problem (network, 403, rate limiting). */
   autoRetry: boolean
+  /** Seconds between requests while a download reads the site (0 = none). */
+  sleepRequests: number
+  /** Seconds to wait before each download starts (0 = none). */
+  sleepInterval: number
   useArchive: boolean
   cookies: Cookies
   autoUpdate: boolean

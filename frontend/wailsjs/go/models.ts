@@ -569,6 +569,9 @@ export namespace settings {
 	    playlistFolder: boolean;
 	    playlistNumbering: boolean;
 	    ignoreArchive: boolean;
+	    sponsorBlockMark: boolean;
+	    splitChapters: boolean;
+	    liveFromStart: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new DownloadOptions(source);
@@ -595,6 +598,9 @@ export namespace settings {
 	        this.playlistFolder = source["playlistFolder"];
 	        this.playlistNumbering = source["playlistNumbering"];
 	        this.ignoreArchive = source["ignoreArchive"];
+	        this.sponsorBlockMark = source["sponsorBlockMark"];
+	        this.splitChapters = source["splitChapters"];
+	        this.liveFromStart = source["liveFromStart"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -624,6 +630,8 @@ export namespace settings {
 	    proxy: string;
 	    retries: number;
 	    autoRetry: boolean;
+	    sleepRequests: number;
+	    sleepInterval: number;
 	    useArchive: boolean;
 	    cookies: Cookies;
 	    autoUpdate: boolean;
@@ -651,6 +659,8 @@ export namespace settings {
 	        this.proxy = source["proxy"];
 	        this.retries = source["retries"];
 	        this.autoRetry = source["autoRetry"];
+	        this.sleepRequests = source["sleepRequests"];
+	        this.sleepInterval = source["sleepInterval"];
 	        this.useArchive = source["useArchive"];
 	        this.cookies = this.convertValues(source["cookies"], Cookies);
 	        this.autoUpdate = source["autoUpdate"];
