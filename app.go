@@ -49,6 +49,9 @@ type App struct {
 
 	probeMu     sync.Mutex
 	probeCancel context.CancelFunc
+
+	chromeMu     sync.Mutex
+	chromeCancel context.CancelFunc // set while GetChromeCookies waits for the user
 }
 
 // NewApp loads settings and the saved queue. If the normal config folder can't be used it falls

@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Prem-dl cookie helper",
+  "version": "1.0.0",
+  "description": "Hands your YouTube cookies to Prem-dl when you approve it, so downloads can use your account (Premium quality, age-restricted videos).",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8dHaS2CheIBnho4WIC/14iyJwoV4mK607XsMJLpgPJPdEiY1GI12Yx4p+Y+KIVIwLA3WlHfZKsMbn9+imXGox9ovOR6y3hMhWcoYdwtKLDV7Ww3S5K9TAr8Isuj46tGS/nvncW9y62IMBSSQhf4ubimnjFWdArsjSveD011DVQT06y8b9mTm/A6BZOrkErZYG2c0MI7hzTkOaoZOhmM7viZx8sVGxvHCFAnxJ++veu36UKnFF2GjC3QmIbL/4vjq3JUF3RVhV3Yjx+z8GSUY5kLtvUrWXwl/QLDrs196omeJA9R0co7jZiDkvSqnI+FaRzGUOMv2dYfIBt27/lS5sQIDAQAB",
+  "permissions": ["cookies"],
+  "optional_host_permissions": ["https://*.youtube.com/*"],
+  "host_permissions": ["http://127.0.0.1/*"]
+}
