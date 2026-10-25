@@ -9,6 +9,8 @@ export function CancelBulk():Promise<void>;
 
 export function CancelChromeCookies():Promise<void>;
 
+export function CancelClose():Promise<void>;
+
 export function CancelJob(arg1:string):Promise<void>;
 
 export function CancelProbe():Promise<void>;
@@ -20,6 +22,10 @@ export function ChromeHelperSetup():Promise<main.ChromeHelperInfo>;
 export function ClearArchive():Promise<main.ArchiveInfo>;
 
 export function ClearFinished(arg1:boolean):Promise<Array<string>>;
+
+export function CloseShown():Promise<void>;
+
+export function ConfirmClose():Promise<void>;
 
 export function CopyText(arg1:string):Promise<void>;
 

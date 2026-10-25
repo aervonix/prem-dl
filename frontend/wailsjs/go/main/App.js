@@ -10,6 +10,10 @@ export function CancelChromeCookies() {
   return window['go']['main']['App']['CancelChromeCookies']();
 }
 
+export function CancelClose() {
+  return window['go']['main']['App']['CancelClose']();
+}
+
 export function CancelJob(arg1) {
   return window['go']['main']['App']['CancelJob'](arg1);
 }
@@ -32,6 +36,14 @@ export function ClearArchive() {
 
 export function ClearFinished(arg1) {
   return window['go']['main']['App']['ClearFinished'](arg1);
+}
+
+export function CloseShown() {
+  return window['go']['main']['App']['CloseShown']();
+}
+
+export function ConfirmClose() {
+  return window['go']['main']['App']['ConfirmClose']();
 }
 
 export function CopyText(arg1) {

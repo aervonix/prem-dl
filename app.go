@@ -55,6 +55,10 @@ type App struct {
 	bulkMu     sync.Mutex
 	bulkCancel context.CancelFunc // set while EnqueueLinks runs
 
+	// The close dialog's state; see beforeClose.
+	closeMu                                sync.Mutex
+	closeAsked, closeShown, closeConfirmed bool
+
 	chromeMu     sync.Mutex
 	chromeCancel context.CancelFunc // set while GetChromeCookies waits for the user
 }
@@ -124,15 +128,45 @@ func (a *App) startup(ctx context.Context) {
 	go a.autoUpdateLoop()
 }
 
-// beforeClose asks for confirmation when downloads are still running, and remembers where the
-// window was when it does close.
+// CloseRequest is sent as "app:confirm-close" when closing needs the user's say-so.
+type CloseRequest struct {
+	Downloads int  `json:"downloads"` // running downloads that would be paused
+	Updating  bool `json:"updating"`  // yt-dlp is being replaced
+}
+
+// beforeClose asks for confirmation when downloads are still running (or yt-dlp is updating),
+// and remembers where the window was when it does close.
+//
+// The question is the app's own dialog: the window stays open, "app:confirm-close" goes to the
+// page, and its buttons call ConfirmClose or CancelClose. A page that never confirms it showed
+// the dialog (it failed to load) mustn't make the app impossible to close, so the next close
+// asks with the system dialog instead.
 func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 	defer func() {
 		if !prevent {
 			a.saveWindow()
 		}
 	}()
+	a.closeMu.Lock()
+	confirmed := a.closeConfirmed
+	a.closeMu.Unlock()
+	if confirmed {
+		return false
+	}
 	n := a.q.ActiveCount()
+	updating := a.updating.Load()
+	if n == 0 && !updating {
+		return false
+	}
+	a.closeMu.Lock()
+	unseen := a.closeAsked && !a.closeShown
+	a.closeAsked, a.closeShown = true, false
+	a.closeMu.Unlock()
+	if !unseen {
+		a.emit("app:confirm-close", CloseRequest{Downloads: n, Updating: updating})
+		return true
+	}
+
 	opts := wr.MessageDialogOptions{
 		Type:          wr.QuestionDialog,
 		Title:         "Downloads in progress",
@@ -156,6 +190,30 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 		return false
 	}
 	return choice != "Quit"
+}
+
+// CloseShown tells beforeClose that the page is showing the close dialog.
+func (a *App) CloseShown() {
+	a.closeMu.Lock()
+	a.closeShown = true
+	a.closeMu.Unlock()
+}
+
+// CancelClose is the close dialog's "Keep downloading".
+func (a *App) CancelClose() {
+	a.closeMu.Lock()
+	a.closeAsked, a.closeShown = false, false
+	a.closeMu.Unlock()
+}
+
+// ConfirmClose is the close dialog's "Quit": the app closes without asking again.
+func (a *App) ConfirmClose() {
+	a.closeMu.Lock()
+	a.closeConfirmed = true
+	a.closeMu.Unlock()
+	if a.ready() {
+		wr.Quit(a.rt())
+	}
 }
 
 func (a *App) shutdown(ctx context.Context) {

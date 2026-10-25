@@ -90,6 +90,9 @@ export const api = {
   revealFile: App.RevealFile,
   openDownloadFolder: App.OpenDownloadFolder,
   openDataFolder: App.OpenDataFolder,
+  closeShown: App.CloseShown,
+  cancelClose: App.CancelClose,
+  confirmClose: App.ConfirmClose,
   getArchiveInfo: () => cast<T.ArchiveInfo>(App.GetArchiveInfo()),
   clearArchive: () => cast<T.ArchiveInfo>(App.ClearArchive()),
   revealArchive: App.RevealArchive,
@@ -126,6 +129,13 @@ export interface BackendEvents {
   'tools:auto-updated': T.UpdateResult
   'settings:changed': T.Settings
   'app:open-url': string
+  'app:confirm-close': CloseRequest
+}
+
+/** Why closing needs confirming (main.CloseRequest; only sent as an event, so not generated). */
+export interface CloseRequest {
+  downloads: number
+  updating: boolean
 }
 
 export function on<K extends keyof BackendEvents>(event: K, fn: (data: BackendEvents[K]) => void): () => void {
