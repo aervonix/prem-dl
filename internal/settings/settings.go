@@ -73,6 +73,7 @@ type Settings struct {
 	RateLimit           string          `json:"rateLimit"` // e.g. 2M, 500K; empty = unlimited
 	Proxy               string          `json:"proxy"`
 	Retries             int             `json:"retries"`
+	AutoRetry           bool            `json:"autoRetry"`  // retry downloads that failed with a passing problem
 	UseArchive          bool            `json:"useArchive"` // skip videos already downloaded before
 	Cookies             Cookies         `json:"cookies"`
 	AutoUpdate          bool            `json:"autoUpdate"`
@@ -99,6 +100,7 @@ func Default() Settings {
 		MaxConcurrent:       2,
 		ConcurrentFragments: 4,
 		Retries:             10,
+		AutoRetry:           true,
 		UseArchive:          false,
 		Cookies:             Cookies{Mode: "none", Browser: "firefox"},
 		AutoUpdate:          true,

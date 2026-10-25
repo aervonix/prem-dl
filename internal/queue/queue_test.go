@@ -81,10 +81,11 @@ func fakeYtdlp(url string) {
 }
 
 type harness struct {
-	m      *Manager
-	mu     sync.Mutex
-	events []string
-	dir    string
+	m        *Manager
+	settings *settings.Settings // change before adding jobs
+	mu       sync.Mutex
+	events   []string
+	dir      string
 }
 
 func newHarness(t *testing.T, maxConcurrent int) *harness {
@@ -94,8 +95,10 @@ func newHarness(t *testing.T, maxConcurrent int) *harness {
 	s := settings.Default()
 	s.MaxConcurrent = maxConcurrent
 	s.DownloadDir = h.dir
+	s.AutoRetry = false // tests of automatic retries switch it on
+	h.settings = &s
 	h.m = New(Deps{
-		Settings: func() settings.Settings { return s },
+		Settings: func() settings.Settings { return *h.settings },
 		Env: func(ctx context.Context) (ytdlp.Env, func(), error) {
 			return ytdlp.Env{Bin: os.Args[0], Settings: s}, func() {}, nil
 		},
@@ -652,5 +655,83 @@ func TestOlderSnapshotNeverReplacesNewer(t *testing.T) {
 	raw, _ := os.ReadFile(filepath.Join(dir, "queue.json"))
 	if !strings.Contains(string(raw), `"id":"new"`) {
 		t.Fatalf("an older snapshot overwrote a newer one: %s", raw)
+	}
+}
+
+// fastRetries switches automatic retries on with short delays for 403s.
+func fastRetries(t *testing.T, h *harness, delays ...time.Duration) {
+	t.Helper()
+	orig := retryDelays
+	retryDelays = map[string][]time.Duration{"forbidden": delays}
+	t.Cleanup(func() { retryDelays = orig })
+	h.settings.AutoRetry = true
+}
+
+func TestPassingFailureIsRetriedAutomatically(t *testing.T) {
+	h := newHarness(t, 1)
+	fastRetries(t, h, 300*time.Millisecond, 300*time.Millisecond)
+	j := h.add(t, "/fail403")
+	waitFor(t, "first automatic retry to be scheduled", func() bool {
+		g, _ := h.m.Get(j.ID)
+		return g.Status == StatusQueued && !g.RetryAt.IsZero() && g.AutoRetries == 1 && g.Error != nil && g.Error.Code == "forbidden"
+	})
+	// After the last delay it gives up and fails for good.
+	waitFor(t, "final failure", func() bool { return h.status(j.ID) == StatusFailed })
+	g, _ := h.m.Get(j.ID)
+	if g.AutoRetries != 2 || !g.RetryAt.IsZero() {
+		t.Fatalf("auto retries %d, retryAt %v", g.AutoRetries, g.RetryAt)
+	}
+
+	// A manual retry starts a fresh set.
+	if err := h.m.Retry(j.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "automatic retry after a manual one", func() bool {
+		g, _ := h.m.Get(j.ID)
+		return g.AutoRetries == 1 && !g.RetryAt.IsZero()
+	})
+}
+
+func TestRetryNowAndPauseWhileWaiting(t *testing.T) {
+	h := newHarness(t, 2)
+	fastRetries(t, h, time.Minute)
+	a := h.add(t, "/fail403")
+	waitFor(t, "a waiting to retry", func() bool { g, _ := h.m.Get(a.ID); return !g.RetryAt.IsZero() })
+
+	// "Retry now" doesn't wait the minute; with no retries left it then fails for good.
+	if err := h.m.Retry(a.ID); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "a to run again at once", func() bool { return h.status(a.ID) == StatusFailed })
+
+	b := h.add(t, "/1/fail403")
+	waitFor(t, "b waiting to retry", func() bool { g, _ := h.m.Get(b.ID); return !g.RetryAt.IsZero() })
+	if err := h.m.Pause(b.ID); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := h.m.Get(b.ID); g.Status != StatusPaused || !g.RetryAt.IsZero() {
+		t.Fatalf("paused job: %s, retryAt %v", g.Status, g.RetryAt)
+	}
+}
+
+func TestLastingFailureIsNotRetried(t *testing.T) {
+	h := newHarness(t, 1)
+	fastRetries(t, h, 100*time.Millisecond)
+	j := h.add(t, "/unsupported") // "Unsupported URL" won't pass by itself
+	waitFor(t, "failure", func() bool { return h.status(j.ID) == StatusFailed })
+	time.Sleep(300 * time.Millisecond)
+	if g, _ := h.m.Get(j.ID); g.Status != StatusFailed || g.AutoRetries != 0 {
+		t.Fatalf("status %s after %d automatic retries", g.Status, g.AutoRetries)
+	}
+}
+
+func TestAutomaticRetriesCanBeSwitchedOff(t *testing.T) {
+	h := newHarness(t, 1)
+	fastRetries(t, h, 100*time.Millisecond)
+	h.settings.AutoRetry = false
+	j := h.add(t, "/fail403")
+	waitFor(t, "failure", func() bool { return h.status(j.ID) == StatusFailed })
+	if g, _ := h.m.Get(j.ID); g.AutoRetries != 0 {
+		t.Fatalf("retried %d times with automatic retries off", g.AutoRetries)
 	}
 }

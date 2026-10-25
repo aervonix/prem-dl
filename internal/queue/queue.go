@@ -76,6 +76,11 @@ type Job struct {
 	Error      *apperr.AppError         `json:"error"`
 	Warnings   []string                 `json:"warnings"`
 	Attempts   int                      `json:"attempts"`
+	// RetryAt is set while a job that failed with a passing problem (a dropped connection, a
+	// 403, rate limiting) waits to be retried automatically; Error says what went wrong.
+	// AutoRetries counts those retries since the user last started the job.
+	RetryAt     time.Time `json:"retryAt" ts_type:"string"`
+	AutoRetries int       `json:"autoRetries"`
 
 	CreatedAt  time.Time `json:"createdAt" ts_type:"string"`
 	StartedAt  time.Time `json:"startedAt" ts_type:"string"`
@@ -121,6 +126,15 @@ const (
 	saveEvery = time.Second // queue.json is rewritten at most this often
 )
 
+// retryDelays lists, per error code, how long to wait before each automatic retry. Only
+// problems that often clear up by themselves are here: retrying a missing file or a full disk
+// on a timer just fails again. Replaced in tests.
+var retryDelays = map[string][]time.Duration{
+	"network":      {30 * time.Second, 2 * time.Minute, 10 * time.Minute},
+	"forbidden":    {30 * time.Second, 2 * time.Minute, 10 * time.Minute},
+	"rate_limited": {2 * time.Minute, 10 * time.Minute, 30 * time.Minute},
+}
+
 // removeWait is how long Remove waits for a running job's process to exit (shortened in tests).
 var removeWait = 5 * time.Second
 
@@ -151,6 +165,8 @@ type Manager struct {
 	noSave   bool
 	saveGen  int64 // snapshots taken
 	held     bool  // nothing new starts (yt-dlp is being replaced); see Hold
+	// wake runs the scheduler when the earliest automatic retry is due.
+	wake *time.Timer
 
 	// saveMu serialises writes to queue.json, which happen without mu held. savedGen is the
 	// snapshot on disk, so an older one finishing late can't replace a newer one.
@@ -264,7 +280,8 @@ func (m *Manager) Pause(id string) error {
 	}
 	switch {
 	case e.job.Status == StatusQueued:
-		m.setLocked(e, func(j *Job) { j.Status = StatusPaused; j.Stage = "Paused" })
+		m.setLocked(e, func(j *Job) { j.Status = StatusPaused; j.Stage = "Paused"; j.RetryAt = time.Time{} })
+		m.scheduleLocked() // the retry timer may no longer be needed
 	case e.job.Status.active():
 		e.stop = stopPause
 		if e.cancel != nil {
@@ -283,7 +300,8 @@ func (m *Manager) Resume(id string) error {
 		return errNoJob
 	}
 	if e.job.Status == StatusPaused {
-		m.setLocked(e, func(j *Job) { j.Status = StatusQueued; j.Stage = "Waiting"; j.Speed = 0; j.ETA = -1 })
+		// The user is starting it again: it gets a fresh set of automatic retries.
+		m.setLocked(e, func(j *Job) { j.Status = StatusQueued; j.Stage = "Waiting"; j.Speed = 0; j.ETA = -1; j.AutoRetries = 0 })
 		m.scheduleLocked()
 	}
 	return nil
@@ -309,6 +327,7 @@ func (m *Manager) Cancel(id string) error {
 			j.Stage = "Cancelled"
 			j.FinishedAt = time.Now()
 			j.Speed = 0
+			j.RetryAt = time.Time{}
 		})
 		m.scheduleLocked()
 	}
@@ -322,6 +341,12 @@ func (m *Manager) Retry(id string) error {
 	e, ok := m.entries[id]
 	if !ok {
 		return errNoJob
+	}
+	if e.job.Status == StatusQueued && !e.job.RetryAt.IsZero() {
+		// "Retry now" on a job waiting for its automatic retry.
+		m.setLocked(e, func(j *Job) { j.RetryAt = time.Time{}; j.Stage = "Waiting" })
+		m.scheduleLocked()
+		return nil
 	}
 	if e.job.Status == StatusFailed || e.job.Status == StatusCancelled {
 		// Two runs of one link would write the same .part file.
@@ -343,6 +368,8 @@ func (m *Manager) Retry(id string) error {
 			j.Note = ""
 			j.Warnings = []string{}
 			j.Attempts++
+			j.AutoRetries = 0
+			j.RetryAt = time.Time{}
 		})
 		e.log = nil
 		m.scheduleLocked()
@@ -488,6 +515,9 @@ func (m *Manager) Kick() {
 // Shutdown kills every running download (they come back paused next launch) and saves state.
 func (m *Manager) Shutdown() {
 	m.cancel()
+	m.mu.Lock()
+	m.wakeAtLocked(time.Time{})
+	m.mu.Unlock()
 	done := make(chan struct{})
 	go func() { m.wg.Wait(); close(done) }()
 	select {
@@ -524,18 +554,24 @@ func (m *Manager) scheduleLocked() {
 		return
 	}
 	limit := m.deps.Settings().MaxConcurrent
+	now := time.Now()
 	running := 0
+	var nextRetry time.Time
 	for _, e := range m.entries {
 		if e.job.Status.active() {
 			running++
 		}
+		if r := e.job.RetryAt; e.job.Status == StatusQueued && r.After(now) && (nextRetry.IsZero() || r.Before(nextRetry)) {
+			nextRetry = r
+		}
 	}
+	m.wakeAtLocked(nextRetry)
 	for _, id := range m.order {
 		if running >= limit {
 			break
 		}
 		e := m.entries[id]
-		if e.job.Status != StatusQueued {
+		if e.job.Status != StatusQueued || e.job.RetryAt.After(now) {
 			continue
 		}
 		running++
@@ -544,6 +580,7 @@ func (m *Manager) scheduleLocked() {
 			j.Stage = "Starting"
 			j.StartedAt = time.Now()
 			j.Error = nil
+			j.RetryAt = time.Time{}
 		})
 		ctx, cancel := context.WithCancel(m.ctx)
 		e.cancel = cancel
@@ -551,6 +588,32 @@ func (m *Manager) scheduleLocked() {
 		m.wg.Add(1)
 		go m.run(ctx, cancel, e)
 	}
+}
+
+// wakeAtLocked (re)arms the timer that runs the scheduler when the next automatic retry is due;
+// a zero time disarms it.
+func (m *Manager) wakeAtLocked(at time.Time) {
+	if m.wake != nil {
+		m.wake.Stop()
+		m.wake = nil
+	}
+	if !at.IsZero() {
+		m.wake = time.AfterFunc(time.Until(at), m.Kick)
+	}
+}
+
+// retryDelay is how long to wait before retrying a job that failed with ae automatically, and
+// false when it shouldn't be: the problem won't pass by itself, the retries are used up, or the
+// user turned automatic retries off.
+func (m *Manager) retryDelay(j Job, ae *apperr.AppError) (time.Duration, bool) {
+	if ae == nil || !m.deps.Settings().AutoRetry {
+		return 0, false
+	}
+	delays := retryDelays[ae.Code]
+	if j.AutoRetries >= len(delays) {
+		return 0, false
+	}
+	return delays[j.AutoRetries], true
 }
 
 // setLocked mutates a job and marks it for the next UI flush.
@@ -708,6 +771,19 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 		ae := asAppError(runErr)
 		if ae == nil {
 			ae = apperr.Classify(lines, runErr)
+		}
+		if delay, ok := m.retryDelay(e.job, ae); ok {
+			// It goes back in line, held until RetryAt; scheduleLocked below arms the timer.
+			m.setLocked(e, func(j *Job) {
+				j.Status = StatusQueued
+				j.Stage = "Retrying soon"
+				j.Speed = 0
+				j.ETA = -1
+				j.Error = ae
+				j.AutoRetries++
+				j.RetryAt = now.Add(delay)
+			})
+			break
 		}
 		m.setLocked(e, func(j *Job) {
 			j.Status = StatusFailed
@@ -1053,6 +1129,7 @@ func (m *Manager) load() {
 			j.Stage = "Interrupted"
 			j.Speed = 0
 			j.ETA = -1
+			j.RetryAt = time.Time{}
 		}
 		if j.Warnings == nil {
 			j.Warnings = []string{}

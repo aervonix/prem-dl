@@ -26,10 +26,27 @@ function matches(j: Job, f: Filter): boolean {
   }
 }
 
+/** When an automatic retry is due, or null. Go sends its zero time (year 1) when there is none. */
+function retryDue(j: Job): number | null {
+  const t = Date.parse(j.retryAt)
+  return j.status === 'queued' && t > Date.UTC(2000, 0) ? t : null
+}
+
+/** "1:45" until the given time, ticking every second. */
+function Countdown({at}: {at: number}) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [])
+  const s = Math.max(0, Math.ceil((at - now) / 1000))
+  return <>{s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`}</>
+}
+
 function statusText(j: Job): string {
   switch (j.status) {
     case 'queued':
-      return 'Waiting in queue'
+      return retryDue(j) ? 'Will retry automatically' : 'Waiting in queue'
     case 'starting':
       return 'Starting…'
     case 'downloading':
@@ -65,6 +82,7 @@ const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: 
   const s = job.status
   const live = ACTIVE.includes(s)
   const percent = s === 'completed' ? 100 : s === 'starting' ? -1 : job.percent
+  const due = retryDue(job)
   const sub = [job.uploader, job.playlistTitle ? `${job.playlistTitle} · ${job.playlistIndex}/${job.playlistCount}` : ''].filter(Boolean).join(' · ')
 
   return (
@@ -80,6 +98,16 @@ const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: 
           {s === 'completed' && job.outputFile && <span className="muted"> · {basename(job.outputFile)}</span>}
         </div>
         {s !== 'failed' && s !== 'cancelled' && <Progress percent={percent} state={progressState(job)} label={job.title} />}
+        {due && (
+          <div className="jretry">
+            <span>
+              {job.error?.title ?? 'It failed'}. Automatic retry {job.autoRetries} in <Countdown at={due} />.
+            </span>
+            <Button size="sm" variant="ghost" icon="retry" onClick={() => void run(() => api.retryJob(job.id))}>
+              Retry now
+            </Button>
+          </div>
+        )}
         {(live || s === 'paused') && (
           <div className="jstats">
             <span>

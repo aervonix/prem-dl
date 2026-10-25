@@ -58,6 +58,8 @@ export interface Settings {
   rateLimit: string
   proxy: string
   retries: number
+  /** Retry downloads that failed with a passing problem (network, 403, rate limiting). */
+  autoRetry: boolean
   useArchive: boolean
   cookies: Cookies
   autoUpdate: boolean
@@ -108,6 +110,9 @@ export interface Job {
   error: AppError | null
   warnings: string[]
   attempts: number
+  /** Set (a real date) while the job waits to be retried automatically after a passing problem. */
+  retryAt: string
+  autoRetries: number
   createdAt: string
   startedAt: string
   finishedAt: string

@@ -1203,6 +1203,17 @@ input[type='checkbox'] {
   gap: 2px;
   align-self: start;
 }
+/* A job waiting for its automatic retry: what went wrong, and when it tries again. */
+.job .jretry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  color: var(--warn);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
 .job .jerr {
   grid-column: 1 / -1;
 }

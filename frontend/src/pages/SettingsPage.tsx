@@ -557,10 +557,16 @@ export function SettingsPage() {
                 <Field label="Parallel fragments" hint="Threads used per download for segmented (DASH/HLS) streams.">
                   <input type="number" min={1} max={16} value={draft.concurrentFragments} onChange={(e) => upd({concurrentFragments: Number(e.target.value)})} />
                 </Field>
-                <Field label="Retries" hint="How often to retry a failed connection or fragment.">
+                <Field label="Retries" hint="How often yt-dlp retries a failed connection or fragment within one download.">
                   <input type="number" min={0} max={50} value={draft.retries} onChange={(e) => upd({retries: Number(e.target.value)})} />
                 </Field>
               </div>
+              <Switch
+                checked={draft.autoRetry}
+                onChange={(v) => upd({autoRetry: v})}
+                label="Retry failed downloads automatically"
+                description="When a download fails with a problem that usually passes (a dropped connection, a 403, rate limiting), try it again after 30 seconds, 2 minutes and 10 minutes (longer when rate-limited)."
+              />
             </Card>
           )}
 

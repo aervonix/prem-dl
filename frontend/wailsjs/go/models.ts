@@ -406,6 +406,8 @@ export namespace queue {
 	    error?: apperr.AppError;
 	    warnings: string[];
 	    attempts: number;
+	    retryAt: string;
+	    autoRetries: number;
 	    createdAt: string;
 	    startedAt: string;
 	    finishedAt: string;
@@ -439,6 +441,8 @@ export namespace queue {
 	        this.error = this.convertValues(source["error"], apperr.AppError);
 	        this.warnings = source["warnings"];
 	        this.attempts = source["attempts"];
+	        this.retryAt = source["retryAt"];
+	        this.autoRetries = source["autoRetries"];
 	        this.createdAt = source["createdAt"];
 	        this.startedAt = source["startedAt"];
 	        this.finishedAt = source["finishedAt"];
@@ -601,6 +605,7 @@ export namespace settings {
 	    rateLimit: string;
 	    proxy: string;
 	    retries: number;
+	    autoRetry: boolean;
 	    useArchive: boolean;
 	    cookies: Cookies;
 	    autoUpdate: boolean;
@@ -627,6 +632,7 @@ export namespace settings {
 	        this.rateLimit = source["rateLimit"];
 	        this.proxy = source["proxy"];
 	        this.retries = source["retries"];
+	        this.autoRetry = source["autoRetry"];
 	        this.useArchive = source["useArchive"];
 	        this.cookies = this.convertValues(source["cookies"], Cookies);
 	        this.autoUpdate = source["autoUpdate"];
