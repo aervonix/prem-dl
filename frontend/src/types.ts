@@ -143,6 +143,9 @@ export interface ToolStatus {
   ffmpeg: FFmpeg | null
   jsRuntimes: JSRuntime[]
   managedPath: string
+  /** The ffmpeg in use is the one the app installed. */
+  ffmpegManaged: boolean
+  canInstallFfmpeg: boolean
 }
 
 export interface AppState {

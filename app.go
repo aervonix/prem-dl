@@ -45,7 +45,8 @@ type App struct {
 	firstTools sync.Once
 	toolsFirst chan struct{} // closed once the first detection pass has published
 
-	updating atomic.Bool
+	updating   atomic.Bool
+	ffmpegBusy atomic.Bool
 
 	probeMu     sync.Mutex
 	probeCancel context.CancelFunc
@@ -702,6 +703,13 @@ func (a *App) CheckUpdate() UpdateInfo {
 	ctx, cancel := context.WithTimeout(a.root, 30*time.Second)
 	defer cancel()
 	return a.checkUpdate(ctx)
+}
+
+// InstallFFmpeg downloads ffmpeg into the app's folder, or updates the copy it installed before.
+func (a *App) InstallFFmpeg() UpdateResult {
+	ctx, cancel := context.WithTimeout(a.root, 15*time.Minute)
+	defer cancel()
+	return a.installFFmpeg(ctx)
 }
 
 // UpdateYtdlp installs the newest yt-dlp (or installs it for the first time).

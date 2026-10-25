@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"yt-dlp-gui/internal/apperr"
@@ -21,6 +22,10 @@ type ToolStatus struct {
 	FFmpeg      *ytdlp.FFmpeg     `json:"ffmpeg"` // nil when ffmpeg was not found
 	JSRuntimes  []ytdlp.JSRuntime `json:"jsRuntimes"`
 	ManagedPath string            `json:"managedPath"`
+	// FFmpegManaged is set when the ffmpeg in use is the one InstallFFmpeg put in the app's
+	// folder; CanInstallFFmpeg when there is a build for this computer.
+	FFmpegManaged    bool `json:"ffmpegManaged"`
+	CanInstallFFmpeg bool `json:"canInstallFfmpeg"`
 }
 
 // UpdateInfo is the result of comparing the installed yt-dlp with the newest release.
@@ -78,9 +83,11 @@ func (a *App) detectTools() {
 	if st.Ytdlp != nil {
 		ytPath = st.Ytdlp.Path
 	}
-	if ff := ytdlp.FindFFmpeg(ctx, s.FfmpegPath, ytPath); ff.Path != "" {
+	if ff := ytdlp.FindFFmpeg(ctx, s.FfmpegPath, ytPath, a.managedDir()); ff.Path != "" {
 		st.FFmpeg = &ff
+		st.FFmpegManaged = strings.EqualFold(filepath.Dir(ff.Path), ytdlp.FFmpegDir(a.managedDir()))
 	}
+	st.CanInstallFFmpeg = ytdlp.CanInstallFFmpeg()
 	st.JSRuntimes = append(st.JSRuntimes, ytdlp.DetectJSRuntimes(ctx)...)
 
 	a.toolsMu.Lock()
@@ -278,6 +285,66 @@ func (a *App) installOrUpdate(ctx context.Context) UpdateResult {
 	_, _ = a.updateSettings(func(v *settings.Settings) { v.LastUpdateCheck = time.Now() })
 	a.detectTools()
 	return res
+}
+
+// installFFmpeg downloads yt-dlp's ffmpeg build into the app's folder, or replaces the copy it
+// installed before.
+func (a *App) installFFmpeg(ctx context.Context) UpdateResult {
+	if !a.ffmpegBusy.CompareAndSwap(false, true) {
+		return UpdateResult{Error: apperr.New("busy", "Already installing", "ffmpeg is already being installed.", "", apperr.ActionNone)}
+	}
+	defer a.ffmpegBusy.Store(false)
+
+	res := UpdateResult{}
+	dir := ytdlp.FFmpegDir(a.managedDir())
+	if _, err := os.Stat(dir); err == nil {
+		// Replacing a copy that downloads are using fails on its DLLs, so nothing new may start.
+		n := a.q.Hold()
+		defer a.q.Release()
+		if n > 0 {
+			return UpdateResult{Error: apperr.New("busy", "Downloads are running",
+				fmt.Sprintf("%d download(s) may be using ffmpeg, which can't be replaced while it runs.", n),
+				"Pause or finish the active downloads, then try again.", apperr.ActionNone)}
+		}
+		if t := a.currentTools(); t.FFmpeg != nil && t.FFmpegManaged {
+			res.Previous = t.FFmpeg.Version
+		}
+	}
+
+	s := a.store.Get()
+	progress := func(done, total int64) {
+		a.emit("ffmpeg:progress", map[string]int64{"done": done, "total": total})
+	}
+	version, err := ytdlp.InstallFFmpeg(ctx, ytdlp.HTTPClient(s.Proxy, 15*time.Minute), a.managedDir(), progress)
+	if err != nil {
+		res.Error = classifyFFmpegError(err)
+		return res
+	}
+	res.OK = true
+	res.Version = version
+	res.Path = filepath.Join(dir, "ffmpeg.exe")
+	if res.Previous != "" {
+		res.Message = "ffmpeg updated from " + res.Previous + " to " + version + "."
+	} else {
+		res.Message = "ffmpeg " + version + " installed."
+	}
+	if s.FfmpegPath != "" {
+		res.Message += " Your ffmpeg location setting still points to another copy; clear it under Settings → Advanced to use this one."
+	}
+	a.detectTools()
+	return res
+}
+
+func classifyFFmpegError(err error) *apperr.AppError {
+	switch {
+	case errors.Is(err, os.ErrPermission):
+		return apperr.New("install_permission", "Can't write ffmpeg", err.Error(),
+			"Check that the app's data folder is writable and not locked by antivirus.", apperr.ActionNone)
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		return apperr.New("install_timeout", "Download timed out", "Downloading ffmpeg took too long.", "Check your connection and try again.", apperr.ActionNone)
+	}
+	return apperr.New("install_failed", "Couldn't install ffmpeg", err.Error(),
+		"Check your internet connection (and proxy) and try again.", apperr.ActionNone)
 }
 
 func classifyUpdateError(err error) *apperr.AppError {

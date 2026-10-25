@@ -43,7 +43,9 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
 2. Start it. If yt-dlp isn't found, the app offers to download it for you. You can also drop
    `yt-dlp.exe` next to `Prem-dl.exe` yourself.
 3. Install ffmpeg if you don't have it. Without it, video and audio can't be merged, so you'd
-   only get lower quality single-file downloads. The easiest way is:
+   only get lower quality single-file downloads. If the app doesn't find ffmpeg it offers an
+   **Install ffmpeg** button, which downloads yt-dlp's own ffmpeg build (about 90 MB, checked
+   against its published SHA-256) into the app's data folder. You can also install it yourself:
 
    ```powershell
    winget install Gyan.FFmpeg

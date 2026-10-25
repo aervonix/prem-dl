@@ -2,8 +2,8 @@ import {Icon} from '../icons'
 import {useApp} from '../store'
 import type {AppError} from '../types'
 import {Button} from './ui'
+import {InstallFfmpegButton} from './FfmpegInstall'
 
-export const FFMPEG_INSTALL_CMD = 'winget install Gyan.FFmpeg'
 export const EJS_DOCS = 'https://github.com/yt-dlp/yt-dlp/wiki/EJS'
 
 /**
@@ -55,15 +55,7 @@ export function ErrorPanel({
         )}
         {error.action === 'install_ffmpeg' && (
           <>
-            <Button
-              size="sm"
-              variant="primary"
-              icon="copy"
-              onClick={() => {
-                void copy(FFMPEG_INSTALL_CMD, `Copied “${FFMPEG_INSTALL_CMD}”. Run it in a terminal, then restart the app.`)
-              }}>
-              Copy install command
-            </Button>
+            <InstallFfmpegButton />
             <Button size="sm" icon="settings" onClick={() => go('settings', 'advanced')}>
               Set ffmpeg location
             </Button>

@@ -21,6 +21,8 @@ interface State {
   settings: Settings | null
   tools: ToolStatus
   toolProgress: {done: number; total: number} | null
+  /** Set while ffmpeg is being installed. */
+  ffmpegProgress: {done: number; total: number} | null
   updateAvailable: UpdateInfo | null
   autoUpdated: UpdateResult | null
   dismissed: Record<string, boolean>
@@ -38,6 +40,8 @@ const emptyTools: ToolStatus = {
   ffmpeg: null,
   jsRuntimes: [],
   managedPath: '',
+  ffmpegManaged: false,
+  canInstallFfmpeg: false,
 }
 
 const initial: State = {
@@ -48,6 +52,7 @@ const initial: State = {
   settings: null,
   tools: emptyTools,
   toolProgress: null,
+  ffmpegProgress: null,
   updateAvailable: null,
   autoUpdated: null,
   dismissed: {},
@@ -64,6 +69,7 @@ type Action =
   | {type: 'jobsRemoved'; ids: string[]}
   | {type: 'tools'; tools: ToolStatus}
   | {type: 'toolProgress'; p: State['toolProgress']}
+  | {type: 'ffmpegProgress'; p: State['ffmpegProgress']}
   | {type: 'settings'; settings: Settings}
   | {type: 'updateAvailable'; info: UpdateInfo | null}
   | {type: 'autoUpdated'; res: UpdateResult | null}
@@ -117,6 +123,8 @@ function reducer(s: State, a: Action): State {
       return {...s, tools: a.tools}
     case 'toolProgress':
       return {...s, toolProgress: a.p}
+    case 'ffmpegProgress':
+      return {...s, ffmpegProgress: a.p}
     case 'settings':
       return {...s, settings: a.settings}
     case 'updateAvailable':
@@ -155,6 +163,8 @@ interface Ctx {
   copy: (text: string, done: string) => Promise<void>
   /** Install or update yt-dlp, reporting the outcome with a toast. */
   updateYtdlp: () => Promise<UpdateResult>
+  /** Install (or update) the app's own ffmpeg, reporting the outcome with a toast. */
+  installFfmpeg: () => Promise<void>
   setUpdateAvailable: (i: UpdateInfo | null) => void
 }
 
@@ -202,6 +212,8 @@ export function AppProvider({children}: {children: ReactNode}) {
       on('jobs:remove', (ids) => dispatch({type: 'jobsRemoved', ids})),
       on('tools:status', (tools) => dispatch({type: 'tools', tools})),
       on('tools:progress', (p) => dispatch({type: 'toolProgress', p})),
+      // Progress only while an install is running: a late event must not bring the bar back.
+      on('ffmpeg:progress', (p) => installing.current && dispatch({type: 'ffmpegProgress', p})),
       on('tools:update-available', (info) => dispatch({type: 'updateAvailable', info})),
       on('tools:auto-updated', (res) => dispatch({type: 'autoUpdated', res})),
       on('settings:changed', (settings) => dispatch({type: 'settings', settings})),
@@ -265,6 +277,23 @@ export function AppProvider({children}: {children: ReactNode}) {
     }
   }, [dispatch, toast])
 
+  const installing = useRef(false)
+  const installFfmpeg = useCallback(async () => {
+    if (installing.current) return
+    installing.current = true
+    dispatch({type: 'ffmpegProgress', p: {done: 0, total: 0}})
+    try {
+      const res = await api.installFfmpeg()
+      if (res.ok) toast('success', res.message)
+      else if (res.error) toast('error', `${res.error.title}: ${res.error.message}`)
+    } catch (e) {
+      toast('error', errMessage(e))
+    } finally {
+      installing.current = false
+      dispatch({type: 'ffmpegProgress', p: null})
+    }
+  }, [dispatch, toast])
+
   // Actions never change identity, so effects and memoised children that take them don't rerun.
   const actions = useMemo<Omit<Ctx, 'state'>>(
     () => ({
@@ -277,9 +306,10 @@ export function AppProvider({children}: {children: ReactNode}) {
       attempt,
       copy,
       updateYtdlp,
+      installFfmpeg,
       setUpdateAvailable: (info) => dispatch({type: 'updateAvailable', info}),
     }),
-    [dispatch, toast, attempt, copy, updateYtdlp],
+    [dispatch, toast, attempt, copy, updateYtdlp, installFfmpeg],
   )
   const ctx = useMemo<Ctx>(() => ({state, ...actions}), [state, actions])
 

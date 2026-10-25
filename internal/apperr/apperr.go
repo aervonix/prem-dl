@@ -175,8 +175,10 @@ var rules = []rule{
 			Code:    "ffmpeg_missing",
 			Title:   "ffmpeg is required",
 			Message: "Merging video and audio, converting formats and embedding subtitles all need ffmpeg, which wasn't found.",
-			Hint:    "Install ffmpeg (for example: winget install Gyan.FFmpeg) or set its location under Settings → General.",
+			Hint:    "Install it with the button below, or set the location of your own copy in Settings, then try again.",
 			Action:  ActionInstallFFmp,
+			// Once ffmpeg is installed the same download works.
+			Retryable: true,
 		}
 	}),
 	r(`javascript runtime|js runtime|no supported javascript|challenge solving failed|n challenge`, func() AppError {

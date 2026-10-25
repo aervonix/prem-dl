@@ -105,6 +105,7 @@ export const api = {
 
   checkUpdate: () => cast<T.UpdateInfo>(App.CheckUpdate()),
   updateYtdlp: () => cast<T.UpdateResult>(App.UpdateYtdlp()),
+  installFfmpeg: () => cast<T.UpdateResult>(App.InstallFFmpeg()),
 }
 
 // ---- events from Go ------------------------------------------------------------------------
@@ -114,6 +115,7 @@ export interface BackendEvents {
   'tools:status': T.ToolStatus
   'tools:progress': {done: number; total: number}
   'bulk:progress': {done: number; total: number}
+  'ffmpeg:progress': {done: number; total: number}
   'tools:update-available': T.UpdateInfo
   'tools:auto-updated': T.UpdateResult
   'settings:changed': T.Settings

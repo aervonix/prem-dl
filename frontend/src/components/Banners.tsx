@@ -5,7 +5,8 @@ import type {IconName} from '../icons'
 import {bytes} from '../format'
 import {useApp, useJobs} from '../store'
 import {Button, IconButton, Progress} from './ui'
-import {EJS_DOCS, FFMPEG_INSTALL_CMD} from './ErrorPanel'
+import {EJS_DOCS} from './ErrorPanel'
+import {FfmpegProgress, InstallFfmpegButton} from './FfmpegInstall'
 
 function Banner({tone, icon, title, children, actions}: {tone: 'warn' | 'bad' | 'info' | 'ok'; icon: IconName; title: string; children?: ReactNode; actions?: ReactNode}) {
   return (
@@ -24,7 +25,7 @@ function Banner({tone, icon, title, children, actions}: {tone: 'warn' | 'bad' | 
 
 /** Status notices that sit above every page: missing tools, updates, interrupted downloads. */
 export function Banners() {
-  const {state, dismiss, updateYtdlp, go, copy, setUpdateAvailable} = useApp()
+  const {state, dismiss, updateYtdlp, go, setUpdateAvailable} = useApp()
   const jobs = useJobs()
   const {tools, dismissed, toolProgress, updateAvailable, autoUpdated} = state
   const ready = !tools.checking
@@ -158,17 +159,10 @@ export function Banners() {
         key="ffmpeg"
         tone="warn"
         icon="warning"
-        title="ffmpeg wasn't found"
+        title={state.ffmpegProgress ? 'Installing ffmpeg…' : "ffmpeg wasn't found"}
         actions={
           <>
-            <Button
-              size="sm"
-              icon="copy"
-              onClick={() => {
-                void copy(FFMPEG_INSTALL_CMD, `Copied “${FFMPEG_INSTALL_CMD}”. Run it in a terminal, then restart the app.`)
-              }}>
-              Copy install command
-            </Button>
+            <InstallFfmpegButton />
             <Button size="sm" variant="ghost" onClick={() => go('settings', 'advanced')}>
               Locate…
             </Button>
@@ -176,6 +170,8 @@ export function Banners() {
           </>
         }>
         Without it, video and audio can't be merged, so you'd get lower-quality single files. Audio extraction, subtitle embedding and SponsorBlock also won't work.
+        {tools.canInstallFfmpeg && !state.ffmpegProgress && ' Install downloads yt-dlp’s own ffmpeg build (about 90 MB) into the app’s folder.'}
+        <FfmpegProgress />
       </Banner>,
     )
   }

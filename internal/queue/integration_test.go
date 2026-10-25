@@ -32,7 +32,7 @@ func integrationEnv(t *testing.T) (settings.Settings, func(context.Context) (ytd
 	s.DownloadDir = t.TempDir()
 	s.Retries = 3
 	rts := ytdlp.DetectJSRuntimes(context.Background())
-	ff := ytdlp.FindFFmpeg(context.Background(), "", bin)
+	ff := ytdlp.FindFFmpeg(context.Background(), "", bin, "")
 	return s, func(context.Context) (ytdlp.Env, func(), error) {
 		return ytdlp.Env{Bin: bin, Settings: s, JSRuntimes: rts, FFmpeg: ff.Path}, func() {}, nil
 	}

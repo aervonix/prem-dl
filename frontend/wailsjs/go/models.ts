@@ -36,6 +36,8 @@ export namespace main {
 	    ffmpeg?: ytdlp.FFmpeg;
 	    jsRuntimes: ytdlp.JSRuntime[];
 	    managedPath: string;
+	    ffmpegManaged: boolean;
+	    canInstallFfmpeg: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ToolStatus(source);
@@ -49,6 +51,8 @@ export namespace main {
 	        this.ffmpeg = this.convertValues(source["ffmpeg"], ytdlp.FFmpeg);
 	        this.jsRuntimes = this.convertValues(source["jsRuntimes"], ytdlp.JSRuntime);
 	        this.managedPath = source["managedPath"];
+	        this.ffmpegManaged = source["ffmpegManaged"];
+	        this.canInstallFfmpeg = source["canInstallFfmpeg"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

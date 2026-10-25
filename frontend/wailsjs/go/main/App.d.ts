@@ -37,6 +37,8 @@ export function ImportCookieText(arg1:string):Promise<main.CookieResponse>;
 
 export function InspectCookieFile(arg1:string):Promise<ytdlp.CookieInfo>;
 
+export function InstallFFmpeg():Promise<main.UpdateResult>;
+
 export function OpenChromeExtensions():Promise<void>;
 
 export function OpenDataFolder():Promise<void>;

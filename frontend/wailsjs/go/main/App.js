@@ -66,6 +66,10 @@ export function InspectCookieFile(arg1) {
   return window['go']['main']['App']['InspectCookieFile'](arg1);
 }
 
+export function InstallFFmpeg() {
+  return window['go']['main']['App']['InstallFFmpeg']();
+}
+
 export function OpenChromeExtensions() {
   return window['go']['main']['App']['OpenChromeExtensions']();
 }

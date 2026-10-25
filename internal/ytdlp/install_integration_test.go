@@ -48,3 +48,39 @@ func TestInstallIntegration(t *testing.T) {
 		t.Errorf("installed %s is older than the latest tag %s", v, latest)
 	}
 }
+
+// Opt-in: downloads yt-dlp's ffmpeg build (about 90 MB) into a temp dir, twice.
+//
+//	$env:YTGUI_INTEGRATION = "1"; go test ./internal/ytdlp -run FFmpegInstallIntegration -v
+func TestFFmpegInstallIntegration(t *testing.T) {
+	if os.Getenv("YTGUI_INTEGRATION") != "1" {
+		t.Skip("set YTGUI_INTEGRATION=1 to download a real ffmpeg build")
+	}
+	if !CanInstallFFmpeg() {
+		t.Skip("no ffmpeg build for this platform")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	client := HTTPClient("", 10*time.Minute)
+	managed := t.TempDir()
+
+	var last, total int64
+	v, err := InstallFFmpeg(ctx, client, managed, func(done, tot int64) { last, total = done, tot })
+	if err != nil {
+		t.Fatalf("fresh install: %v", err)
+	}
+	t.Logf("installed ffmpeg %s (%d of %d bytes)", v, last, total)
+	ff := FindFFmpeg(ctx, "", "", managed)
+	if ff.Version != v || filepath.Dir(ff.Path) != FFmpegDir(managed) {
+		t.Fatalf("detection found %+v, want version %s in %s", ff, v, FFmpegDir(managed))
+	}
+
+	// Installing again replaces the folder and leaves nothing beside it.
+	if _, err := InstallFFmpeg(ctx, client, managed, nil); err != nil {
+		t.Fatalf("reinstall over existing: %v", err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(managed, "bin"))
+	if len(entries) != 1 || entries[0].Name() != "ffmpeg" {
+		t.Fatalf("expected only the ffmpeg folder after reinstall, found %v", entries)
+	}
+}

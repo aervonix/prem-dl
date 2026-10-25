@@ -126,8 +126,9 @@ type FFmpeg struct {
 
 var ffmpegVersionRe = regexp.MustCompile(`ffmpeg version (\S+)`)
 
-// FindFFmpeg looks at the user's path, next to yt-dlp, then PATH. Path may be empty.
-func FindFFmpeg(ctx context.Context, custom, ytdlpPath string) FFmpeg {
+// FindFFmpeg looks at the user's path, next to yt-dlp, in the app's own install (managedDir),
+// then PATH. Any of them may be empty.
+func FindFFmpeg(ctx context.Context, custom, ytdlpPath, managedDir string) FFmpeg {
 	name := "ffmpeg"
 	if runtime.GOOS == "windows" {
 		name = "ffmpeg.exe"
@@ -142,6 +143,9 @@ func FindFFmpeg(ctx context.Context, custom, ytdlpPath string) FFmpeg {
 	}
 	if ytdlpPath != "" {
 		candidates = append(candidates, filepath.Join(filepath.Dir(ytdlpPath), name))
+	}
+	if managedDir != "" {
+		candidates = append(candidates, filepath.Join(FFmpegDir(managedDir), name))
 	}
 	if p, err := exec.LookPath(name); err == nil {
 		candidates = append(candidates, p)
@@ -446,11 +450,11 @@ func downloadTo(ctx context.Context, client *http.Client, u, path string, progre
 	req.Header.Set("User-Agent", "Prem-dl")
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("downloading yt-dlp: %w", err)
+		return "", fmt.Errorf("downloading %s: %w", fileOf(u), err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("downloading yt-dlp: server answered %s", resp.Status)
+		return "", fmt.Errorf("downloading %s: server answered %s", fileOf(u), resp.Status)
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
@@ -461,7 +465,7 @@ func downloadTo(ctx context.Context, client *http.Client, u, path string, progre
 	_, copyErr := io.Copy(io.MultiWriter(f, h), pr)
 	closeErr := f.Close()
 	if copyErr != nil {
-		return "", fmt.Errorf("downloading yt-dlp: %w", copyErr)
+		return "", fmt.Errorf("downloading %s: %w", fileOf(u), copyErr)
 	}
 	if closeErr != nil {
 		return "", closeErr
@@ -485,4 +489,9 @@ func (p *progressReader) Read(b []byte) (int, error) {
 		p.cb(p.done, p.total)
 	}
 	return n, err
+}
+
+// fileOf is the last element of a download URL, for error messages.
+func fileOf(u string) string {
+	return u[strings.LastIndex(u, "/")+1:]
 }

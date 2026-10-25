@@ -1,6 +1,7 @@
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {api, errMessage} from '../api'
-import {ErrorPanel, EJS_DOCS, FFMPEG_INSTALL_CMD} from '../components/ErrorPanel'
+import {ErrorPanel, EJS_DOCS} from '../components/ErrorPanel'
+import {FfmpegProgress, InstallFfmpegButton} from '../components/FfmpegInstall'
 import {OptionsPanel} from '../components/OptionsPanel'
 import {Button, Card, Field, Modal, Progress, Switch} from '../components/ui'
 import {bytes, plural} from '../format'
@@ -83,7 +84,7 @@ function PasteCookiesModal({onClose, onImport}: {onClose: () => void; onImport: 
 }
 
 export function SettingsPage() {
-  const {state, setSettings, toast, attempt, copy, updateYtdlp, setTools, setUpdateAvailable} = useApp()
+  const {state, setSettings, toast, attempt, updateYtdlp, setTools, setUpdateAvailable} = useApp()
   const saved = state.settings
   const [draft, setDraft] = useState<Settings | null>(saved)
   const [saving, setSaving] = useState(false)
@@ -575,15 +576,21 @@ export function SettingsPage() {
                       <>
                         <b>{tools.ffmpeg.version || 'found'}</b>
                         <div className="mono muted">{tools.ffmpeg.path}</div>
+                        {tools.ffmpegManaged && (
+                          <div style={{marginTop: 6}}>
+                            <InstallFfmpegButton variant="secondary" label="Update ffmpeg" />
+                          </div>
+                        )}
                       </>
                     ) : (
                       <>
-                        <span className="badge warn">Not found</span>{' '}
-                        <button type="button" className="link" onClick={() => void copy(FFMPEG_INSTALL_CMD, `Copied “${FFMPEG_INSTALL_CMD}”`)}>
-                          copy install command
-                        </button>
+                        <span className="badge warn">Not found</span>
+                        <div style={{marginTop: 6}}>
+                          <InstallFfmpegButton variant="secondary" />
+                        </div>
                       </>
                     )}
+                    <FfmpegProgress />
                   </dd>
                   <dt>JavaScript runtime</dt>
                   <dd>
