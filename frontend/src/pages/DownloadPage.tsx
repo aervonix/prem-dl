@@ -49,9 +49,11 @@ const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}
       <div className="pl-row" onClick={() => onOpen(entry.url)}>
         <Icon name="list" size={16} />
         <span className="idx">{entry.index}</span>
-        {entry.thumbnail ? <img className="pthumb" src={entry.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="pthumb" />}
+        <PlaylistThumb src={entry.thumbnail} />
         <div style={{minWidth: 0}}>
-          <div className="ptitle">{entry.title || entry.id}</div>
+          <div className="ptitle" title={entry.title || entry.id}>
+            {entry.title || entry.id}
+          </div>
           <div className="psub truncate">Playlist</div>
         </div>
         <Button
@@ -66,18 +68,28 @@ const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}
     )
   }
   return (
-    <div className={`pl-row${off ? ' off' : ''}`} onClick={() => !off && onToggle(entry.index)} role="checkbox" aria-checked={checked} aria-disabled={off}>
-      <input type="checkbox" checked={checked && !off} disabled={off} onChange={() => onToggle(entry.index)} onClick={(e) => e.stopPropagation()} aria-label={`Select ${entry.title}`} />
+    // A label, so the whole row toggles the checkbox and assistive tech meets one control, not two.
+    <label className={`pl-row${off ? ' off' : ''}`}>
+      <input type="checkbox" checked={checked && !off} disabled={off} onChange={() => onToggle(entry.index)} aria-label={`Select ${entry.title || entry.id}`} />
       <span className="idx">{entry.index}</span>
-      {entry.thumbnail ? <img className="pthumb" src={entry.thumbnail} alt="" loading="lazy" referrerPolicy="no-referrer" /> : <span className="pthumb" />}
+      <PlaylistThumb src={entry.thumbnail} />
       <div style={{minWidth: 0}}>
-        <div className="ptitle">{entry.title || entry.id}</div>
+        <div className="ptitle" title={entry.title || entry.id}>
+            {entry.title || entry.id}
+          </div>
         <div className="psub truncate">{off ? 'Unavailable (private or deleted)' : entry.uploader}</div>
       </div>
       <span className="psub">{duration(entry.duration)}</span>
-    </div>
+    </label>
   )
 })
+
+// A thumbnail that failed to load shows the empty placeholder instead of a broken image.
+function PlaylistThumb({src}: {src: string}) {
+  const [failed, setFailed] = useState(false)
+  if (!src || failed) return <span className="pthumb" />
+  return <img className="pthumb" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+}
 
 export function DownloadPage() {
   const {state, go, toast, attempt, setSettings} = useApp()
@@ -432,7 +444,7 @@ export function DownloadPage() {
               <div className="media">
                 <Thumb src={video.thumbnail} seconds={video.duration} />
                 <div className="media-info">
-                  <h2>{video.title}</h2>
+                  <h2 title={video.title}>{video.title}</h2>
                   <div className="meta">
                     {video.uploader && (
                       <span>
@@ -505,7 +517,7 @@ export function DownloadPage() {
                 <input type="text" placeholder="Filter by title…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter playlist" />
               </div>
               <div className="pl-list" role="group" aria-label="Playlist videos">
-                {rows.length === 0 && <div className="empty" style={{padding: 24}}>No videos match “{filter}”.</div>}
+                {rows.length === 0 && <div className="empty" style={{padding: 24}}>{filter.trim() ? `No videos match “${filter.trim()}”.` : 'This playlist is empty.'}</div>}
                 {rows.map((e) => {
                   const header = e.group && e.group !== lastGroup ? <div key={`g-${e.index}`} className="pl-group">{e.group}</div> : null
                   lastGroup = e.group

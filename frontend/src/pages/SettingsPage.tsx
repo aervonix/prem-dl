@@ -148,6 +148,7 @@ export function SettingsPage() {
   }, [cookieFile])
 
   const upd = useCallback((patch: Partial<Settings>) => setDraft((d) => (d ? {...d, ...patch} : d)), [])
+  const templateInput = useRef<HTMLInputElement>(null)
 
   if (!saved || !draft) return null
 
@@ -274,7 +275,12 @@ export function SettingsPage() {
                   <Field label="File names" hint="How downloaded files are named.">
                     <select
                       value={templatePreset}
-                      onChange={(e) => e.target.value !== 'custom' && upd({filenameTemplate: e.target.value})}>
+                      onChange={(e) => {
+                        if (e.target.value !== 'custom') return upd({filenameTemplate: e.target.value})
+                        // The template field below is where a custom one is written.
+                        templateInput.current?.focus()
+                        templateInput.current?.select()
+                      }}>
                       {TEMPLATES.map((t) => (
                         <option key={t.value} value={t.value}>
                           {t.label}
@@ -291,10 +297,10 @@ export function SettingsPage() {
                   label="File name template"
                   hint={
                     <>
-                      Uses yt-dlp's <a onClick={() => void api.openExternal('https://github.com/yt-dlp/yt-dlp#output-template')}>output template</a> syntax and must end with <code>.%(ext)s</code>.
+                      Uses yt-dlp's <button type="button" className="link" onClick={() => void api.openExternal('https://github.com/yt-dlp/yt-dlp#output-template')}>output template</button> syntax and must end with <code>.%(ext)s</code>.
                     </>
                   }>
-                  <input type="text" className="mono" value={draft.filenameTemplate} onChange={(e) => upd({filenameTemplate: e.target.value})} spellCheck={false} />
+                  <input ref={templateInput} type="text" className="mono" value={draft.filenameTemplate} onChange={(e) => upd({filenameTemplate: e.target.value})} spellCheck={false} />
                 </Field>
   
                 <div className="grid2">
@@ -495,7 +501,7 @@ export function SettingsPage() {
                     </ol>
                     <p className="hint" style={{marginTop: 8}}>
                       Treat the file like a password: anyone with it can use your logged-in session. This app keeps its own private copy and gives each download a temporary one. See the{' '}
-                      <a onClick={() => void api.openExternal(COOKIE_FAQ)}>yt-dlp FAQ</a>.
+                      <button type="button" className="link" onClick={() => void api.openExternal(COOKIE_FAQ)}>yt-dlp FAQ</button>.
                     </p>
                   </details>
                 </div>
@@ -573,12 +579,9 @@ export function SettingsPage() {
                     ) : (
                       <>
                         <span className="badge warn">Not found</span>{' '}
-                        <a
-                          onClick={() => {
-                            void copy(FFMPEG_INSTALL_CMD, `Copied “${FFMPEG_INSTALL_CMD}”`)
-                          }}>
+                        <button type="button" className="link" onClick={() => void copy(FFMPEG_INSTALL_CMD, `Copied “${FFMPEG_INSTALL_CMD}”`)}>
                           copy install command
-                        </a>
+                        </button>
                       </>
                     )}
                   </dd>
@@ -594,7 +597,7 @@ export function SettingsPage() {
                       ))
                     ) : (
                       <>
-                        <span className="badge warn">None found</span> YouTube needs Deno or Node.js 20+. <a onClick={() => void api.openExternal(EJS_DOCS)}>Why?</a>
+                        <span className="badge warn">None found</span> YouTube needs Deno or Node.js 20+. <button type="button" className="link" onClick={() => void api.openExternal(EJS_DOCS)}>Why?</button>
                       </>
                     )}
                   </dd>
@@ -602,7 +605,7 @@ export function SettingsPage() {
   
                 {updating && (
                   <div>
-                    <Progress percent={pct} />
+                    <Progress percent={pct} label="Downloading yt-dlp" />
                     <div className="hint" style={{marginTop: 4}}>
                       {state.toolProgress && state.toolProgress.total > 0 ? `${bytes(state.toolProgress.done)} of ${bytes(state.toolProgress.total)}` : 'Working…'}
                     </div>

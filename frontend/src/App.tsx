@@ -25,8 +25,15 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="brand">Prem-dl</div>
-      {NAV.map((n) => (
-        <button key={n.page} type="button" className="nav-item" aria-current={state.page === n.page ? 'page' : undefined} onClick={() => go(n.page)}>
+      {NAV.map((n, i) => (
+        <button
+          key={n.page}
+          type="button"
+          className="nav-item"
+          title={`${n.label} (Ctrl+${i + 1})`}
+          aria-keyshortcuts={`Control+${i + 1}`}
+          aria-current={state.page === n.page ? 'page' : undefined}
+          onClick={() => go(n.page)}>
           <Icon name={n.icon} />
           {n.label}
           {n.page === 'queue' && busy > 0 && <span className="nav-badge">{busy}</span>}
@@ -44,7 +51,8 @@ function Sidebar() {
             PREM-DL - UPDATE AVAILABLE
           </button>
         ) : (
-          <span>PREM-DL - UPDATED</span>
+          // The installed version, not "updated": no check may have run, or it may have failed.
+          <span>PREM-DL - YT-DLP {tools.ytdlp.version}</span>
         )}
       </div>
     </aside>

@@ -30,6 +30,7 @@ export function Banners() {
   const ready = !tools.checking
   const updating = toolProgress !== null
   const interrupted = jobs.filter((j) => j.status === 'paused' && j.stage === 'Interrupted').length
+  const running = jobs.filter((j) => ['starting', 'downloading', 'processing'].includes(j.status)).length
 
   const out: ReactNode[] = []
 
@@ -47,7 +48,7 @@ export function Banners() {
         }>
         {updating ? (
           <div style={{marginTop: 6, minWidth: 220}}>
-            <Progress percent={toolProgress && toolProgress.total > 0 ? (toolProgress.done / toolProgress.total) * 100 : -1} />
+            <Progress percent={toolProgress && toolProgress.total > 0 ? (toolProgress.done / toolProgress.total) * 100 : -1} label="Downloading yt-dlp" />
             <div style={{marginTop: 4}}>{toolProgress && toolProgress.total > 0 ? `${bytes(toolProgress.done)} of ${bytes(toolProgress.total)}` : 'Starting…'}</div>
           </div>
         ) : (
@@ -78,7 +79,7 @@ export function Banners() {
     out.push(
       <Banner key="updating" tone="info" icon="refresh" title="Updating yt-dlp…">
         <div style={{marginTop: 6, maxWidth: 360}}>
-          <Progress percent={toolProgress && toolProgress.total > 0 ? (toolProgress.done / toolProgress.total) * 100 : -1} />
+          <Progress percent={toolProgress && toolProgress.total > 0 ? (toolProgress.done / toolProgress.total) * 100 : -1} label="Downloading yt-dlp" />
         </div>
       </Banner>,
     )
@@ -93,7 +94,12 @@ export function Banners() {
         title={`yt-dlp ${updateAvailable.latest} is available`}
         actions={
           <>
-            <Button variant="primary" size="sm" onClick={() => void updateYtdlp()}>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={running > 0}
+              title={running > 0 ? 'Pause or finish the active downloads first' : undefined}
+              onClick={() => void updateYtdlp()}>
               Update now
             </Button>
             <IconButton

@@ -79,7 +79,7 @@ const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: 
           <span style={{color: s === 'failed' ? 'var(--danger)' : s === 'completed' ? 'var(--ok)' : undefined}}>{statusText(job)}</span>
           {s === 'completed' && job.outputFile && <span className="muted"> · {basename(job.outputFile)}</span>}
         </div>
-        {s !== 'failed' && s !== 'cancelled' && <Progress percent={percent} state={progressState(job)} />}
+        {s !== 'failed' && s !== 'cancelled' && <Progress percent={percent} state={progressState(job)} label={job.title} />}
         {(live || s === 'paused') && (
           <div className="jstats">
             <span>
@@ -111,7 +111,8 @@ const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: 
           </>
         )}
         <IconButton icon="terminal" label="Show log" onClick={() => onLog(job)} />
-        {(live || s === 'queued' || s === 'paused') && <IconButton icon="x" label="Cancel" danger onClick={() => void run(() => api.cancelJob(job.id))} />}
+        {/* A paused job offers Remove; Cancel next to it did the same thing by another name. */}
+        {(live || s === 'queued') && <IconButton icon="x" label="Cancel" danger onClick={() => void run(() => api.cancelJob(job.id))} />}
         {!live && s !== 'queued' && <IconButton icon="trash" label="Remove from list" danger onClick={() => void run(() => api.removeJob(job.id))} />}
       </div>
       {s === 'failed' && job.error && (
@@ -190,10 +191,18 @@ function LogModal({job, onClose}: {job: Job; onClose: () => void}) {
   )
 }
 
+// The page unmounts while hidden (it would otherwise re-render on every progress tick), so the
+// chosen filter is kept here for the next visit.
+let lastFilter: Filter = 'all'
+
 export function QueuePage() {
   const {go, toast} = useApp()
   const jobs = useJobs()
-  const [filter, setFilter] = useState<Filter>('all')
+  const [filter, setFilterState] = useState<Filter>(lastFilter)
+  const setFilter = useCallback((f: Filter) => {
+    lastFilter = f
+    setFilterState(f)
+  }, [])
   const [logJob, setLogJob] = useState<Job | null>(null)
 
   const counts = useMemo(() => {
@@ -253,8 +262,16 @@ export function QueuePage() {
             <Button size="sm" icon="play" disabled={!canResume} onClick={() => void api.resumeAll()}>
               Resume all
             </Button>
-            <Button size="sm" icon="trash" disabled={counts.done === 0 && counts.failed === 0} onClick={() => void api.clearFinished(false)}>
-              Clear finished
+            <Button size="sm" icon="trash" disabled={counts.done === 0} title="Remove completed downloads from the list. Files on disk are kept." onClick={() => void api.clearFinished(true)}>
+              Clear completed
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={counts.done === 0 && counts.failed === 0}
+              title="Also remove failed and cancelled downloads, which can then no longer be retried. Files on disk are kept."
+              onClick={() => void api.clearFinished(false)}>
+              Clear all finished
             </Button>
           </div>
 

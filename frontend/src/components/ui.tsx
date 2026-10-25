@@ -1,4 +1,4 @@
-import {cloneElement, isValidElement, useEffect, useId} from 'react'
+import {cloneElement, isValidElement, useEffect, useId, useRef, useState} from 'react'
 import type {ButtonHTMLAttributes, ReactNode} from 'react'
 import {Icon} from '../icons'
 import type {IconName} from '../icons'
@@ -139,11 +139,11 @@ export function Card({
   )
 }
 
-export function Progress({percent, state}: {percent: number; state?: 'busy' | 'done' | 'paused' | 'failed' | 'active'}) {
+export function Progress({percent, state, label}: {percent: number; state?: 'busy' | 'done' | 'paused' | 'failed' | 'active'; label?: string}) {
   const unknown = percent < 0
   const cls = ['progress', state && state !== 'active' ? state : '', unknown ? 'indeterminate' : ''].join(' ').trim()
   return (
-    <div className={cls} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={unknown ? undefined : Math.round(percent)}>
+    <div className={cls} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={unknown ? undefined : Math.round(percent)}>
       <i style={{width: unknown ? undefined : `${Math.min(100, Math.max(0, percent))}%`}} />
     </div>
   )
@@ -157,17 +157,49 @@ export function Chip({pressed, onClick, children, title}: {pressed?: boolean; on
   )
 }
 
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 export function Modal({title, onClose, children, footer}: {title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode}) {
+  const titleId = useId()
+  const box = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose)
+  close.current = onClose
+  // Read during the first render, before a child's autoFocus moves focus into the dialog.
+  const [opener] = useState(() => document.activeElement as HTMLElement | null)
+
+  // Focus moves into the dialog, Tab cycles inside it, and focus goes back to whatever opened it.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    // A child with autoFocus has already taken focus by now; keep it.
+    if (!box.current?.contains(document.activeElement)) box.current?.focus()
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') return close.current()
+      if (e.key !== 'Tab' || !box.current) return
+      const items = [...box.current.querySelectorAll<HTMLElement>(FOCUSABLE)]
+      if (items.length === 0) return e.preventDefault()
+      const first = items[0]
+      const last = items[items.length - 1]
+      const inside = box.current.contains(document.activeElement)
+      if (e.shiftKey && (!inside || document.activeElement === first || document.activeElement === box.current)) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && (!inside || document.activeElement === last)) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      opener?.focus?.()
+    }
+  }, [opener])
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-modal="true">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={box}>
         <div className="modal-head">
-          <h2 className="truncate">{title}</h2>
+          <h2 className="truncate" id={titleId}>
+            {title}
+          </h2>
           <IconButton icon="x" label="Close" onClick={onClose} />
         </div>
         <div className="modal-body">{children}</div>

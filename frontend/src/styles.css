@@ -11,7 +11,7 @@
   --border-strong: #c8c8c8;
   --text: #111111;
   --muted: #5c5c5c;
-  --faint: #8c8c8c;
+  --faint: #707070; /* 4.5:1 on --bg and --panel */
   --accent: #111111;
   --accent-hover: #333333;
   --accent-fg: #ffffff;
@@ -38,7 +38,7 @@
     --border-strong: #333333;
     --text: #ececec;
     --muted: #9a9a9a;
-    --faint: #666666;
+    --faint: #808080; /* 4.5:1 on --panel and --panel-2 */
     --accent: #ececec;
     --accent-hover: #ffffff;
     --accent-fg: #000000;
@@ -59,7 +59,7 @@
   --border-strong: #333333;
   --text: #ececec;
   --muted: #9a9a9a;
-  --faint: #666666;
+  --faint: #808080;
   --accent: #ececec;
   --accent-hover: #ffffff;
   --accent-fg: #000000;
@@ -99,13 +99,23 @@ button {
   font: inherit;
   color: inherit;
 }
-a {
+/* .link is a button that looks like a link: it acts in place, so it must be reachable by Tab. */
+a,
+.link {
   color: var(--text);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-a:hover {
+.link {
+  display: inline;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+}
+a:hover,
+.link:hover {
   color: var(--muted);
 }
 code,
@@ -709,7 +719,8 @@ input[type='checkbox'] {
 .toasts {
   position: fixed;
   right: 18px;
-  bottom: 18px;
+  /* Clear of the Download and Save bars pinned to the bottom edge, so a toast never hides them. */
+  bottom: 84px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -785,6 +796,9 @@ input[type='checkbox'] {
   place-items: center;
   z-index: 90;
   padding: 24px;
+}
+.modal:focus {
+  outline: none;
 }
 .modal {
   width: min(760px, 100%);
@@ -956,9 +970,15 @@ input[type='checkbox'] {
 .pl-row:hover {
   background: var(--panel-2);
 }
+/* Only the picture fades: faded text ("Unavailable (private or deleted)") was unreadable. */
 .pl-row.off {
-  opacity: 0.45;
   cursor: default;
+}
+.pl-row.off .pthumb {
+  opacity: 0.4;
+}
+.pl-row.off .ptitle {
+  color: var(--muted);
 }
 .pl-row .idx {
   color: var(--faint);
@@ -1060,7 +1080,11 @@ input[type='checkbox'] {
 .q-toolbar .summary {
   flex: 1;
   color: var(--muted);
-  min-width: 160px;
+  /* Shrinks (and truncates) before the buttons wrap onto a second line. */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .job {
   display: grid;

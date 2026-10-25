@@ -186,7 +186,7 @@ export function AppProvider({children}: {children: ReactNode}) {
   const toast = useCallback((kind: ToastKind, text: string, action?: Toast['action']) => {
     const id = ++toastId.current
     dispatch({type: 'toast', toast: {id, kind, text, action}})
-    window.setTimeout(() => dispatch({type: 'toastDone', id}), kind === 'error' ? 9000 : 5000)
+    // Toasts dismiss themselves (see Toasts.tsx), pausing while hovered or focused.
   }, [dispatch])
 
   // Initial load + backend events.
