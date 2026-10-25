@@ -151,6 +151,11 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	return a
 }
 
+// QualitySort ranks video streams by resolution, frame rate, HDR and then bitrate, ahead of
+// yt-dlp's default codec preference. Observed: signed in, YouTube offers two "1080p Premium"
+// streams, VP9 at ~2.8 Mbps and AV1 at ~0.4 Mbps, and the default ranking picked the AV1 one.
+const QualitySort = "res,fps,hdr:12,vbr"
+
 // FormatArgs maps the quality preset onto yt-dlp's format selection flags.
 func FormatArgs(o settings.DownloadOptions) []string {
 	var a []string
@@ -167,11 +172,11 @@ func FormatArgs(o settings.DownloadOptions) []string {
 	case "custom":
 		a = append(a, "--format="+o.FormatID)
 	case "best", "":
-		a = append(a, "--format=bv*+ba/b")
+		a = append(a, "--format=bv*+ba/b", "--format-sort="+QualitySort)
 	default:
 		h := o.Preset
 		// "<=?" also admits formats whose height is unknown (some sites don't report it).
-		a = append(a, fmt.Sprintf("--format=bv*[height<=%[1]s]+ba/b[height<=%[1]s]/bv*[height<=?%[1]s]+ba/b[height<=?%[1]s]", h))
+		a = append(a, fmt.Sprintf("--format=bv*[height<=%[1]s]+ba/b[height<=%[1]s]/bv*[height<=?%[1]s]+ba/b[height<=?%[1]s]", h), "--format-sort="+QualitySort)
 	}
 	switch o.Container {
 	case "":

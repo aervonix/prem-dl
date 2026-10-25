@@ -56,6 +56,9 @@ type VideoInfo struct {
 	Heights      []int           `json:"heights"`
 	Subtitles    []SubtitleTrack `json:"subtitles"`
 	AutoCaptions []SubtitleTrack `json:"autoCaptions"`
+	// BestPremium is set when the default format choice, which the "Best" preset uses, picks a
+	// YouTube Premium video stream (format_note "Premium").
+	BestPremium bool `json:"bestPremium"`
 }
 
 // PlaylistEntry is one item of a playlist.
@@ -99,7 +102,7 @@ func NormalizeURL(raw string) (string, error) {
 		return "", errors.New("enter a link first")
 	}
 	if strings.ContainsAny(u, " \t\r\n") {
-		return "", fmt.Errorf("%q contains spaces — put one link per line", u)
+		return "", fmt.Errorf("%q contains spaces. Put one link per line.", u)
 	}
 	if !strings.Contains(u, "://") {
 		if strings.HasPrefix(u, "-") || !strings.Contains(u, ".") {
@@ -160,6 +163,8 @@ type rawInfo struct {
 	Availability string `json:"availability"`
 
 	Formats           []rawFormat         `json:"formats"`
+	FormatNote        string              `json:"format_note"`       // of the default choice
+	RequestedFormats  []rawFormat         `json:"requested_formats"` // the default choice, when merged
 	Subtitles         map[string][]rawSub `json:"subtitles"`
 	AutomaticCaptions map[string][]rawSub `json:"automatic_captions"`
 	Entries           []json.RawMessage   `json:"entries"`
@@ -309,10 +314,18 @@ func buildVideo(r *rawInfo) *VideoInfo {
 		}
 	}
 	sort.Sort(sort.Reverse(sort.IntSlice(v.Heights)))
+	v.BestPremium = isPremium(r.FormatNote)
+	for _, f := range r.RequestedFormats {
+		if f.VCodec != "" && f.VCodec != "none" {
+			v.BestPremium = isPremium(f.FormatNote)
+		}
+	}
 	v.Subtitles = tracks(r.Subtitles, false)
 	v.AutoCaptions = tracks(r.AutomaticCaptions, true)
 	return v
 }
+
+func isPremium(note string) bool { return strings.Contains(strings.ToLower(note), "premium") }
 
 func tracks(m map[string][]rawSub, auto bool) []SubtitleTrack {
 	out := make([]SubtitleTrack, 0, len(m))
@@ -340,7 +353,8 @@ func Probe(ctx context.Context, env Env, rawURL string, noPlaylist bool) (*Probe
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	args := append([]string{"--dump-single-json", "--flat-playlist", "--no-warnings"}, env.CommonArgs()...)
+	// The default format choice in the JSON is what "Best" downloads, so rank it the same way.
+	args := append([]string{"--dump-single-json", "--flat-playlist", "--no-warnings", "--format-sort=" + QualitySort}, env.CommonArgs()...)
 	if noPlaylist {
 		args = append(args, "--no-playlist")
 	}

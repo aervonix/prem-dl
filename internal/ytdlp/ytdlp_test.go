@@ -254,7 +254,11 @@ func TestFormatPresets(t *testing.T) {
 		want []string
 	}{
 		{"720", settings.DownloadOptions{Preset: "720"},
-			[]string{"--format=bv*[height<=720]+ba/b[height<=720]/bv*[height<=?720]+ba/b[height<=?720]"}},
+			[]string{"--format=bv*[height<=720]+ba/b[height<=720]/bv*[height<=?720]+ba/b[height<=?720]", "--format-sort=res,fps,hdr:12,vbr"}},
+		// Observed (ulLBRyVrI1Y, signed in): default ranking picked the 0.4 Mbps AV1 "1080p Premium"
+		// stream over the 2.8 Mbps VP9 one. Bitrate now outranks codec at equal resolution.
+		{"best ranks bitrate above codec", settings.DownloadOptions{Preset: "best"},
+			[]string{"--format=bv*+ba/b", "--format-sort=res,fps,hdr:12,vbr"}},
 		{"audio mp3", settings.DownloadOptions{Preset: "audio", AudioFormat: "mp3", AudioQuality: "0"},
 			[]string{"--format=ba/b", "--extract-audio", "--audio-format=mp3", "--audio-quality=0"}},
 		{"audio flac has no quality", settings.DownloadOptions{Preset: "audio", AudioFormat: "flac", AudioQuality: "0"},
@@ -263,7 +267,7 @@ func TestFormatPresets(t *testing.T) {
 			[]string{"--format=137+140", "--merge-output-format=mp4", "--remux-video=mp4"}},
 		// Observed: h264 into WebM fails in ffmpeg; with the fallback it becomes .mkv, VP9 stays .webm.
 		{"webm falls back to mkv", settings.DownloadOptions{Preset: "best", Container: "webm"},
-			[]string{"--format=bv*+ba/b", "--merge-output-format=webm/mkv", "--remux-video=webm>webm/mkv"}},
+			[]string{"--format=bv*+ba/b", "--format-sort=res,fps,hdr:12,vbr", "--merge-output-format=webm/mkv", "--remux-video=webm>webm/mkv"}},
 	}
 	for _, c := range cases {
 		got := FormatArgs(c.o)
@@ -644,5 +648,23 @@ func TestParseChecksum(t *testing.T) {
 func TestPostStage(t *testing.T) {
 	if PostStage("Merger") != "Merging video and audio" || PostStage("SomethingNew") != "Processing" {
 		t.Fatal("stage names")
+	}
+}
+
+func TestBestPremiumComesFromTheDefaultChoice(t *testing.T) {
+	// Trimmed from real probes: r6Rp-uo6HmI picks 616 "Premium"; dQw4w9WgXcQ picks 401 "2160p".
+	cases := map[string]bool{
+		`{"_type":"video","id":"p","format_id":"616+251","format_note":"Premium+medium","requested_formats":[{"format_id":"616","format_note":"Premium","vcodec":"vp09.00.40.08","acodec":"none"},{"format_id":"251","format_note":"medium","vcodec":"none","acodec":"opus"}]}`: true,
+		`{"_type":"video","id":"n","format_id":"401+251","requested_formats":[{"format_id":"401","format_note":"2160p","vcodec":"av01","acodec":"none"},{"format_id":"251","format_note":"medium","vcodec":"none","acodec":"opus"}]}`:                                           false,
+		`{"_type":"video","id":"s","format_id":"18","format_note":"360p"}`: false,
+	}
+	for raw, want := range cases {
+		res, err := ParseProbe([]byte(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Video.BestPremium != want {
+			t.Errorf("%s: bestPremium = %v, want %v", res.Video.ID, res.Video.BestPremium, want)
+		}
 	}
 }
