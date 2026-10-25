@@ -190,6 +190,8 @@ export interface VideoInfo {
   heights: number[]
   subtitles: SubtitleTrack[]
   autoCaptions: SubtitleTrack[]
+  /** "Best" will download a YouTube Premium stream for this video. */
+  bestPremium: boolean
 }
 
 export interface PlaylistEntry {
@@ -263,6 +265,14 @@ export interface CookieInfo {
 export interface CookieResponse {
   info: CookieInfo
   settings: Settings
+  error: string
+}
+
+/** Where the Chrome cookie helper extension was written, for "Load unpacked". */
+export interface ChromeHelperInfo {
+  path: string
+  extensionId: string
+  chromeFound: boolean
   error: string
 }
 

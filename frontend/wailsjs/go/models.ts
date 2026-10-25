@@ -175,6 +175,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ChromeHelperInfo {
+	    path: string;
+	    extensionId: string;
+	    chromeFound: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChromeHelperInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.extensionId = source["extensionId"];
+	        this.chromeFound = source["chromeFound"];
+	        this.error = source["error"];
+	    }
+	}
 	export class CookieResponse {
 	    info: ytdlp.CookieInfo;
 	    settings: settings.Settings;
@@ -877,6 +895,7 @@ export namespace ytdlp {
 	    heights: number[];
 	    subtitles: SubtitleTrack[];
 	    autoCaptions: SubtitleTrack[];
+	    bestPremium: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new VideoInfo(source);
@@ -898,6 +917,7 @@ export namespace ytdlp {
 	        this.heights = source["heights"];
 	        this.subtitles = this.convertValues(source["subtitles"], SubtitleTrack);
 	        this.autoCaptions = this.convertValues(source["autoCaptions"], SubtitleTrack);
+	        this.bestPremium = source["bestPremium"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

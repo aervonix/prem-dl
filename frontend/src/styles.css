@@ -1,25 +1,27 @@
 /* ---------- tokens ---------- */
+/* Neutral greys only. The accent is the text colour (black on white, white on black); green,
+   amber and red appear only where they carry meaning: done, warning, failed. */
 :root {
   color-scheme: light;
-  --bg: #f4f5f8;
+  --bg: #f5f5f5;
   --panel: #ffffff;
-  --panel-2: #f0f2f6;
-  --panel-3: #e7eaf0;
-  --border: #dfe3ea;
-  --border-strong: #c9cfda;
-  --text: #171a21;
-  --muted: #5f6877;
-  --faint: #8b93a3;
-  --accent: #3b5bdb;
-  --accent-hover: #2f4cc4;
+  --panel-2: #f0f0f0;
+  --panel-3: #e5e5e5;
+  --border: #e0e0e0;
+  --border-strong: #c8c8c8;
+  --text: #111111;
+  --muted: #5c5c5c;
+  --faint: #8c8c8c;
+  --accent: #111111;
+  --accent-hover: #333333;
   --accent-fg: #ffffff;
-  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
-  --ok: #1a8f4c;
-  --warn: #b7791f;
-  --danger: #d12f2f;
-  --shadow: 0 8px 28px rgba(20, 24, 36, 0.14);
-  --radius: 10px;
-  --radius-sm: 7px;
+  --accent-soft: var(--panel-3);
+  --ok: #1e7a45;
+  --warn: #9a6700;
+  --danger: #c62828;
+  --shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  --radius: 6px;
+  --radius-sm: 4px;
   font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 14px;
   line-height: 1.45;
@@ -28,43 +30,43 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #0f1115;
-    --panel: #161a21;
-    --panel-2: #1c212a;
-    --panel-3: #252b36;
-    --border: #262c37;
-    --border-strong: #353d4b;
-    --text: #e8ebf1;
-    --muted: #9099a9;
-    --faint: #6c7584;
-    --accent: #7b96ff;
-    --accent-hover: #93a9ff;
-    --accent-fg: #0b0e14;
-    --ok: #4ade80;
-    --warn: #f5b64a;
-    --danger: #ff7b7b;
-    --shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+    --bg: #000000;
+    --panel: #0b0b0b;
+    --panel-2: #141414;
+    --panel-3: #1e1e1e;
+    --border: #222222;
+    --border-strong: #333333;
+    --text: #ececec;
+    --muted: #9a9a9a;
+    --faint: #666666;
+    --accent: #ececec;
+    --accent-hover: #ffffff;
+    --accent-fg: #000000;
+    --ok: #5fbf7f;
+    --warn: #d9a440;
+    --danger: #e5605b;
+    --shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
   }
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #0f1115;
-  --panel: #161a21;
-  --panel-2: #1c212a;
-  --panel-3: #252b36;
-  --border: #262c37;
-  --border-strong: #353d4b;
-  --text: #e8ebf1;
-  --muted: #9099a9;
-  --faint: #6c7584;
-  --accent: #7b96ff;
-  --accent-hover: #93a9ff;
-  --accent-fg: #0b0e14;
-  --ok: #4ade80;
-  --warn: #f5b64a;
-  --danger: #ff7b7b;
-  --shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+  --bg: #000000;
+  --panel: #0b0b0b;
+  --panel-2: #141414;
+  --panel-3: #1e1e1e;
+  --border: #222222;
+  --border-strong: #333333;
+  --text: #ececec;
+  --muted: #9a9a9a;
+  --faint: #666666;
+  --accent: #ececec;
+  --accent-hover: #ffffff;
+  --accent-fg: #000000;
+  --ok: #5fbf7f;
+  --warn: #d9a440;
+  --danger: #e5605b;
+  --shadow: 0 6px 20px rgba(0, 0, 0, 0.6);
 }
 
 /* ---------- base ---------- */
@@ -98,12 +100,13 @@ button {
   color: inherit;
 }
 a {
-  color: var(--accent);
+  color: var(--text);
   cursor: pointer;
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 a:hover {
-  text-decoration: underline;
+  color: var(--muted);
 }
 code,
 .mono {
@@ -111,7 +114,7 @@ code,
   font-size: 12.5px;
 }
 ::selection {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--text) 25%, transparent);
 }
 :focus-visible {
   outline: 2px solid var(--accent);
@@ -123,7 +126,7 @@ code,
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 8px;
+  border-radius: 4px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
@@ -149,22 +152,9 @@ code,
   gap: 4px;
 }
 .brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 2px 10px 18px;
-  font-weight: 650;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-}
-.brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  background: var(--accent);
-  color: var(--accent-fg);
+  padding: 2px 11px 18px;
+  font-weight: 600;
+  font-size: 14px;
 }
 .nav-item {
   display: flex;
@@ -184,20 +174,22 @@ code,
   color: var(--text);
 }
 .nav-item[aria-current='page'] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--panel-3);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--text);
 }
 .nav-badge {
   margin-left: auto;
   min-width: 20px;
-  padding: 0 6px;
-  border-radius: 10px;
-  background: var(--accent);
-  color: var(--accent-fg);
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--panel-3);
+  color: var(--text);
   font-size: 11.5px;
-  font-weight: 700;
+  font-weight: 600;
   text-align: center;
-  line-height: 20px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
 }
 .sidebar-foot {
   margin-top: auto;
@@ -209,26 +201,19 @@ code,
   flex-direction: column;
   gap: 4px;
 }
-.sidebar-foot .row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.foot-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--faint);
-  flex: none;
-}
-.dot.ok {
-  background: var(--ok);
-}
-.dot.warn {
-  background: var(--warn);
-}
-.dot.bad {
-  background: var(--danger);
+.foot-link.bad {
+  color: var(--danger);
 }
 
 .main {
@@ -261,9 +246,8 @@ code,
   margin-bottom: 18px;
 }
 .page-head h1 {
-  font-size: 22px;
-  font-weight: 680;
-  letter-spacing: -0.02em;
+  font-size: 20px;
+  font-weight: 600;
 }
 .page-head .spacer {
   flex: 1;
@@ -285,9 +269,8 @@ code,
   border: 1px solid var(--border-strong);
   background: var(--panel);
   cursor: pointer;
-  font-weight: 560;
+  font-weight: 500;
   white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s;
 }
 .btn:hover:not(:disabled) {
   background: var(--panel-2);
@@ -330,7 +313,7 @@ code,
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   border: 0;
   background: none;
   color: var(--muted);
@@ -369,9 +352,9 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline: 1px solid var(--text);
   outline-offset: 0;
-  border-color: var(--accent);
+  border-color: var(--text);
 }
 input::placeholder,
 textarea::placeholder {
@@ -380,7 +363,7 @@ textarea::placeholder {
 select {
   appearance: none;
   padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b93a3' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238c8c8c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 9px center;
 }
@@ -417,10 +400,9 @@ input[type='checkbox'] {
   width: 34px;
   height: 20px;
   margin-top: 1px;
-  border-radius: 11px;
+  border-radius: 4px;
   background: var(--border-strong);
   position: relative;
-  transition: background 0.15s;
 }
 .switch .track::after {
   content: '';
@@ -429,20 +411,25 @@ input[type='checkbox'] {
   left: 2px;
   width: 16px;
   height: 16px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.15s;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  background: var(--muted);
+  transition: transform 0.1s;
 }
 .switch input:checked + .track {
   background: var(--accent);
 }
 .switch input:checked + .track::after {
   transform: translateX(14px);
+  background: var(--accent-fg);
 }
 .switch input:focus-visible + .track {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+/* Next to a labelled field (e.g. "Convert to" over a dropdown), line the switch up with the
+   control rather than with the field's label. */
+.grid2:has(> .field) > .switch {
+  margin-top: 26px;
 }
 .switch .label {
   font-weight: 540;
@@ -457,28 +444,54 @@ input[type='checkbox'] {
   align-self: flex-start;
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 9px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
+  gap: 0;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
 }
 .seg button {
+  position: relative;
   border: 0;
+  border-right: 1px solid var(--border);
   background: none;
   padding: 5px 12px;
-  border-radius: 6px;
+  border-radius: 0;
   cursor: pointer;
   color: var(--muted);
-  font-weight: 560;
+  font-weight: 500;
+}
+.seg button:first-child {
+  border-radius: 3px 0 0 3px;
+}
+.seg button:last-child {
+  border-right: 0;
+  border-radius: 0 3px 3px 0;
+}
+/* A small label above one option, e.g. "Premium" over Best. */
+.seg-tagged {
+  padding-top: 14px;
+}
+.seg-tag {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
 }
 .seg button:hover:not(:disabled):not([aria-pressed='true']) {
   color: var(--text);
+  background: var(--panel-2);
 }
 .seg button[aria-pressed='true'] {
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  background: var(--accent);
+  color: var(--accent-fg);
 }
 .seg button:disabled {
   opacity: 0.4;
@@ -495,8 +508,8 @@ input[type='checkbox'] {
   align-items: center;
   gap: 6px;
   height: 26px;
-  padding: 0 10px;
-  border-radius: 13px;
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-strong);
   background: var(--panel);
   cursor: pointer;
@@ -509,9 +522,9 @@ input[type='checkbox'] {
   border-color: var(--faint);
 }
 .chip[aria-pressed='true'] {
-  background: var(--accent-soft);
+  background: var(--accent);
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 .chip.static {
   cursor: default;
@@ -521,28 +534,24 @@ input[type='checkbox'] {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 1px 8px;
-  border-radius: 10px;
-  background: var(--panel-3);
+  padding: 0 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border-strong);
   color: var(--muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .badge.ok {
   color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
 }
 .badge.warn {
   color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 16%, transparent);
 }
 .badge.bad {
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 .badge.accent {
-  color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--text);
 }
 
 .spinner {
@@ -578,8 +587,8 @@ input[type='checkbox'] {
   margin-bottom: 14px;
 }
 .card-head h2 {
-  font-size: 15.5px;
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 600;
 }
 .card-head .sub {
   color: var(--muted);
@@ -630,11 +639,9 @@ input[type='checkbox'] {
   margin: 16px 0;
 }
 .section-title {
-  font-weight: 650;
+  font-weight: 600;
   font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--faint);
+  color: var(--muted);
   margin: 0 0 8px;
 }
 .muted {
@@ -674,21 +681,22 @@ input[type='checkbox'] {
   flex: none;
 }
 .banner.warn {
-  border-color: color-mix(in srgb, var(--warn) 50%, var(--border));
-  background: color-mix(in srgb, var(--warn) 9%, var(--panel));
+  border-left: 3px solid var(--warn);
 }
 .banner.warn > .ic {
   color: var(--warn);
 }
 .banner.bad {
-  border-color: color-mix(in srgb, var(--danger) 50%, var(--border));
-  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+  border-left: 3px solid var(--danger);
 }
 .banner.bad > .ic {
   color: var(--danger);
 }
+.banner.ok {
+  border-left: 3px solid var(--ok);
+}
 .banner.info > .ic {
-  color: var(--accent);
+  color: var(--muted);
 }
 .banner.ok > .ic {
   color: var(--ok);
@@ -717,10 +725,9 @@ input[type='checkbox'] {
   background: var(--panel);
   border: 1px solid var(--border-strong);
   box-shadow: var(--shadow);
-  animation: pop 0.18s ease-out;
 }
 .toast.error {
-  border-color: var(--danger);
+  border-left: 3px solid var(--danger);
 }
 .toast.success .ic {
   color: var(--ok);
@@ -728,17 +735,11 @@ input[type='checkbox'] {
 .toast.error .ic {
   color: var(--danger);
 }
-@keyframes pop {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-}
 
 /* ---------- progress ---------- */
 .progress {
-  height: 6px;
-  border-radius: 3px;
+  height: 4px;
+  border-radius: 2px;
   background: var(--panel-3);
   overflow: hidden;
   position: relative;
@@ -747,7 +748,6 @@ input[type='checkbox'] {
   position: absolute;
   inset: 0 auto 0 0;
   background: var(--accent);
-  border-radius: 3px;
   transition: width 0.25s linear;
 }
 .progress.done > i {
@@ -760,27 +760,12 @@ input[type='checkbox'] {
   background: var(--danger);
 }
 .progress.busy > i {
-  background-image: linear-gradient(
-    45deg,
-    rgba(255, 255, 255, 0.28) 25%,
-    transparent 25%,
-    transparent 50%,
-    rgba(255, 255, 255, 0.28) 50%,
-    rgba(255, 255, 255, 0.28) 75%,
-    transparent 75%
-  );
-  background-size: 14px 14px;
-  animation: stripes 0.8s linear infinite;
+  background: var(--muted);
 }
 .progress.indeterminate > i {
   width: 35% !important;
   animation: slide 1.2s ease-in-out infinite;
   transition: none;
-}
-@keyframes stripes {
-  to {
-    background-position: 14px 0;
-  }
 }
 @keyframes slide {
   from {
@@ -795,7 +780,7 @@ input[type='checkbox'] {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(8, 10, 14, 0.55);
+  background: rgba(0, 0, 0, 0.6);
   display: grid;
   place-items: center;
   z-index: 90;
@@ -808,7 +793,7 @@ input[type='checkbox'] {
   flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: var(--radius);
   box-shadow: var(--shadow);
 }
 .modal-head {
@@ -875,7 +860,7 @@ input[type='checkbox'] {
   flex: none;
   width: 220px;
   aspect-ratio: 16 / 9;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--panel-3) center / cover no-repeat;
   position: relative;
   overflow: hidden;
@@ -898,15 +883,15 @@ input[type='checkbox'] {
   font-size: 11.5px;
   font-weight: 600;
   padding: 1px 6px;
-  border-radius: 4px;
+  border-radius: 2px;
 }
 .media-info {
   min-width: 0;
   flex: 1;
 }
 .media-info h2 {
-  font-size: 17px;
-  font-weight: 650;
+  font-size: 16px;
+  font-weight: 600;
   line-height: 1.3;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -951,10 +936,8 @@ input[type='checkbox'] {
   background: var(--panel-2);
   border-bottom: 1px solid var(--border);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 .pl-row {
   display: grid;
@@ -985,7 +968,7 @@ input[type='checkbox'] {
 .pl-row .pthumb {
   width: 84px;
   aspect-ratio: 16 / 9;
-  border-radius: 5px;
+  border-radius: 2px;
   background: var(--panel-3);
   object-fit: cover;
 }
@@ -1007,8 +990,7 @@ input[type='checkbox'] {
   bottom: 0;
   margin: 18px -28px -32px;
   padding: 14px 28px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--bg);
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -1026,18 +1008,9 @@ input[type='checkbox'] {
   color: var(--muted);
   padding: 56px 20px;
 }
-.empty .big {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  display: inline-grid;
-  place-items: center;
-  background: var(--panel-2);
-  color: var(--faint);
-  margin-bottom: 14px;
-}
 .empty h3 {
-  font-size: 16px;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text);
   margin-bottom: 4px;
 }
@@ -1054,10 +1027,7 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 620;
-}
-.opt-head .ic {
-  color: var(--faint);
+  font-weight: 600;
 }
 .collapse-btn {
   display: flex;
@@ -1068,10 +1038,9 @@ input[type='checkbox'] {
   background: none;
   padding: 2px 0;
   cursor: pointer;
-  font-weight: 620;
+  font-weight: 600;
 }
 .collapse-btn .chev {
-  transition: transform 0.15s;
   color: var(--faint);
 }
 .collapse-btn[aria-expanded='true'] .chev {
@@ -1107,7 +1076,7 @@ input[type='checkbox'] {
 .job .jthumb {
   width: 124px;
   aspect-ratio: 16 / 9;
-  border-radius: 6px;
+  border-radius: 2px;
   background: var(--panel-3);
   object-fit: cover;
   display: grid;
@@ -1141,8 +1110,9 @@ input[type='checkbox'] {
   grid-column: 1 / -1;
 }
 .errpanel {
-  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
-  background: color-mix(in srgb, var(--danger) 7%, var(--panel));
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  background: var(--panel);
   border-radius: var(--radius-sm);
   padding: 11px 13px;
 }
@@ -1150,7 +1120,7 @@ input[type='checkbox'] {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-weight: 640;
+  font-weight: 600;
   color: var(--danger);
 }
 .errpanel .m {
@@ -1171,17 +1141,19 @@ input[type='checkbox'] {
 }
 
 /* ---------- settings ---------- */
+/* Three columns: the panel is centred in the middle one, the tab list sits in the left one
+   against it, and the empty right one mirrors the left so the panel stays centred. */
 .settings-layout {
   display: grid;
-  grid-template-columns: 150px 1fr;
-  gap: 26px;
-  max-width: 1000px;
-  margin: 0 auto;
+  grid-template-columns: minmax(150px, 1fr) minmax(0, 900px) minmax(150px, 1fr);
+  column-gap: 26px;
 }
 .settings-nav {
   position: sticky;
   top: 0;
   align-self: start;
+  justify-self: end;
+  width: 150px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1191,7 +1163,7 @@ input[type='checkbox'] {
   background: none;
   text-align: left;
   padding: 7px 10px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--muted);
   font-weight: 550;
@@ -1199,6 +1171,11 @@ input[type='checkbox'] {
 .settings-nav button:hover {
   background: var(--panel-2);
   color: var(--text);
+}
+.settings-nav button[aria-current='page'] {
+  background: var(--panel-3);
+  color: var(--text);
+  box-shadow: inset 2px 0 0 var(--text);
 }
 .savebar {
   position: sticky;
@@ -1211,7 +1188,6 @@ input[type='checkbox'] {
   background: var(--panel);
   border-top: 1px solid var(--border-strong);
   z-index: 5;
-  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
 }
 .savebar .grow {
   flex: 1;
@@ -1234,11 +1210,11 @@ input[type='checkbox'] {
   border-color: var(--faint);
 }
 .radio-card[aria-pressed='true'] {
-  border-color: var(--accent);
-  background: var(--accent-soft);
+  border-color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--text);
 }
 .radio-card .t {
-  font-weight: 620;
+  font-weight: 600;
 }
 .radio-card .d {
   color: var(--muted);
@@ -1271,10 +1247,20 @@ input[type='checkbox'] {
     width: 100%;
     max-width: 360px;
   }
+}
+/* Below this the centred panel would get narrower than about 600px beside the tab list, so the
+   tabs become a row above it instead. */
+@media (max-width: 1230px) {
   .settings-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 900px);
+    justify-content: center;
   }
   .settings-nav {
-    display: none;
+    position: static;
+    justify-self: stretch;
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
   }
 }

@@ -219,7 +219,7 @@ export function DownloadPage() {
       }
       if (res.failed.length > 0) {
         const first = res.failed[0]
-        toast('error', `${plural(res.failed.length, 'link')} couldn't be added — ${hostOf(first.url)}: ${first.error.title}`)
+        toast('error', `${plural(res.failed.length, 'link')} couldn't be added. ${hostOf(first.url)}: ${first.error.title}`)
         // Keep only the failed links in the box so they can be fixed and retried.
         setText(res.failed.map((f) => f.url).join('\n'))
       } else {
@@ -338,7 +338,7 @@ export function DownloadPage() {
             ref={inputRef}
             value={text}
             rows={Math.min(5, Math.max(1, text.split('\n').length))}
-            placeholder="Paste a video, playlist or channel link — or several, one per line"
+            placeholder="Paste a video, playlist or channel link, or several, one per line"
             aria-label="Video, playlist or channel links"
             spellCheck={false}
             onChange={(e) => setText(e.target.value)}
@@ -375,7 +375,7 @@ export function DownloadPage() {
                 void analyze(clip)
               }}>
               <span className="truncate" style={{maxWidth: 520}}>
-                Use copied link — {hostOf(clip)}
+                Use copied link: {hostOf(clip)}
                 <span className="muted"> {clip.replace(/^https?:\/\/(www\.)?[^/]+/, '').slice(0, 60)}</span>
               </span>
             </Button>
@@ -400,13 +400,13 @@ export function DownloadPage() {
       )}
 
       {phase === 'idle' && !bulk && (
-        <Empty icon="download" title="Paste a link to get started">
+        <Empty title="Paste a link to get started">
           Works with YouTube and the 1,800+ other sites yt-dlp supports. Playlists and channels show a checklist so you can pick what to download.
         </Empty>
       )}
 
       {bulk && opts && phase !== 'analyzing' && (
-        <Card title={`${links.length} links`} sub="Each link is checked and queued. Playlists are expanded and queued in full. Use the options below for all of them." icon="list">
+        <Card title={`${links.length} links`} sub="Each link is checked and queued. Playlists are expanded and queued in full. Use the options below for all of them.">
           <OptionsPanel value={opts} onChange={setOpts} playlist mode="download" />
           <div className="divider" />
           <Button variant="ghost" icon="save" onClick={() => void saveAsDefaults()}>
@@ -436,13 +436,13 @@ export function DownloadPage() {
                   </div>
                   {video.isLive && (
                     <div className="badge warn" style={{marginTop: 8}}>
-                      <Icon name="warning" size={13} /> Live stream — it records until the stream ends
+                      <Icon name="warning" size={13} /> Live stream. It records until the stream ends.
                     </div>
                   )}
                   {isVideoInPlaylist(probedUrl) && noPlaylist && (
                     <div style={{marginTop: 10}}>
                       <Button size="sm" onClick={() => void analyze(probedUrl, false)}>
-                        This link is part of a playlist — show the whole playlist
+                        This link is part of a playlist. Show the whole playlist
                       </Button>
                     </div>
                   )}
@@ -455,7 +455,7 @@ export function DownloadPage() {
             <Card
               title={playlist.title || 'Playlist'}
               sub={`${plural(available.length, 'video')}${nestedCount ? ` · ${plural(nestedCount, 'playlist')} (open one to pick its videos)` : ''}${playlist.uploader ? ` · ${playlist.uploader}` : ''}${available.length + nestedCount < playlist.entries.length ? ` · ${playlist.entries.length - available.length - nestedCount} unavailable` : ''}`}
-              icon="list">
+             >
               {isVideoInPlaylist(probedUrl) && (
                 <div className="banner info" style={{marginBottom: 12}}>
                   <span className="ic">
@@ -513,7 +513,7 @@ export function DownloadPage() {
             </Card>
           )}
 
-          <Card title="Options" icon="sliders">
+          <Card title="Options">
             <OptionsPanel value={opts} onChange={setOpts} video={video} playlist={!!playlist} mode="download" />
             <div className="divider" />
             <Button variant="ghost" icon="save" onClick={() => void saveAsDefaults()}>

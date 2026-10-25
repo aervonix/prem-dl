@@ -71,7 +71,7 @@ export function ErrorPanel({
               icon="copy"
               onClick={() => {
                 void api.copyText(FFMPEG_INSTALL_CMD)
-                toast('info', `Copied “${FFMPEG_INSTALL_CMD}” — run it in a terminal, then restart the app`)
+                toast('info', `Copied “${FFMPEG_INSTALL_CMD}”. Run it in a terminal, then restart the app.`)
               }}>
               Copy install command
             </Button>

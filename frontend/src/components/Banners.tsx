@@ -170,7 +170,7 @@ export function Banners() {
             <IconButton icon="x" label="Dismiss" onClick={() => dismiss('ffmpeg')} />
           </>
         }>
-        Without it, video and audio can't be merged, so you'd get lower-quality single files — and audio extraction, subtitle embedding and SponsorBlock won't work.
+        Without it, video and audio can't be merged, so you'd get lower-quality single files. Audio extraction, subtitle embedding and SponsorBlock also won't work.
       </Banner>,
     )
   }

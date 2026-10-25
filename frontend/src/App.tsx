@@ -24,12 +24,7 @@ function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <div className="brand">
-        <span className="brand-mark">
-          <Icon name="download" size={16} />
-        </span>
-        yt-dlp GUI
-      </div>
+      <div className="brand">Prem-dl</div>
       {NAV.map((n) => (
         <button key={n.page} type="button" className="nav-item" aria-current={state.page === n.page ? 'page' : undefined} onClick={() => go(n.page)}>
           <Icon name={n.icon} />
@@ -38,14 +33,18 @@ function Sidebar() {
         </button>
       ))}
       <div className="sidebar-foot">
-        <div className="row">
-          <span className={`dot ${tools.checking ? '' : tools.ytdlp && !tools.ytdlpError ? 'ok' : 'bad'}`} />
-          <span className="truncate">{tools.checking ? 'Checking yt-dlp…' : tools.ytdlp ? `yt-dlp ${tools.ytdlp.version}` : 'yt-dlp missing'}</span>
-        </div>
-        {updateAvailable && (
-          <button type="button" className="chip" style={{alignSelf: 'flex-start'}} onClick={() => go('settings', 'updates')}>
-            <Icon name="refresh" size={12} /> Update available
+        {tools.checking ? (
+          <span>PREM-DL - CHECKING</span>
+        ) : !tools.ytdlp || tools.ytdlpError ? (
+          <button type="button" className="foot-link bad" onClick={() => go('settings', 'updates')}>
+            PREM-DL - YT-DLP MISSING
           </button>
+        ) : updateAvailable ? (
+          <button type="button" className="foot-link" onClick={() => go('settings', 'updates')}>
+            PREM-DL - UPDATE AVAILABLE
+          </button>
+        ) : (
+          <span>PREM-DL - UPDATED</span>
         )}
       </div>
     </aside>

@@ -115,20 +115,17 @@ export function Card({
   actions,
   children,
   id,
-  icon,
 }: {
   title?: ReactNode
   sub?: ReactNode
   actions?: ReactNode
   children: ReactNode
   id?: string
-  icon?: IconName
 }) {
   return (
     <section className="card" id={id} style={{scrollMarginTop: 8}}>
       {(title || actions) && (
         <div className="card-head">
-          {icon && <Icon name={icon} size={20} style={{color: 'var(--faint)', marginTop: 2}} />}
           <div>
             <h2>{title}</h2>
             {sub && <div className="sub">{sub}</div>}
@@ -180,12 +177,9 @@ export function Modal({title, onClose, children, footer}: {title: ReactNode; onC
   )
 }
 
-export function Empty({icon, title, children}: {icon: IconName; title: string; children?: ReactNode}) {
+export function Empty({title, children}: {title: string; children?: ReactNode}) {
   return (
     <div className="empty">
-      <div className="big">
-        <Icon name={icon} size={26} />
-      </div>
       <h3>{title}</h3>
       {children && <p>{children}</p>}
     </div>

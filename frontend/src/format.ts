@@ -8,7 +8,7 @@ export function bytes(n: number, digits = 1): string {
 }
 
 export function speed(bps: number): string {
-  return bps > 0 ? `${bytes(bps)}/s` : '—'
+  return bps > 0 ? `${bytes(bps)}/s` : ''
 }
 
 /** 3725 → "1:02:05", 75 → "1:15" */
@@ -22,9 +22,9 @@ export function duration(sec: number): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(ss)}` : `${m}:${pad(ss)}`
 }
 
-/** Remaining time as a short phrase; negative means unknown. */
+/** Remaining time as a short phrase; '' when unknown (negative). */
 export function eta(sec: number): string {
-  if (sec < 0 || !isFinite(sec)) return '—'
+  if (sec < 0 || !isFinite(sec)) return ''
   if (sec < 60) return `${Math.max(1, Math.round(sec))}s left`
   if (sec < 3600) return `${Math.floor(sec / 60)}m ${Math.round(sec % 60)}s left`
   return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m left`

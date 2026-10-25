@@ -40,6 +40,7 @@ export type _Guards = [
   Expect<Guard<main.LinkFailure, T.LinkFailure>>,
   Expect<Guard<main.SettingsResponse, T.SettingsResponse>>,
   Expect<Guard<main.CookieResponse, T.CookieResponse>>,
+  Expect<Guard<main.ChromeHelperInfo, T.ChromeHelperInfo>>,
   Expect<Guard<main.UpdateInfo, T.UpdateInfo>>,
   Expect<Guard<main.UpdateResult, T.UpdateResult>>,
   Expect<Guard<ytdlp.Binary, T.Binary>>,
@@ -96,6 +97,10 @@ export const api = {
   importCookieText: (t: string) => cast<T.CookieResponse>(App.ImportCookieText(t)),
   removeCookieFile: () => cast<T.CookieResponse>(App.RemoveCookieFile()),
   testCookies: () => cast<T.CookieTest>(App.TestCookies()),
+  chromeHelperSetup: () => cast<T.ChromeHelperInfo>(App.ChromeHelperSetup()),
+  openChromeExtensions: App.OpenChromeExtensions,
+  getChromeCookies: () => cast<T.CookieResponse>(App.GetChromeCookies()),
+  cancelChromeCookies: App.CancelChromeCookies,
 
   checkUpdate: () => cast<T.UpdateInfo>(App.CheckUpdate()),
   updateYtdlp: () => cast<T.UpdateResult>(App.UpdateYtdlp()),

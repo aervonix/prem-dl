@@ -5,11 +5,15 @@ import {queue} from '../models';
 import {settings} from '../models';
 import {ytdlp} from '../models';
 
+export function CancelChromeCookies():Promise<void>;
+
 export function CancelJob(arg1:string):Promise<void>;
 
 export function CancelProbe():Promise<void>;
 
 export function CheckUpdate():Promise<main.UpdateInfo>;
+
+export function ChromeHelperSetup():Promise<main.ChromeHelperInfo>;
 
 export function ClearFinished(arg1:boolean):Promise<Array<string>>;
 
@@ -18,6 +22,8 @@ export function CopyText(arg1:string):Promise<void>;
 export function Enqueue(arg1:Array<queue.NewJob>,arg2:settings.DownloadOptions):Promise<main.EnqueueResponse>;
 
 export function EnqueueLinks(arg1:Array<string>,arg2:settings.DownloadOptions):Promise<main.BulkResponse>;
+
+export function GetChromeCookies():Promise<main.CookieResponse>;
 
 export function GetJobLog(arg1:string):Promise<Array<string>>;
 
@@ -28,6 +34,8 @@ export function ImportCookieFile(arg1:string):Promise<main.CookieResponse>;
 export function ImportCookieText(arg1:string):Promise<main.CookieResponse>;
 
 export function InspectCookieFile(arg1:string):Promise<ytdlp.CookieInfo>;
+
+export function OpenChromeExtensions():Promise<void>;
 
 export function OpenDataFolder():Promise<void>;
 

@@ -83,12 +83,13 @@ const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: 
         {(live || s === 'paused') && (
           <div className="jstats">
             <span>
-              {job.percent >= 0 ? `${job.percent.toFixed(1)}%` : '—'}
-              {job.total > 0 && ` · ${bytes(job.downloaded)} of ${bytes(job.total)}`}
+              {[job.percent >= 0 ? `${job.percent.toFixed(1)}%` : '', job.total > 0 ? `${bytes(job.downloaded)} of ${bytes(job.total)}` : '']
+                .filter(Boolean)
+                .join(' · ')}
             </span>
             {s === 'downloading' && (
               <span>
-                {speed(job.speed)} · {eta(job.eta)}
+                {[speed(job.speed), eta(job.eta)].filter(Boolean).join(' · ')}
               </span>
             )}
           </div>
@@ -158,7 +159,7 @@ function LogModal({job, onClose}: {job: Job; onClose: () => void}) {
 
   return (
     <Modal
-      title={`Log — ${job.title}`}
+      title={`Log: ${job.title}`}
       onClose={onClose}
       footer={
         <>
@@ -227,7 +228,7 @@ export function QueuePage() {
       </div>
 
       {jobs.length === 0 ? (
-        <Empty icon="list" title="Nothing in the queue">
+        <Empty title="Nothing in the queue">
           Downloads you add show up here with live progress.
           <div style={{marginTop: 14}}>
             <Button variant="primary" icon="download" onClick={() => go('download')}>
@@ -263,7 +264,7 @@ export function QueuePage() {
           </div>
 
           {shown.length === 0 ? (
-            <div className="empty">Nothing here — {plural(counts.all, 'download')} in other tabs.</div>
+            <div className="empty">Nothing here. {plural(counts.all, 'download')} in other tabs.</div>
           ) : (
             shown.map((j) => <JobRow key={j.id} job={j} onLog={setLogJob} notify={notify} />)
           )}

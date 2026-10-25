@@ -62,7 +62,9 @@ export function OptionsPanel({
 
   const maxHeight = video && video.heights.length > 0 ? video.heights[0] : 0
   const presetOptions: SegOption<Preset>[] = [
-    {value: 'best', label: 'Best'},
+    video?.bestPremium
+      ? {value: 'best', label: <>Best<span className="seg-tag">Premium</span></>, title: 'Best downloads the YouTube Premium stream for this video'}
+      : {value: 'best', label: 'Best'},
     ...(['2160', '1440', '1080', '720', '480', '360'] as const).map((h) => ({
       value: h as Preset,
       label: h === '2160' ? '4K' : `${h}p`,
@@ -111,12 +113,11 @@ export function OptionsPanel({
       {/* ---- quality ---- */}
       <div className="optgroup">
         <div className="opt-head">
-          <span className="ic">
-            <Icon name={isAudio ? 'music' : 'film'} />
-          </span>
           Quality
         </div>
-        <Segmented label="Quality" value={value.preset} options={presetOptions} onChange={(v) => set('preset', v)} />
+        <div className={video?.bestPremium ? 'seg-tagged' : undefined}>
+          <Segmented label="Quality" value={value.preset} options={presetOptions} onChange={(v) => set('preset', v)} />
+        </div>
 
         {isAudio && (
           <div className="grid3" style={{marginTop: 4}}>
@@ -204,9 +205,6 @@ export function OptionsPanel({
       {/* ---- subtitles ---- */}
       <div className="optgroup">
         <div className="opt-head">
-          <span className="ic">
-            <Icon name="captions" />
-          </span>
           Subtitles
         </div>
         <Segmented
@@ -305,9 +303,6 @@ export function OptionsPanel({
             <Icon name="chevronRight" size={16} />
           </span>
           <span className="opt-head">
-            <span className="ic">
-              <Icon name="sliders" />
-            </span>
             More options
           </span>
         </button>
@@ -321,7 +316,7 @@ export function OptionsPanel({
                 disabled={value.container === 'webm' && !isAudio}
                 onChange={(v) => set('embedThumbnail', v)}
                 label="Embed cover art"
-                description={value.container === 'webm' && !isAudio ? "WebM files can't hold cover art — pick Auto, MP4 or MKV" : "Thumbnail as the file's cover image"}
+                description={value.container === 'webm' && !isAudio ? "WebM files can't hold cover art. Pick Auto, MP4 or MKV." : "Thumbnail as the file's cover image"}
               />
               <Switch checked={value.writeThumbnail} onChange={(v) => set('writeThumbnail', v)} label="Save thumbnail file" />
               <Switch checked={value.writeDescription} onChange={(v) => set('writeDescription', v)} label="Save description (.description)" />
