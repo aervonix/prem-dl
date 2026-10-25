@@ -49,6 +49,8 @@ export interface DownloadOptions {
   splitChapters: boolean
   /** Record a live stream from its beginning. */
   liveFromStart: boolean
+  /** Audio track language on dubbed videos; '' = the default track. */
+  audioLang: string
 }
 
 export interface Cookies {
@@ -189,6 +191,13 @@ export interface FormatInfo {
   note: string
   filesize: number
   tbr: number
+  /** Audio / video bitrate, kbit/s. */
+  abr: number
+  vbr: number
+  /** SDR, HDR10, HLG...; '' when unknown. */
+  dynamicRange: string
+  /** Audio language, e.g. "en" or "es-419". */
+  language: string
   hasVideo: boolean
   hasAudio: boolean
 }
@@ -220,6 +229,8 @@ export interface VideoInfo {
   autoCaptions: SubtitleTrack[]
   /** "Best" will download a YouTube Premium stream for this video. */
   bestPremium: boolean
+  /** Audio track languages when there is more than one (dubbed videos), the default first. */
+  audioLanguages: string[]
 }
 
 export interface PlaylistEntry {

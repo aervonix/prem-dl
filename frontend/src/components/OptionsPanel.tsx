@@ -27,18 +27,41 @@ function expressionFor(f: FormatInfo): string {
   return f.id
 }
 
+const languageNames = (() => {
+  try {
+    return new Intl.DisplayNames(undefined, {type: 'language'})
+  } catch {
+    return null
+  }
+})()
+
+/** "German", "Chinese (Simplified)"... for a language code; the code itself if unknown. */
+export function languageName(code: string): string {
+  try {
+    return languageNames?.of(code) ?? code
+  } catch {
+    return code
+  }
+}
+
 function describeFormat(f: FormatInfo): string {
   const parts: string[] = []
   if (f.hasVideo) {
     parts.push(f.height ? `${f.height}p${f.fps && f.fps > 30 ? Math.round(f.fps) : ''}` : f.resolution || 'video')
   } else if (f.hasAudio) {
-    parts.push(f.note || 'audio')
+    parts.push(f.language ? languageName(f.language) : 'audio')
   } else {
     parts.push(f.resolution || f.note || f.id)
   }
   parts.push(f.ext)
   const codec = f.hasVideo ? f.vcodec : f.acodec
   if (codec && codec !== 'none') parts.push(codec.split('.')[0])
+  if (f.dynamicRange && f.dynamicRange !== 'SDR') parts.push(f.dynamicRange)
+  const kbps = f.hasVideo ? f.vbr || f.tbr : f.abr || f.tbr
+  if (kbps) parts.push(`${Math.round(kbps)} kbps`)
+  // What YouTube's notes add: "Premium" streams, and which audio track is the original.
+  if (f.hasVideo && /premium/i.test(f.note)) parts.push('Premium')
+  if (!f.hasVideo && /original/i.test(f.note)) parts.push('original')
   if (f.filesize) parts.push(bytes(f.filesize))
   return `${parts.join(' · ')}  (${f.id})`
 }
@@ -146,6 +169,19 @@ export function OptionsPanel({
               </Field>
             )}
           </div>
+        )}
+
+        {mode === 'download' && video && video.audioLanguages.length > 1 && value.preset !== 'custom' && (
+          <Field label="Audio language" hint="This video has dubbed audio tracks. Formats without the chosen language use the default one.">
+            <select value={value.audioLang} onChange={(e) => set('audioLang', e.target.value)}>
+              <option value="">{languageName(video.audioLanguages[0])} (default)</option>
+              {video.audioLanguages.slice(1).map((l) => (
+                <option key={l} value={l}>
+                  {languageName(l)}
+                </option>
+              ))}
+            </select>
+          </Field>
         )}
 
         {value.preset === 'custom' && video && (

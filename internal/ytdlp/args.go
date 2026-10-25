@@ -192,7 +192,7 @@ func FormatArgs(o settings.DownloadOptions) []string {
 	var a []string
 	switch o.Preset {
 	case "audio":
-		a = append(a, "--format=ba/b", "--extract-audio", "--audio-format="+o.AudioFormat)
+		a = append(a, "--format="+withAudioLang("ba/b", o.AudioLang), "--extract-audio", "--audio-format="+o.AudioFormat)
 		switch o.AudioFormat {
 		case "mp3", "aac", "opus", "m4a":
 			if o.AudioQuality != "" {
@@ -203,11 +203,12 @@ func FormatArgs(o settings.DownloadOptions) []string {
 	case "custom":
 		a = append(a, "--format="+o.FormatID)
 	case "best", "":
-		a = append(a, "--format=bv*+ba/b", "--format-sort="+QualitySort)
+		a = append(a, "--format="+withAudioLang("bv*+ba/b", o.AudioLang), "--format-sort="+QualitySort)
 	default:
 		h := o.Preset
 		// "<=?" also admits formats whose height is unknown (some sites don't report it).
-		a = append(a, fmt.Sprintf("--format=bv*[height<=%[1]s]+ba/b[height<=%[1]s]/bv*[height<=?%[1]s]+ba/b[height<=?%[1]s]", h), "--format-sort="+QualitySort)
+		expr := fmt.Sprintf("bv*[height<=%[1]s]+ba/b[height<=%[1]s]/bv*[height<=?%[1]s]+ba/b[height<=?%[1]s]", h)
+		a = append(a, "--format="+withAudioLang(expr, o.AudioLang), "--format-sort="+QualitySort)
 	}
 	switch o.Container {
 	case "":
@@ -268,6 +269,26 @@ func OutputTemplate(base string, o settings.DownloadOptions, t Target) string {
 		prefix += fmt.Sprintf("%0*d - ", width, t.PlaylistIndex)
 	}
 	return prefix + base
+}
+
+// withAudioLang puts a try for the audio track in lang in front of a format expression: its first
+// alternative with "ba" narrowed to that language, then the expression as it was, so formats
+// without that language still download with the default track.
+func withAudioLang(expr, lang string) string {
+	if lang == "" {
+		return expr
+	}
+	first, _, _ := strings.Cut(expr, "/")
+	pick := "ba[language^=" + lang + "]"
+	switch {
+	case strings.Contains(first, "+ba"):
+		first = strings.Replace(first, "+ba", "+"+pick, 1)
+	case strings.HasPrefix(first, "ba"):
+		first = pick + first[2:]
+	default:
+		return expr
+	}
+	return first + "/" + expr
 }
 
 // ChapterTemplate names the files --split-chapters writes: a folder named like the video (inside

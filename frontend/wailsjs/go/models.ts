@@ -572,6 +572,7 @@ export namespace settings {
 	    sponsorBlockMark: boolean;
 	    splitChapters: boolean;
 	    liveFromStart: boolean;
+	    audioLang: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new DownloadOptions(source);
@@ -601,6 +602,7 @@ export namespace settings {
 	        this.sponsorBlockMark = source["sponsorBlockMark"];
 	        this.splitChapters = source["splitChapters"];
 	        this.liveFromStart = source["liveFromStart"];
+	        this.audioLang = source["audioLang"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -802,6 +804,10 @@ export namespace ytdlp {
 	    note: string;
 	    filesize: number;
 	    tbr: number;
+	    abr: number;
+	    vbr: number;
+	    dynamicRange: string;
+	    language: string;
 	    hasVideo: boolean;
 	    hasAudio: boolean;
 	
@@ -822,6 +828,10 @@ export namespace ytdlp {
 	        this.note = source["note"];
 	        this.filesize = source["filesize"];
 	        this.tbr = source["tbr"];
+	        this.abr = source["abr"];
+	        this.vbr = source["vbr"];
+	        this.dynamicRange = source["dynamicRange"];
+	        this.language = source["language"];
 	        this.hasVideo = source["hasVideo"];
 	        this.hasAudio = source["hasAudio"];
 	    }
@@ -942,6 +952,7 @@ export namespace ytdlp {
 	    subtitles: SubtitleTrack[];
 	    autoCaptions: SubtitleTrack[];
 	    bestPremium: boolean;
+	    audioLanguages: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new VideoInfo(source);
@@ -966,6 +977,7 @@ export namespace ytdlp {
 	        this.subtitles = this.convertValues(source["subtitles"], SubtitleTrack);
 	        this.autoCaptions = this.convertValues(source["autoCaptions"], SubtitleTrack);
 	        this.bestPremium = source["bestPremium"];
+	        this.audioLanguages = source["audioLanguages"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

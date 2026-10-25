@@ -30,8 +30,14 @@ type FormatInfo struct {
 	Note       string  `json:"note"`
 	Filesize   int64   `json:"filesize"` // exact or approximate; 0 when unknown
 	TBR        float64 `json:"tbr"`
-	HasVideo   bool    `json:"hasVideo"`
-	HasAudio   bool    `json:"hasAudio"`
+	ABR        float64 `json:"abr"` // audio bitrate, kbit/s
+	VBR        float64 `json:"vbr"` // video bitrate, kbit/s
+	// DynamicRange is SDR, HDR10, HLG...; empty when unknown.
+	DynamicRange string `json:"dynamicRange"`
+	// Language of the audio, e.g. "en" or "es-419"; dubbed videos have one track per language.
+	Language string `json:"language"`
+	HasVideo bool   `json:"hasVideo"`
+	HasAudio bool   `json:"hasAudio"`
 }
 
 // SubtitleTrack is an available subtitle language.
@@ -64,6 +70,9 @@ type VideoInfo struct {
 	// BestPremium is set when the default format choice, which the "Best" preset uses, picks a
 	// YouTube Premium video stream (format_note "Premium").
 	BestPremium bool `json:"bestPremium"`
+	// AudioLanguages lists the audio tracks' languages when there is more than one (dubbed
+	// videos); the default track's language comes first.
+	AudioLanguages []string `json:"audioLanguages"`
 }
 
 // PlaylistEntry is one item of a playlist.
@@ -146,6 +155,10 @@ type rawFormat struct {
 	Filesize       float64 `json:"filesize"`
 	FilesizeApprox float64 `json:"filesize_approx"`
 	TBR            float64 `json:"tbr"`
+	ABR            float64 `json:"abr"`
+	VBR            float64 `json:"vbr"`
+	DynamicRange   string  `json:"dynamic_range"`
+	Language       string  `json:"language"`
 }
 
 type rawInfo struct {
@@ -319,6 +332,7 @@ func buildVideo(r *rawInfo) *VideoInfo {
 		Duration: r.Duration, UploadDate: r.UploadDate, ViewCount: int64(r.ViewCount), IsLive: r.IsLive,
 		Extractor: r.Extractor,
 		Formats:   []FormatInfo{}, Heights: []int{}, Subtitles: []SubtitleTrack{}, AutoCaptions: []SubtitleTrack{},
+		AudioLanguages: []string{},
 	}
 	if v.URL == "" {
 		v.URL = r.URL
@@ -339,7 +353,8 @@ func buildVideo(r *rawInfo) *VideoInfo {
 		v.Formats = append(v.Formats, FormatInfo{
 			ID: f.FormatID, Ext: f.Ext, Resolution: f.Resolution, Width: int(f.Width), Height: height,
 			FPS: f.FPS, VCodec: f.VCodec, ACodec: f.ACodec, Note: f.FormatNote, Filesize: size,
-			TBR: f.TBR, HasVideo: hasV, HasAudio: hasA,
+			TBR: f.TBR, ABR: f.ABR, VBR: f.VBR, DynamicRange: f.DynamicRange, Language: f.Language,
+			HasVideo: hasV, HasAudio: hasA,
 		})
 		if hasV && height > 0 && !seenHeight[height] {
 			seenHeight[height] = true
@@ -355,7 +370,36 @@ func buildVideo(r *rawInfo) *VideoInfo {
 	}
 	v.Subtitles = tracks(r.Subtitles, false)
 	v.AutoCaptions = tracks(r.AutomaticCaptions, true)
+	v.AudioLanguages = audioLanguages(r)
 	return v
+}
+
+// audioLanguages lists the languages of the audio streams, the default track's first (the one
+// "Best" picks, or YouTube's "original"), or nothing when there is only one.
+func audioLanguages(r *rawInfo) []string {
+	first := ""
+	for _, f := range r.RequestedFormats {
+		if f.ACodec != "" && f.ACodec != "none" && f.Language != "" {
+			first = f.Language
+		}
+	}
+	seen := map[string]bool{}
+	var langs []string
+	for _, f := range r.Formats {
+		if f.ACodec == "" || f.ACodec == "none" || f.Language == "" || seen[f.Language] {
+			continue
+		}
+		seen[f.Language] = true
+		if first == "" && strings.Contains(strings.ToLower(f.FormatNote), "original") {
+			first = f.Language
+		}
+		langs = append(langs, f.Language)
+	}
+	if len(langs) < 2 {
+		return []string{}
+	}
+	sort.SliceStable(langs, func(i, j int) bool { return langs[i] == first && langs[j] != first })
+	return langs
 }
 
 func isPremium(note string) bool { return strings.Contains(strings.ToLower(note), "premium") }

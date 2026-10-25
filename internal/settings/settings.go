@@ -62,6 +62,9 @@ type DownloadOptions struct {
 	SplitChapters bool `json:"splitChapters"`
 	// LiveFromStart records a live stream from its beginning rather than from now.
 	LiveFromStart bool `json:"liveFromStart"`
+	// AudioLang picks the audio track by language ("en", "es-419") on dubbed videos; "" takes
+	// the default. Formats without it fall back to the default track.
+	AudioLang string `json:"audioLang"`
 }
 
 // Cookies describes where yt-dlp should read login cookies from.
@@ -135,6 +138,7 @@ func Default() Settings {
 var (
 	rateLimitRe = regexp.MustCompile(`^\d+(\.\d+)?[KkMmGg]?$`)
 	timeRe      = regexp.MustCompile(`^(\d+:){0,2}\d+(\.\d+)?$`)
+	audioLangRe = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`)
 	langRe      = regexp.MustCompile(`^[A-Za-z0-9_.*\-\[\]()|?+^$]+$`)
 	sponsorCats = map[string]bool{
 		"sponsor": true, "intro": true, "outro": true, "selfpromo": true, "preview": true,
@@ -213,6 +217,10 @@ func ValidateOptions(o *DownloadOptions) error {
 	}
 	if o.SectionEnd != "" && !timeRe.MatchString(o.SectionEnd) {
 		return fmt.Errorf("end time %q must look like 90, 1:30 or 1:02:03", o.SectionEnd)
+	}
+	o.AudioLang = strings.TrimSpace(o.AudioLang)
+	if o.AudioLang != "" && !audioLangRe.MatchString(o.AudioLang) {
+		return fmt.Errorf("%q is not a language code", o.AudioLang)
 	}
 	// yt-dlp resolves a relative folder against the app's working directory.
 	o.OutputDir = strings.TrimSpace(o.OutputDir)

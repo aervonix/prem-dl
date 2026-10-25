@@ -91,3 +91,13 @@ func TestSaveAndReload(t *testing.T) {
 		t.Errorf("reloaded %+v", g)
 	}
 }
+
+func TestAudioLangIsALanguageCode(t *testing.T) {
+	for lang, ok := range map[string]bool{"": true, "de": true, " en-US ": true, "zh-Hans": true, "es-419": true, "d]e": false, "en,de": false, "--exec": false} {
+		o := Default().Defaults
+		o.AudioLang = lang
+		if err := ValidateOptions(&o); (err == nil) != ok {
+			t.Errorf("%q: err = %v", lang, err)
+		}
+	}
+}

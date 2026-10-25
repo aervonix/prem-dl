@@ -254,6 +254,41 @@ func TestNoThumbnailEmbedInWebM(t *testing.T) {
 	}
 }
 
+func TestAudioLanguage(t *testing.T) {
+	// Each was checked against yt-dlp on a dubbed video (0e3GPea1Tyg): "de" picks 251-2 (German)
+	// and an unknown language falls back to the default track.
+	cases := map[string]string{
+		"best":  "--format=bv*+ba[language^=de]/bv*+ba/b",
+		"720":   "--format=bv*[height<=720]+ba[language^=de]/bv*[height<=720]+ba/b[height<=720]/bv*[height<=?720]+ba/b[height<=?720]",
+		"audio": "--format=ba[language^=de]/ba/b",
+	}
+	for preset, want := range cases {
+		o := settings.Default().Defaults
+		o.Preset, o.AudioLang = preset, "de"
+		if !has(FormatArgs(o), want) {
+			t.Errorf("%s: %v", preset, FormatArgs(o))
+		}
+	}
+	o := settings.Default().Defaults
+	o.Preset, o.FormatID, o.AudioLang = "custom", "137+140", "de"
+	if !has(FormatArgs(o), "--format=137+140") {
+		t.Errorf("a picked format is left alone: %v", FormatArgs(o))
+	}
+
+	res, err := ParseProbe([]byte(`{"_type":"video","id":"x","title":"t",
+		"requested_formats":[{"format_id":"616","vcodec":"vp09","acodec":"none"},{"format_id":"251-23","vcodec":"none","acodec":"opus","language":"en-US"}],
+		"formats":[{"format_id":"251-2","vcodec":"none","acodec":"opus","language":"de","format_note":"German, low"},
+			{"format_id":"251-23","vcodec":"none","acodec":"opus","language":"en-US","format_note":"English (United States) original (default)"},
+			{"format_id":"251-3","vcodec":"none","acodec":"opus","language":"zh-Hans"},
+			{"format_id":"616","vcodec":"vp09","acodec":"none","dynamic_range":"SDR"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(res.Video.AudioLanguages, ","); got != "en-US,de,zh-Hans" {
+		t.Errorf("languages %q, want the default first", got)
+	}
+}
+
 func TestMoreDownloadOptions(t *testing.T) {
 	e := testEnv()
 	o := e.Settings.Defaults
