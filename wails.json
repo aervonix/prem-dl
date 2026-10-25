@@ -1,17 +1,17 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "yt-dlp GUI",
-  "outputfilename": "yt-dlp-gui",
+  "name": "Prem-dl",
+  "outputfilename": "Prem-dl",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
   "info": {
     "companyName": "",
-    "productName": "yt-dlp GUI",
+    "productName": "Prem-dl",
     "productVersion": "0.1.0",
     "copyright": "",
-    "comments": "A desktop front end for yt-dlp"
+    "comments": "A desktop downloader built on yt-dlp"
   },
   "author": {
     "name": "aervonix",

@@ -48,7 +48,7 @@ func inspect(data []byte, now time.Time) CookieInfo {
 		info.Problem = "The file is empty."
 		return info
 	case strings.HasPrefix(first, "[") || strings.HasPrefix(first, "{"):
-		info.Problem = "This looks like a JSON export. yt-dlp needs the Netscape “cookies.txt” format — most cookie-export extensions have a cookies.txt option."
+		info.Problem = "This looks like a JSON export. yt-dlp needs the Netscape “cookies.txt” format. Most cookie-export extensions have a cookies.txt option."
 		return info
 	case !strings.HasPrefix(first, "# Netscape HTTP Cookie File") && !strings.HasPrefix(first, "# HTTP Cookie File"):
 		info.Problem = "The first line must be “# Netscape HTTP Cookie File”. Re-export the cookies in cookies.txt (Netscape) format."

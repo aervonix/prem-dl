@@ -272,7 +272,7 @@ func LatestVersion(ctx context.Context, client *http.Client, channel string) (st
 		return "", err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "yt-dlp-gui")
+	req.Header.Set("User-Agent", "Prem-dl")
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("checking for updates: %w", err)
@@ -378,7 +378,7 @@ func fetchAll(ctx context.Context, client *http.Client, u string, limit int64) (
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "yt-dlp-gui")
+	req.Header.Set("User-Agent", "Prem-dl")
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -395,7 +395,7 @@ func downloadTo(ctx context.Context, client *http.Client, u, path string, progre
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "yt-dlp-gui")
+	req.Header.Set("User-Agent", "Prem-dl")
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("downloading yt-dlp: %w", err)

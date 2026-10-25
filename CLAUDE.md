@@ -1,4 +1,8 @@
-# yt-dlp GUI
+# Prem-dl
+
+Was "yt-dlp GUI"; internal names (Go module `yt-dlp-gui`, data folder `%APPDATA%\yt-dlp-gui`,
+single-instance ID, Chrome helper extension ID) keep the old name on purpose, so existing data
+and the loaded helper keep working.
 
 Windows desktop app for yt-dlp. **Go** backend, **React + TypeScript** frontend, joined by **Wails v2**
 (WebView2). The Go side owns the queue, output parsing, error classification, cookies and yt-dlp updates;
@@ -8,7 +12,7 @@ the UI is not a thin wrapper over a shell command. See `README.md` for the featu
 
 ```powershell
 wails dev                 # live reload; bridge also at http://localhost:34115 for browser debugging
-wails build               # -> build\bin\yt-dlp-gui.exe (copy yt-dlp.exe next to it)
+wails build               # -> build\bin\Prem-dl.exe (copy yt-dlp.exe next to it)
 go test ./...             # offline unit tests (~10 s)
 go vet ./...; gofmt -l app.go main.go tools.go internal
 cd frontend; npx tsc --noEmit
@@ -52,6 +56,10 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
   We pass `webm/mkv` + `webm>webm/mkv` and skip `--embed-thumbnail` for WebM.
 - `--download-sections` fetches all streams in ONE ffmpeg run into the final file (no `.fNNN` parts)
   and reports a single `finished` event sized for the cut, not the plan's full size (`Tracker.Cut`).
+- yt-dlp's default ranking prefers newer codecs before bitrate. Signed in, YouTube offers two
+  "1080p Premium" streams (VP9 ~2.8 Mbps, AV1 ~0.4 Mbps) and the default picked AV1. Quality presets
+  and the probe pass `--format-sort=res,fps,hdr:12,vbr` (`ytdlp.QualitySort`); keep them in step.
+  The probe's default choice (`requested_formats`) is what "Best" downloads; `bestPremium` reads it.
 - A channel's Playlists tab lists playlists as flat `_type: url` entries (`ie_key: YoutubeTab`). Queued
   as a video, one job downloads the whole playlist; they are flagged `isPlaylist`.
 - `--print` implies `--quiet`; we pass `--no-quiet` so "already downloaded" lines are visible.

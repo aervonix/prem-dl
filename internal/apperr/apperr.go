@@ -275,7 +275,7 @@ var rules = []rule{
 			Code:    "ytdlp_crash",
 			Title:   "yt-dlp crashed",
 			Message: "yt-dlp stopped with an internal error instead of a normal message.",
-			Hint:    "Update yt-dlp and retry. If it keeps happening, open the details — they're what you'd include in a bug report.",
+			Hint:    "Update yt-dlp and retry. If it keeps happening, open the details: they're what you'd include in a bug report.",
 			Action:  ActionUpdate, Retryable: true,
 		}
 	}),

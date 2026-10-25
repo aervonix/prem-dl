@@ -71,7 +71,7 @@ func (a *App) detectTools() {
 		bin.Version = a.versionOf(ctx, bin.Path)
 		st.Ytdlp = &bin
 		if bin.Version == "" {
-			st.YtdlpError = "yt-dlp was found but didn't run. The file may be damaged — reinstall it from Settings → Updates."
+			st.YtdlpError = "yt-dlp was found but didn't run. The file may be damaged. Reinstall it from Settings → Updates."
 		}
 	}
 	ytPath := ""

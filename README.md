@@ -1,4 +1,4 @@
-# yt-dlp GUI
+# Prem-dl
 
 A desktop app for [yt-dlp](https://github.com/yt-dlp/yt-dlp). The backend is **Go**, the frontend is
 **React + TypeScript**, and the two are joined with [Wails v2](https://wails.io) (WebView2 on Windows).
@@ -60,7 +60,7 @@ and the WebView2 runtime (already on Windows 11).
 
 ```powershell
 wails dev          # live reload; the bridge is also at http://localhost:34115 for browser debugging
-wails build        # -> build\bin\yt-dlp-gui.exe
+wails build        # -> build\bin\Prem-dl.exe
 go test ./...      # unit tests (no network)
 ```
 
