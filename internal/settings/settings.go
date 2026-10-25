@@ -80,7 +80,9 @@ type Settings struct {
 	LastUpdateCheck     time.Time       `json:"lastUpdateCheck" ts_type:"string"`
 	YtdlpPath           string          `json:"ytdlpPath"`
 	FfmpegPath          string          `json:"ffmpegPath"`
-	Theme               string          `json:"theme"` // system | light | dark
+	Theme               string          `json:"theme"`       // system | light | dark
+	NotifySound         bool            `json:"notifySound"` // a click when a download finishes
+	NotifyPopup         bool            `json:"notifyPopup"` // a card in the corner when one finishes
 	ExtraArgs           string          `json:"extraArgs"`
 	Defaults            DownloadOptions `json:"defaults"`
 }
@@ -102,6 +104,8 @@ func Default() Settings {
 		AutoUpdate:          true,
 		UpdateChannel:       "stable",
 		Theme:               "system",
+		NotifySound:         true,
+		NotifyPopup:         true,
 		Defaults: DownloadOptions{
 			Preset:            "best",
 			AudioFormat:       "mp3",

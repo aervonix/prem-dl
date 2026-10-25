@@ -319,6 +319,20 @@ export function SettingsPage() {
                     description="Skips videos you've already downloaded, even if you moved or deleted the file. Handy for re-running a playlist."
                   />
                 </div>
+                <div className="grid2">
+                  <Switch
+                    checked={draft.notifyPopup}
+                    onChange={(v) => upd({notifyPopup: v})}
+                    label="Show finished downloads"
+                    description="A card in the corner with Open and Show in folder when a download finishes or fails."
+                  />
+                  <Switch
+                    checked={draft.notifySound}
+                    onChange={(v) => upd({notifySound: v})}
+                    label="Play a sound when downloads finish"
+                    description="A short click. A playlist finishing at once clicks once."
+                  />
+                </div>
               </div>
             </Card>
           )}

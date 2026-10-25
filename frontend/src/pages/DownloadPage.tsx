@@ -239,6 +239,13 @@ export function DownloadPage() {
     try {
       const res = await api.enqueueLinks(links, {...opts, sectionStart: '', sectionEnd: ''})
       if (res.error) return toast('error', res.error)
+      if (res.added > 0 && res.failed.length === 0) {
+        // Everything was queued: show it downloading. Otherwise stay, with the leftovers in the box.
+        if (res.skipped > 0) toast('info', `${plural(res.skipped, 'download')} already in the queue`)
+        setText('')
+        go('queue')
+        return
+      }
       if (res.added > 0) {
         toast('success', `Added ${plural(res.added, 'download')}${res.skipped ? ` (${res.skipped} already queued)` : ''}`, {label: 'View queue', run: () => go('queue')})
       }
@@ -331,10 +338,11 @@ export function DownloadPage() {
       const res = await api.enqueue(items, options)
       if (res.error) return toast('error', res.error)
       if (res.added === 0 && res.skipped > 0) return toast('info', 'Already in the queue')
-      toast('success', `Added ${plural(res.added, 'download')}${res.skipped ? ` (${res.skipped} already queued)` : ''}`, {label: 'View queue', run: () => go('queue')})
+      if (res.skipped > 0) toast('info', `${plural(res.skipped, 'download')} already in the queue`)
+      // The form is cleared for next time; the Queue page shows the download starting.
       setText('')
       reset()
-      inputRef.current?.focus()
+      go('queue')
     } catch (e) {
       toast('error', errMessage(e))
     } finally {

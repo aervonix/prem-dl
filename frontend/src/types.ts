@@ -66,6 +66,10 @@ export interface Settings {
   ytdlpPath: string
   ffmpegPath: string
   theme: 'system' | 'light' | 'dark'
+  /** A click when a download finishes. */
+  notifySound: boolean
+  /** A card in the corner when a download finishes. */
+  notifyPopup: boolean
   extraArgs: string
   defaults: DownloadOptions
 }

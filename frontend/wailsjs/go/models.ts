@@ -609,6 +609,8 @@ export namespace settings {
 	    ytdlpPath: string;
 	    ffmpegPath: string;
 	    theme: string;
+	    notifySound: boolean;
+	    notifyPopup: boolean;
 	    extraArgs: string;
 	    defaults: DownloadOptions;
 	
@@ -633,6 +635,8 @@ export namespace settings {
 	        this.ytdlpPath = source["ytdlpPath"];
 	        this.ffmpegPath = source["ffmpegPath"];
 	        this.theme = source["theme"];
+	        this.notifySound = source["notifySound"];
+	        this.notifyPopup = source["notifyPopup"];
 	        this.extraArgs = source["extraArgs"];
 	        this.defaults = this.convertValues(source["defaults"], DownloadOptions);
 	    }

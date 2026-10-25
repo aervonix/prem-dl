@@ -2,6 +2,7 @@ import {useCallback, useEffect, useState} from 'react'
 import {Icon} from '../icons'
 import {useApp} from '../store'
 import type {Toast} from '../store'
+import {FinishNotices} from './FinishNotices'
 import {Button, IconButton} from './ui'
 
 export function Toasts() {
@@ -10,6 +11,8 @@ export function Toasts() {
   // them would announce everything twice.
   return (
     <div className="toasts">
+      {/* Finished-download cards share the corner, above the toasts, so the two never overlap. */}
+      <FinishNotices />
       {state.toasts.map((t) => (
         <ToastItem key={t.id} t={t} dismiss={dismissToast} />
       ))}

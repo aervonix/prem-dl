@@ -747,6 +747,69 @@ input[type='checkbox'] {
   color: var(--danger);
 }
 
+/* ---------- finished-download cards ---------- */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 8px 12px 12px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--ok);
+  box-shadow: var(--shadow);
+  animation: notice-in 0.18s ease-out;
+}
+.notice.bad {
+  border-left-color: var(--danger);
+}
+.notice .nthumb {
+  width: 96px;
+}
+.notice .ntext {
+  flex: 1;
+  min-width: 0;
+}
+.notice .nhead {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ok);
+}
+.notice.bad .nhead {
+  color: var(--danger);
+}
+.notice .ntitle {
+  font-weight: 540;
+  line-height: 1.3;
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.notice .nsub {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+.notice .nactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notice {
+    animation: none;
+  }
+}
+
 /* ---------- progress ---------- */
 .progress {
   height: 4px;
