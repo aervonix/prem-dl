@@ -1,0 +1,648 @@
+package ytdlp
+
+import (
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
+	"yt-dlp-gui/internal/settings"
+)
+
+// ---- progress parsing: lines are taken from a real yt-dlp 2026.10.21 run ----
+
+const (
+	subLine    = `YTGUI_P {"status": "downloading", "downloaded_bytes": 3072, "total_bytes": null, "filename": "C:\\d\\Rick [x].en.vtt", "eta": null, "speed": 3070026.65}`
+	videoLine  = `YTGUI_P {"status": "downloading", "downloaded_bytes": 2096128, "total_bytes": 5685561, "filename": "C:\\d\\Rick [x].f396.mp4", "eta": 0, "speed": 40386965.1}`
+	videoDone  = `YTGUI_P {"downloaded_bytes": 5685561, "total_bytes": 5685561, "filename": "C:\\d\\Rick [x].f396.mp4", "status": "finished", "speed": 50163280.1}`
+	audioStart = `YTGUI_P {"status": "downloading", "downloaded_bytes": 1024, "total_bytes": 3433755, "filename": "C:\\d\\Rick [x].f251.webm", "eta": null, "speed": null}`
+	audioMid   = `YTGUI_P {"status": "downloading", "downloaded_bytes": 1716877, "total_bytes": 3433755, "filename": "C:\\d\\Rick [x].f251.webm", "eta": 1, "speed": 1000000}`
+	streamsRaw = `YTGUI_STREAMS [{"filesize": 5685561, "filesize_approx": 5685558, "vcodec": "av01.0.01M.08", "acodec": "none"}, {"filesize": 3433755, "filesize_approx": 3433744, "vcodec": "none", "acodec": "opus"}]`
+)
+
+func TestParseLineKinds(t *testing.T) {
+	if l := ParseLine(videoLine); l.Kind != KindProgress || l.Progress.Total != 5685561 || l.Progress.ETA != 0 {
+		t.Fatalf("progress: %+v", l)
+	}
+	if l := ParseLine(audioStart); l.Progress.ETA != -1 || l.Progress.Speed != 0 {
+		t.Fatalf("null eta/speed should be -1/0: %+v", l.Progress)
+	}
+	if l := ParseLine("YTGUI_PP Merger|started"); l.Kind != KindPost || l.PostName != "Merger" || l.PostStat != "started" {
+		t.Fatalf("post: %+v", l)
+	}
+	if l := ParseLine("YTGUI_FILE\tC:\\d\\Rick [x].webm\r\n"); l.Kind != KindFile || l.File != `C:\d\Rick [x].webm` {
+		t.Fatalf("file: %+v", l)
+	}
+	if l := ParseLine("YTGUI_FILE\tNA"); l.Kind != KindOther {
+		t.Fatalf("NA path must be ignored: %+v", l)
+	}
+	if l := ParseLine("[download] Destination: x.mp4"); l.Kind != KindOther {
+		t.Fatalf("ordinary log line: %+v", l)
+	}
+	if l := ParseLine("YTGUI_P {broken"); l.Kind != KindOther {
+		t.Fatalf("malformed JSON must not crash or classify: %+v", l)
+	}
+	l := ParseLine(`YTGUI_PLAN {"id": "dQw4w9WgXcQ", "title": "Never Gonna Give You Up", "duration": 213, "filesize_approx": 9119316}`)
+	if l.Kind != KindPlan || l.Plan.Title != "Never Gonna Give You Up" || l.Plan.Size() != 9119316 {
+		t.Fatalf("plan: %+v", l)
+	}
+}
+
+func TestParseStreams(t *testing.T) {
+	got := ParseLine(streamsRaw).Streams
+	want := []Stream{{Size: 5685561, Kind: "video"}, {Size: 3433755, Kind: "audio"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v want %+v", got, want)
+	}
+	if s := ParseLine("YTGUI_STREAMS NA").Streams; s != nil {
+		t.Fatalf("NA should give no streams, got %+v", s)
+	}
+}
+
+func TestTrackerTwoStreamsGivesOneMonotonicBar(t *testing.T) {
+	var tr Tracker
+	tr.SetStreams(ParseLine(streamsRaw).Streams)
+
+	// Subtitle progress arrives first and must not count as a stream.
+	if _, ok := tr.Update(ParseLine(subLine).Progress); ok {
+		t.Fatal("subtitle file progress should be ignored")
+	}
+
+	total := float64(5685561 + 3433755)
+	snap, ok := tr.Update(ParseLine(videoLine).Progress)
+	if !ok || snap.Stage != "Downloading video" {
+		t.Fatalf("video: %+v ok=%v", snap, ok)
+	}
+	wantPct := 2096128 / total * 100
+	if d := snap.Percent - wantPct; d > 0.01 || d < -0.01 {
+		t.Fatalf("percent = %.3f want %.3f", snap.Percent, wantPct)
+	}
+	prev := snap.Percent
+
+	if tr.AllDone() {
+		t.Fatal("not done while the first of two streams is mid-download")
+	}
+	snap, _ = tr.Update(ParseLine(videoDone).Progress)
+	if snap.Percent < prev {
+		t.Fatalf("went backwards at end of video: %.2f < %.2f", snap.Percent, prev)
+	}
+	if tr.AllDone() {
+		t.Fatal("finishing the video stream must not count as all done — audio is still to come")
+	}
+	prev = snap.Percent
+
+	// The audio stream restarts at 0 bytes; overall progress must not drop.
+	snap, _ = tr.Update(ParseLine(audioStart).Progress)
+	if snap.Stage != "Downloading audio" {
+		t.Fatalf("stage = %q", snap.Stage)
+	}
+	if snap.Percent < prev {
+		t.Fatalf("bar jumped back when audio began: %.2f < %.2f", snap.Percent, prev)
+	}
+	audioFinished := ParseLine(audioMid).Progress
+	audioFinished.Status, audioFinished.Downloaded = "finished", 3433755
+	snap, _ = tr.Update(ParseLine(audioMid).Progress)
+	if tr.AllDone() {
+		t.Fatal("audio is only half done")
+	}
+	tr2 := tr // a copy: check the end state without disturbing the assertions below
+	if _, _ = tr2.Update(audioFinished); !tr2.AllDone() {
+		t.Fatal("all streams finished should report done")
+	}
+	wantPct = (5685561 + 1716877) / total * 100
+	if d := snap.Percent - wantPct; d > 0.01 || d < -0.01 {
+		t.Fatalf("mid-audio percent = %.3f want %.3f", snap.Percent, wantPct)
+	}
+	if snap.ETA != 1 { // (3433755-1716877)/1000000 ≈ 1.7 → 1
+		t.Fatalf("ETA should be recomputed from the overall remainder, got %d", snap.ETA)
+	}
+}
+
+func TestTrackerWithoutKnownSizes(t *testing.T) {
+	var tr Tracker
+	snap, ok := tr.Update(ParseLine(audioStart).Progress)
+	if !ok {
+		t.Fatal("expected a snapshot")
+	}
+	// With no plan the current stream's own total is all we have.
+	if snap.Total != 3433755 {
+		t.Fatalf("total = %d", snap.Total)
+	}
+	var live Tracker
+	snap, _ = live.Update(Progress{Status: "downloading", Downloaded: 500, Filename: "live.mp4"})
+	if snap.Percent != -1 {
+		t.Fatalf("unknown total must report -1, got %v", snap.Percent)
+	}
+}
+
+func TestTrackerTimeRangeIsOneMergedFile(t *testing.T) {
+	// Observed with --download-sections "*0:05-0:10" -f "bv*+ba": no per-stream files, a single
+	// "finished" report for the final file, sized for the cut rather than the whole video.
+	tr := Tracker{Cut: true}
+	tr.SetPlan(Plan{Filesize: 9119316})
+	tr.SetStreams(ParseLine(streamsRaw).Streams)
+	snap, _ := tr.Update(Progress{Status: "finished", Downloaded: 364835, Total: 364835, Filename: `C:\dl\dQw4w9WgXcQ.webm`})
+	if !tr.AllDone() {
+		t.Fatal("the merged file finishing means everything is downloaded")
+	}
+	if snap.Percent != 100 || snap.Total != 364835 || snap.Stage != "Downloading" {
+		t.Fatalf("want 100%% of the cut: %+v", snap)
+	}
+}
+
+func TestTrackerTwoStreamsWithUnknownSizesNeverGoesBack(t *testing.T) {
+	var tr Tracker
+	tr.SetStreams([]Stream{{Kind: "video"}, {Kind: "audio"}})
+	var prev float64
+	for _, p := range []Progress{
+		{Status: "downloading", Downloaded: 500, Total: 1000, Filename: "v.f137.mp4"},
+		{Status: "finished", Downloaded: 1000, Total: 1000, Filename: "v.f137.mp4"},
+		{Status: "downloading", Downloaded: 10, Total: 100, Filename: "v.f140.m4a"},
+		{Status: "finished", Downloaded: 100, Total: 100, Filename: "v.f140.m4a"},
+	} {
+		snap, _ := tr.Update(p)
+		if snap.Percent < prev {
+			t.Fatalf("bar went back from %.1f to %.1f at %+v", prev, snap.Percent, p)
+		}
+		if snap.Percent >= 100 && !tr.AllDone() {
+			t.Fatalf("full bar before the last stream finished: %+v", p)
+		}
+		prev = snap.Percent
+	}
+	if prev != 100 || !tr.AllDone() {
+		t.Fatalf("end: %.1f done=%v", prev, tr.AllDone())
+	}
+}
+
+func TestTrackerLowEstimateDoesNotShowFullBarEarly(t *testing.T) {
+	var tr Tracker
+	tr.SetStreams([]Stream{{Size: 1000, Kind: "video"}, {Size: 100, Kind: "audio"}})
+	tr.Update(Progress{Status: "finished", Downloaded: 1500, Total: 1500, Filename: "v.f1.mp4"})
+	snap, _ := tr.Update(Progress{Status: "downloading", Downloaded: 50, Total: 100, Speed: 10, Filename: "v.f2.m4a"})
+	if snap.Percent >= 100 || snap.ETA < 0 {
+		t.Fatalf("estimate ran low: want <100%% and ETA >= 0, got %+v", snap)
+	}
+}
+
+func TestTrackerAlreadyDownloadedStreamCounts(t *testing.T) {
+	var tr Tracker
+	tr.SetStreams([]Stream{{Size: 900, Kind: "video"}, {Size: 100, Kind: "audio"}})
+	// yt-dlp's "already downloaded" report carries the size but no downloaded_bytes.
+	tr.Update(Progress{Status: "finished", Total: 900, Filename: "v.f1.mp4"})
+	snap, _ := tr.Update(Progress{Status: "downloading", Downloaded: 50, Total: 100, Filename: "v.f2.m4a"})
+	if snap.Downloaded != 950 {
+		t.Fatalf("downloaded = %d, want 950", snap.Downloaded)
+	}
+}
+
+// ---- argument building ----
+
+func testEnv() Env {
+	s := settings.Default()
+	s.DownloadDir = `C:\Dl`
+	return Env{Bin: "yt-dlp", Settings: s}
+}
+
+func has(args []string, want string) bool {
+	for _, a := range args {
+		if a == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestDownloadArgsBasics(t *testing.T) {
+	e := testEnv()
+	o := e.Settings.Defaults
+	args := e.DownloadArgs(o, Target{URL: "https://example.com/v"})
+
+	for _, want := range []string{"--ignore-config", "--no-playlist", "--paths=C:\\Dl", "--format=bv*+ba/b", "--embed-metadata", "--embed-chapters"} {
+		if !has(args, want) {
+			t.Errorf("missing %q in %v", want, args)
+		}
+	}
+	// The URL must be the last argument, preceded by "--" so it can never be read as an option.
+	n := len(args)
+	if args[n-1] != "https://example.com/v" || args[n-2] != "--" {
+		t.Fatalf("URL placement wrong: %v", args[n-2:])
+	}
+	if has(args, "--write-subs") || has(args, "--embed-subs") {
+		t.Error("subtitles are off by default")
+	}
+}
+
+func TestNoThumbnailEmbedInWebM(t *testing.T) {
+	// Observed: "Supported filetypes for thumbnail embedding are: mp3, mkv/mka, ogg/opus/flac,
+	// m4a/mp4/m4v/mov" fails the download after the media is already on disk.
+	e := testEnv()
+	o := e.Settings.Defaults
+	o.EmbedThumbnail, o.Container = true, "webm"
+	if has(e.DownloadArgs(o, Target{URL: "https://example.com/v"}), "--embed-thumbnail") {
+		t.Error("--embed-thumbnail must not be passed with WebM")
+	}
+	o.Container = ""
+	if !has(e.DownloadArgs(o, Target{URL: "https://example.com/v"}), "--embed-thumbnail") {
+		t.Error("with no container chosen yt-dlp handles it, so the flag stays")
+	}
+}
+
+func TestFormatPresets(t *testing.T) {
+	cases := []struct {
+		name string
+		o    settings.DownloadOptions
+		want []string
+	}{
+		{"720", settings.DownloadOptions{Preset: "720"},
+			[]string{"--format=bv*[height<=720]+ba/b[height<=720]/bv*[height<=?720]+ba/b[height<=?720]"}},
+		{"audio mp3", settings.DownloadOptions{Preset: "audio", AudioFormat: "mp3", AudioQuality: "0"},
+			[]string{"--format=ba/b", "--extract-audio", "--audio-format=mp3", "--audio-quality=0"}},
+		{"audio flac has no quality", settings.DownloadOptions{Preset: "audio", AudioFormat: "flac", AudioQuality: "0"},
+			[]string{"--format=ba/b", "--extract-audio", "--audio-format=flac"}},
+		{"custom with container", settings.DownloadOptions{Preset: "custom", FormatID: "137+140", Container: "mp4"},
+			[]string{"--format=137+140", "--merge-output-format=mp4", "--remux-video=mp4"}},
+		// Observed: h264 into WebM fails in ffmpeg; with the fallback it becomes .mkv, VP9 stays .webm.
+		{"webm falls back to mkv", settings.DownloadOptions{Preset: "best", Container: "webm"},
+			[]string{"--format=bv*+ba/b", "--merge-output-format=webm/mkv", "--remux-video=webm>webm/mkv"}},
+	}
+	for _, c := range cases {
+		got := FormatArgs(c.o)
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: got %v want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestSubtitleModes(t *testing.T) {
+	langs := []string{"en", "es"}
+	cases := []struct {
+		name string
+		o    settings.SubtitleOptions
+		want []string
+	}{
+		{"none", settings.SubtitleOptions{Mode: "none", Langs: langs}, nil},
+		{"files", settings.SubtitleOptions{Mode: "files", Langs: langs}, []string{"--sub-langs=en,es", "--write-subs"}},
+		// Embed-only must not pass --write-subs or yt-dlp keeps the sidecar files (observed).
+		{"embed", settings.SubtitleOptions{Mode: "embed", Langs: langs}, []string{"--sub-langs=en,es", "--embed-subs"}},
+		// Observed: --embed-subs --write-auto-subs alone picks the auto captions over uploaded
+		// subtitles; --write-subs fixes that and no-keep-subs still removes the sidecars.
+		{"embed+auto", settings.SubtitleOptions{Mode: "embed", Langs: langs, Auto: true},
+			[]string{"--sub-langs=en,es", "--write-subs", "--compat-options=no-keep-subs", "--embed-subs", "--write-auto-subs"}},
+		{"both+auto+srt", settings.SubtitleOptions{Mode: "both", Langs: langs, Auto: true, Format: "srt"},
+			[]string{"--sub-langs=en,es", "--write-subs", "--embed-subs", "--write-auto-subs", "--convert-subs=srt"}},
+	}
+	for _, c := range cases {
+		if got := SubtitleArgs(c.o); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: got %v want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestOutputTemplate(t *testing.T) {
+	o := settings.DownloadOptions{PlaylistFolder: true, PlaylistNumbering: true}
+	base := settings.DefaultTemplate
+
+	if got := OutputTemplate(base, o, Target{}); got != base {
+		t.Errorf("non-playlist should keep the template, got %q", got)
+	}
+	tg := Target{PlaylistTitle: "My Mix: 50% <best>?", PlaylistIndex: 7, PlaylistCount: 120}
+	want := "My Mix_ 50%% _best__/007 - " + base
+	if got := OutputTemplate(base, o, tg); got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+	o.PlaylistFolder = false
+	if got := OutputTemplate(base, o, tg); got != "007 - "+base {
+		t.Errorf("numbering only: %q", got)
+	}
+	o.PlaylistNumbering = false
+	if got := OutputTemplate(base, o, tg); got != base {
+		t.Errorf("neither: %q", got)
+	}
+	if got := sanitizeSegment("CON"); got != "CON_" {
+		t.Errorf("reserved name: %q", got)
+	}
+	if got := sanitizeSegment("..."); got != "playlist" {
+		t.Errorf("all-dots: %q", got)
+	}
+}
+
+func TestPercentInTitleCannotInjectTemplateFields(t *testing.T) {
+	// A playlist literally named "%(title)s" must stay literal text, not expand to the video title.
+	got := sanitizeSegment("%(title)s")
+	if got != "%%(title)s" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestCookieArgs(t *testing.T) {
+	e := testEnv()
+	e.Settings.Cookies = settings.Cookies{Mode: "browser", Browser: "firefox", Profile: "default-release"}
+	if !has(e.CommonArgs(), "--cookies-from-browser=firefox:default-release") {
+		t.Errorf("browser: %v", e.CommonArgs())
+	}
+	e.Settings.Cookies = settings.Cookies{Mode: "file", File: `C:\orig.txt`}
+	e.CookieFile = `C:\tmp\private.txt`
+	if !has(e.CommonArgs(), `--cookies=C:\tmp\private.txt`) {
+		t.Errorf("file should use the private copy: %v", e.CommonArgs())
+	}
+	e.Settings.Cookies.Mode = "none"
+	for _, a := range e.CommonArgs() {
+		if strings.Contains(a, "cookies") {
+			t.Errorf("no cookie flags expected, got %q", a)
+		}
+	}
+}
+
+func TestExtraArgsComeLast(t *testing.T) {
+	e := testEnv()
+	e.Settings.ExtraArgs = `--extractor-args "youtube:player_client=web" --no-mtime`
+	args := e.DownloadArgs(e.Settings.Defaults, Target{URL: "https://x.test/"})
+	n := len(args)
+	if args[n-2] != "--" {
+		t.Fatalf("separator missing: %v", args[n-3:])
+	}
+	if args[n-3] != "--no-mtime" || args[n-4] != "youtube:player_client=web" {
+		t.Fatalf("extra args should directly precede --: %v", args[n-5:])
+	}
+}
+
+func TestSplitArgs(t *testing.T) {
+	got, err := SplitArgs(`--a "b c"  --d='e f' g\h`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"--a", "b c", "--d=e f", `g\h`}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	if _, err := SplitArgs(`--a "unterminated`); err == nil {
+		t.Fatal("expected an error for an unterminated quote")
+	}
+	if got, _ := SplitArgs("   "); len(got) != 0 {
+		t.Fatalf("blank input: %q", got)
+	}
+	if got, _ := SplitArgs(`--a ""`); !reflect.DeepEqual(got, []string{"--a", ""}) {
+		t.Fatalf("empty quoted arg should survive: %q", got)
+	}
+}
+
+// ---- url normalisation ----
+
+func TestNormalizeURL(t *testing.T) {
+	good := map[string]string{
+		"https://youtu.be/abc":       "https://youtu.be/abc",
+		"  youtube.com/watch?v=abc ": "https://youtube.com/watch?v=abc",
+		"http://example.com/a b":     "", // space inside → rejected below
+	}
+	for in, want := range good {
+		got, err := NormalizeURL(in)
+		if want == "" {
+			if err == nil {
+				t.Errorf("%q should be rejected", in)
+			}
+			continue
+		}
+		if err != nil || got != want {
+			t.Errorf("%q → %q, %v (want %q)", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"", "   ", "--exec calc", "-o", "notalink", "ftp://x.test/f", "javascript:alert(1)", "file:///C:/x"} {
+		if _, err := NormalizeURL(bad); err == nil {
+			t.Errorf("%q should be rejected", bad)
+		}
+	}
+}
+
+// ---- probe parsing ----
+
+const singleVideoJSON = `{
+ "_type": "video", "id": "dQw4w9WgXcQ", "title": "Never Gonna Give You Up", "webpage_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+ "uploader": "Rick Astley", "duration": 213, "thumbnail": "https://i.ytimg.com/vi/x/max.webp", "extractor_key": "Youtube",
+ "formats": [
+  {"format_id":"sb0","ext":"mhtml","vcodec":"none","acodec":"none","format_note":"storyboard","height":27},
+  {"format_id":"140","ext":"m4a","vcodec":"none","acodec":"mp4a.40.2","filesize":3400000,"tbr":129},
+  {"format_id":"137","ext":"mp4","vcodec":"avc1","acodec":"none","height":1080,"width":1920,"fps":30,"filesize_approx":50000000},
+  {"format_id":"18","ext":"mp4","vcodec":"avc1","acodec":"mp4a","height":360,"width":640},
+  {"format_id":"248","ext":"webm","vcodec":"vp9","acodec":"none","height":1080,"width":1920}
+ ],
+ "subtitles": {"en": [{"name":"English","ext":"vtt"}], "live_chat": [{"ext":"json"}]},
+ "automatic_captions": {"fr": [{"name":"French","ext":"vtt"}], "de": [{"ext":"vtt"}]}
+}`
+
+func TestParseSingleVideo(t *testing.T) {
+	res, err := ParseProbe([]byte(singleVideoJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != "video" || res.Video == nil {
+		t.Fatalf("kind = %q", res.Kind)
+	}
+	v := res.Video
+	if len(v.Formats) != 4 {
+		t.Errorf("storyboard must be filtered out; got %d formats", len(v.Formats))
+	}
+	if !reflect.DeepEqual(v.Heights, []int{1080, 360}) {
+		t.Errorf("heights = %v (want distinct, descending)", v.Heights)
+	}
+	for _, f := range v.Formats {
+		if f.ID == "137" && (f.Filesize != 50000000 || !f.HasVideo || f.HasAudio) {
+			t.Errorf("137 parsed wrong: %+v", f)
+		}
+		if f.ID == "140" && (f.HasVideo || !f.HasAudio) {
+			t.Errorf("140 parsed wrong: %+v", f)
+		}
+	}
+	if len(v.Subtitles) != 1 || v.Subtitles[0].Lang != "en" || v.Subtitles[0].Name != "English" {
+		t.Errorf("subtitles (live_chat must be excluded): %+v", v.Subtitles)
+	}
+	if len(v.AutoCaptions) != 2 || v.AutoCaptions[0].Lang != "de" || v.AutoCaptions[0].Name != "de" || !v.AutoCaptions[0].Auto {
+		t.Errorf("auto captions: %+v", v.AutoCaptions)
+	}
+}
+
+const playlistJSON = `{
+ "_type": "playlist", "id": "PL1", "title": "Channel Uploads", "webpage_url": "https://www.youtube.com/playlist?list=PL1",
+ "entries": [
+  {"_type":"url","id":"a","title":"First","url":"https://www.youtube.com/watch?v=a","duration":60,"channel":"Chan",
+   "thumbnails":[{"url":"https://t/small.jpg","width":120},{"url":"https://t/mid.jpg","width":320},{"url":"https://t/big.jpg","width":1280}]},
+  null,
+  {"_type":"url","id":"b","title":"[Private video]","url":"https://www.youtube.com/watch?v=b"},
+  {"_type":"playlist","title":"Shorts","entries":[
+     {"_type":"url","id":"c","title":"Short one","url":"https://www.youtube.com/shorts/c"}
+  ]}
+ ]
+}`
+
+func TestParsePlaylist(t *testing.T) {
+	res, err := ParseProbe([]byte(playlistJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != "playlist" {
+		t.Fatalf("kind = %q", res.Kind)
+	}
+	e := res.Playlist.Entries
+	if len(e) != 3 {
+		t.Fatalf("null entries are skipped and nested playlists flattened; got %d: %+v", len(e), e)
+	}
+	if e[0].Thumbnail != "https://t/mid.jpg" {
+		t.Errorf("thumbnail should prefer the smallest ≥240px, got %q", e[0].Thumbnail)
+	}
+	if e[0].Uploader != "Chan" || e[0].Index != 1 || e[2].Index != 3 {
+		t.Errorf("indexes/uploader: %+v", e)
+	}
+	if !e[1].Unavailable {
+		t.Errorf("private video should be flagged unavailable")
+	}
+	if e[2].Group != "Shorts" || e[2].Unavailable {
+		t.Errorf("nested entry: %+v", e[2])
+	}
+}
+
+// Trimmed from a real probe of https://www.youtube.com/@RickAstleyYT/playlists.
+const playlistsTabJSON = `{"_type":"playlist","id":"UCuAXFkgsw1L7xaCfnd5JJOw","title":"Rick Astley - Playlists","extractor_key":"YoutubeTab","entries":[
+ {"title":"Rick Astley Live at The O2","duration":null,"view_count":null,"channel":"Playlist","uploader":"Playlist","ie_key":"YoutubeTab","id":"PLlaN88a7y2_qHDbY9eQbuNTAuEJUSEeuu","_type":"url","url":"https://www.youtube.com/playlist?list=PLlaN88a7y2_qHDbY9eQbuNTAuEJUSEeuu"},
+ {"title":"A video","ie_key":"Youtube","id":"dQw4w9WgXcQ","_type":"url","url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+ {"title":"Video in a list","ie_key":"Youtube","id":"lW1aFyk_E5I","_type":"url","url":"https://www.youtube.com/watch?v=lW1aFyk_E5I&list=PLx"}
+]}`
+
+func TestNestedPlaylistEntriesAreFlagged(t *testing.T) {
+	res, err := ParseProbe([]byte(playlistsTabJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := res.Playlist.Entries
+	if len(e) != 3 || !e[0].IsPlaylist || e[1].IsPlaylist || e[2].IsPlaylist {
+		t.Fatalf("only the playlist link should be flagged: %+v", e)
+	}
+	if e[0].Unavailable {
+		t.Error("a nested playlist is not unavailable")
+	}
+}
+
+func TestProbeToleratesFractionalNumbers(t *testing.T) {
+	res, err := ParseProbe([]byte(`{"_type":"video","id":"x","title":"t","view_count":12.0,
+		"formats":[{"format_id":"a","ext":"mp4","vcodec":"avc1","acodec":"mp4a","height":720.0,"width":1280.0,"filesize_approx":1234.5}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := res.Video.Formats[0]; f.Height != 720 || f.Filesize != 1234 || res.Video.ViewCount != 12 {
+		t.Fatalf("%+v views=%d", f, res.Video.ViewCount)
+	}
+}
+
+func TestParseProbeRejectsGarbage(t *testing.T) {
+	if _, err := ParseProbe([]byte("not json")); err == nil {
+		t.Fatal("expected an error")
+	}
+}
+
+// ---- cookies ----
+
+func TestInspectCookies(t *testing.T) {
+	now := time.Unix(2_000_000_000, 0)
+	good := "# Netscape HTTP Cookie File\r\n\r\n" +
+		".youtube.com\tTRUE\t/\tTRUE\t2100000000\tSID\tsecret1\r\n" +
+		"#HttpOnly_.youtube.com\tTRUE\t/\tTRUE\t0\tHSID\tsecret2\r\n" +
+		".google.com\tTRUE\t/\tFALSE\t1000000000\tOLD\tsecret3\r\n"
+	info := inspect([]byte("\xef\xbb\xbf"+good), now)
+	if !info.Valid || info.Count != 3 || info.Expired != 1 || info.Session != 1 || info.DomainCount != 2 {
+		t.Fatalf("info: %+v", info)
+	}
+	if info.Domains[0] != "youtube.com" {
+		t.Errorf("domains should be ordered by cookie count: %v", info.Domains)
+	}
+	if b, _ := jsonString(info); strings.Contains(b, "secret") {
+		t.Fatal("cookie values must never appear in CookieInfo")
+	}
+
+	bad := map[string]string{
+		"empty":     "",
+		"json":      `[{"domain":".x.com"}]`,
+		"no header": ".x.com\tTRUE\t/\tTRUE\t0\tA\tB\n",
+		"no rows":   "# Netscape HTTP Cookie File\n# nothing\n",
+		"spaces":    "# Netscape HTTP Cookie File\n.x.com TRUE / TRUE 0 A B\n",
+	}
+	for name, content := range bad {
+		if got := inspect([]byte(content), now); got.Valid || got.Problem == "" {
+			t.Errorf("%s should be invalid with a reason: %+v", name, got)
+		}
+	}
+}
+
+func TestImportCookiesNormalisesAndStores(t *testing.T) {
+	dir := t.TempDir()
+	in := "\xef\xbb\xbf# Netscape HTTP Cookie File\r\n.a.com\tTRUE\t/\tFALSE\t0\tX\tY\r\n"
+	info, err := ImportCookies([]byte(in), dir)
+	if err != nil || !info.Valid {
+		t.Fatalf("%v %+v", err, info)
+	}
+	got := InspectCookieFile(info.Path)
+	if !got.Valid || got.Count != 1 {
+		t.Fatalf("re-read: %+v", got)
+	}
+	if _, err := ImportCookies([]byte("garbage"), dir); err == nil {
+		t.Fatal("garbage must be rejected")
+	}
+	if missing := InspectCookieFile(dir + "/nope.txt"); missing.Valid || missing.Problem == "" {
+		t.Fatalf("missing file: %+v", missing)
+	}
+}
+
+func TestPrivateCookieCopyIsIndependent(t *testing.T) {
+	dir := t.TempDir()
+	info, _ := ImportCookies([]byte("# Netscape HTTP Cookie File\n.a.com\tTRUE\t/\tFALSE\t0\tX\tY\n"), dir)
+	c1, done1, err := PrivateCookieCopy(info.Path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2, done2, _ := PrivateCookieCopy(info.Path)
+	if c1 == c2 || c1 == info.Path {
+		t.Fatalf("each run needs its own copy: %q %q %q", c1, c2, info.Path)
+	}
+	done1()
+	done2()
+	if InspectCookieFile(c1).Valid {
+		t.Fatal("cleanup should delete the copy")
+	}
+}
+
+// ---- versions ----
+
+func TestCompareVersions(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want int
+	}{
+		{"2026.10.21", "2026.10.21", 0},
+		{"2026.10.21", "2026.10.25", -1},
+		{"2026.11.01", "2026.10.25", 1},
+		{"2026.10.25.232749", "2026.10.25", 1}, // nightly after the stable of the same day
+		{"2026.10.25.010101", "2026.10.25.232749", -1},
+		{"2026.9.30", "2026.10.1", -1}, // numeric, not lexicographic
+	}
+	for _, c := range cases {
+		if got := CompareVersions(c.a, c.b); got != c.want {
+			t.Errorf("Compare(%s,%s)=%d want %d", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+func TestParseChecksum(t *testing.T) {
+	sums := []byte("AAA111  yt-dlp\nBBB222  yt-dlp.exe\nccc333 *yt-dlp_x86.exe\n")
+	if h, ok := parseChecksum(sums, "yt-dlp.exe"); !ok || h != "bbb222" {
+		t.Fatalf("got %q %v", h, ok)
+	}
+	if h, ok := parseChecksum(sums, "yt-dlp_x86.exe"); !ok || h != "ccc333" {
+		t.Fatalf("binary-mode marker: %q %v", h, ok)
+	}
+	if _, ok := parseChecksum(sums, "missing.exe"); ok {
+		t.Fatal("should not find a missing asset")
+	}
+}
+
+func TestPostStage(t *testing.T) {
+	if PostStage("Merger") != "Merging video and audio" || PostStage("SomethingNew") != "Processing" {
+		t.Fatal("stage names")
+	}
+}
