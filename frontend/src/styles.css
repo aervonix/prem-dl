@@ -987,7 +987,9 @@ input[type='checkbox'] {
 
 .actionbar {
   position: sticky;
-  bottom: 0;
+  /* Sticky offsets count from inside .page's 32px bottom padding; cancel it so the bar meets
+     the window edge instead of floating above content scrolling underneath. */
+  bottom: -32px;
   margin: 18px -28px -32px;
   padding: 14px 28px;
   background: var(--bg);
@@ -1179,7 +1181,9 @@ input[type='checkbox'] {
 }
 .savebar {
   position: sticky;
-  bottom: 0;
+  /* Sticky offsets count from inside .page's 32px bottom padding; cancel it so the bar meets
+     the window edge instead of floating above content scrolling underneath. */
+  bottom: -32px;
   margin: 18px -28px -32px;
   padding: 12px 28px;
   display: flex;
