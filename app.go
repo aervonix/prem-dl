@@ -504,6 +504,12 @@ func (a *App) GetJobLog(id string) []string { return a.q.Log(id) }
 // ClearFinished removes finished jobs from the list (files on disk are never touched).
 func (a *App) ClearFinished(onlyCompleted bool) []string { return a.q.ClearFinished(onlyCompleted) }
 
+// RetryFailed retries every failed download and returns how many went back in line.
+func (a *App) RetryFailed() int { return a.q.RetryFailed() }
+
+// MoveJobToTop makes a waiting download the next to start.
+func (a *App) MoveJobToTop(id string) error { return a.q.MoveToTop(id) }
+
 // ---- files and folders ----
 
 // OpenFile opens a finished download in the default player.

@@ -28,6 +28,7 @@ const (
 	MarkPlan     = "YTGUI_PLAN "
 	MarkStreams  = "YTGUI_STREAMS "
 	MarkFile     = "YTGUI_FILE\t"
+	MarkName     = "YTGUI_NAME " // the probe's expansion of the filename template
 )
 
 // CommonArgs are applied to every invocation (probing and downloading).

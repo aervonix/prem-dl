@@ -51,7 +51,7 @@ func (s Status) finished() bool {
 // Job is one download. It is sent to the frontend as JSON.
 type Job struct {
 	ID        string  `json:"id"`
-	Seq       int64   `json:"seq"` // position in the queue; strictly increasing
+	Seq       int64   `json:"seq"` // position in the queue; new jobs count up, MoveToTop goes below the lowest
 	URL       string  `json:"url"`
 	Title     string  `json:"title"`
 	Uploader  string  `json:"uploader"`
@@ -409,6 +409,59 @@ func (m *Manager) Remove(id string) error {
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
+	return nil
+}
+
+// RetryFailed retries every failed job (not cancelled ones) and returns how many went back in
+// line. A job whose link is queued again elsewhere is left as it is.
+func (m *Manager) RetryFailed() int {
+	m.mu.Lock()
+	var ids []string
+	for _, id := range m.order {
+		if m.entries[id].job.Status == StatusFailed {
+			ids = append(ids, id)
+		}
+	}
+	m.mu.Unlock()
+	n := 0
+	for _, id := range ids {
+		if m.Retry(id) == nil {
+			n++
+		}
+	}
+	return n
+}
+
+// MoveToTop makes a waiting or paused job the first in the list and, once it is waiting, the
+// next to start.
+func (m *Manager) MoveToTop(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.entries[id]
+	if !ok {
+		return errNoJob
+	}
+	if e.job.Status != StatusQueued && e.job.Status != StatusPaused {
+		return nil
+	}
+	lowest := e.job.Seq
+	for _, o := range m.entries {
+		if o.job.Seq < lowest {
+			lowest = o.job.Seq
+		}
+	}
+	if lowest < e.job.Seq || m.order[0] != id {
+		m.setLocked(e, func(j *Job) { j.Seq = lowest - 1 })
+		order := []string{id}
+		for _, o := range m.order {
+			if o != id {
+				order = append(order, o)
+			}
+		}
+		m.order = order
+		m.persist = true
+	}
+	m.scheduleLocked()
 	return nil
 }
 

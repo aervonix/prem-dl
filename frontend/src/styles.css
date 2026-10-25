@@ -1145,6 +1145,9 @@ input[type='checkbox'] {
   align-items: center;
   margin-bottom: 14px;
 }
+.q-toolbar .q-search {
+  width: min(360px, 100%);
+}
 .q-toolbar .summary {
   flex: 1;
   color: var(--muted);

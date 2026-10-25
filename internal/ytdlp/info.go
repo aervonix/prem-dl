@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"yt-dlp-gui/internal/apperr"
+	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
 )
 
@@ -42,21 +43,24 @@ type SubtitleTrack struct {
 
 // VideoInfo describes a single video.
 type VideoInfo struct {
-	ID             string          `json:"id"`
-	Title          string          `json:"title"`
-	URL            string          `json:"url"`
-	Uploader       string          `json:"uploader"`
-	Thumbnail      string          `json:"thumbnail"`
-	ThumbnailSmall string          `json:"thumbnailSmall"` // for list rows
-	Duration       float64         `json:"duration"`
-	UploadDate     string          `json:"uploadDate"`
-	ViewCount      int64           `json:"viewCount"`
-	IsLive         bool            `json:"isLive"`
-	Extractor      string          `json:"extractor"`
-	Formats        []FormatInfo    `json:"formats"`
-	Heights        []int           `json:"heights"`
-	Subtitles      []SubtitleTrack `json:"subtitles"`
-	AutoCaptions   []SubtitleTrack `json:"autoCaptions"`
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	URL            string `json:"url"`
+	Uploader       string `json:"uploader"`
+	Thumbnail      string `json:"thumbnail"`
+	ThumbnailSmall string `json:"thumbnailSmall"` // for list rows
+	// FileName is the filename template expanded for this video, relative to the download
+	// folder. Its extension is a guess: the chosen format and post-processing can change it.
+	FileName     string          `json:"fileName"`
+	Duration     float64         `json:"duration"`
+	UploadDate   string          `json:"uploadDate"`
+	ViewCount    int64           `json:"viewCount"`
+	IsLive       bool            `json:"isLive"`
+	Extractor    string          `json:"extractor"`
+	Formats      []FormatInfo    `json:"formats"`
+	Heights      []int           `json:"heights"`
+	Subtitles    []SubtitleTrack `json:"subtitles"`
+	AutoCaptions []SubtitleTrack `json:"autoCaptions"`
 	// BestPremium is set when the default format choice, which the "Best" preset uses, picks a
 	// YouTube Premium video stream (format_note "Premium").
 	BestPremium bool `json:"bestPremium"`
@@ -387,6 +391,10 @@ func Probe(ctx context.Context, env Env, rawURL string, noPlaylist bool) (*Probe
 	if noPlaylist {
 		args = append(args, "--no-playlist")
 	}
+	// The filename a download would get, with the same template and trimming. It's printed
+	// as its own line before the JSON (yt-dlp leaves it out of the JSON).
+	args = append(args, "--output="+OutputTemplate(env.Settings.FilenameTemplate, settings.DownloadOptions{}, Target{}),
+		"--trim-filenames=180", "--print=video:"+MarkName+"%(filename)s")
 	args = append(args, env.UserArgs()...)
 	args = append(args, "--", link)
 
@@ -411,11 +419,27 @@ func Probe(ctx context.Context, env Env, rawURL string, noPlaylist bool) (*Probe
 	if runErr != nil || stdout.Len() == 0 {
 		return nil, apperr.Classify(splitLines(stderr.String()), runErr)
 	}
-	res, perr := ParseProbe(stdout.Bytes())
+	data, name := splitProbeOutput(stdout.Bytes())
+	res, perr := ParseProbe(data)
 	if perr != nil {
 		return nil, apperr.Classify(splitLines(stderr.String()), perr)
 	}
+	if res.Video != nil {
+		res.Video.FileName = name
+	}
 	return res, nil
+}
+
+// splitProbeOutput separates the MarkName line printed before the JSON from the JSON itself.
+func splitProbeOutput(out []byte) (data []byte, name string) {
+	for bytes.HasPrefix(out, []byte(MarkName)) {
+		line, rest, _ := bytes.Cut(out, []byte("\n"))
+		if name == "" {
+			name = strings.TrimSpace(string(line[len(MarkName):]))
+		}
+		out = rest
+	}
+	return out, name
 }
 
 func splitLines(s string) []string {

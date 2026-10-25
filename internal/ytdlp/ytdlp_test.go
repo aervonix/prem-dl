@@ -604,6 +604,22 @@ func TestThumbnailSizes(t *testing.T) {
 	}
 }
 
+func TestSplitProbeOutput(t *testing.T) {
+	// As printed by -J with --print=video:YTGUI_NAME %(filename)s (observed with yt-dlp 2026.10.21).
+	out := "YTGUI_NAME Rick Astley - Never Gonna Give You Up [dQw4w9WgXcQ].webm\r\n{\"_type\":\"video\",\"id\":\"dQw4w9WgXcQ\",\"title\":\"t\"}\n"
+	data, name := splitProbeOutput([]byte(out))
+	if name != "Rick Astley - Never Gonna Give You Up [dQw4w9WgXcQ].webm" {
+		t.Fatalf("name %q", name)
+	}
+	if res, err := ParseProbe(data); err != nil || res.Video.ID != "dQw4w9WgXcQ" {
+		t.Fatalf("json after the name line: %v %+v", err, res)
+	}
+	// A playlist prints no name; the output is all JSON.
+	if data, name := splitProbeOutput([]byte(`{"_type":"playlist"}`)); name != "" || string(data) != `{"_type":"playlist"}` {
+		t.Fatalf("%q %q", data, name)
+	}
+}
+
 func TestParseProbeRejectsGarbage(t *testing.T) {
 	if _, err := ParseProbe([]byte("not json")); err == nil {
 		t.Fatal("expected an error")

@@ -7,7 +7,7 @@ import {Button, Card, Empty, Spinner} from '../components/ui'
 import {compactCount, duration, hostOf, plural, uploadDate} from '../format'
 import {Icon} from '../icons'
 import {useApp} from '../store'
-import type {AppError, DownloadOptions, NewJob, PlaylistEntry, ProbeResult} from '../types'
+import type {AppError, DownloadOptions, NewJob, PlaylistEntry, ProbeResult, VideoInfo} from '../types'
 
 type Phase = 'idle' | 'analyzing' | 'ready' | 'error'
 
@@ -16,6 +16,20 @@ function splitLinks(text: string): string[] {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
+}
+
+/**
+ * The name a download will get: yt-dlp's expansion of the filename template from the analysis,
+ * with the extension the chosen options produce. With no container chosen yt-dlp settles the
+ * extension while processing (embedding subtitles or a thumbnail can turn WebM into MKV), so
+ * the extension is shown only when a container or an audio format fixes it.
+ */
+function plannedName(v: VideoInfo, o: DownloadOptions): string {
+  if (!v.fileName) return ''
+  const dot = v.fileName.lastIndexOf('.')
+  const stem = dot > 0 ? v.fileName.slice(0, dot) : v.fileName
+  const ext = o.preset === 'audio' ? (o.audioFormat === 'best' ? '' : o.audioFormat) : o.container
+  return ext ? `${stem}.${ext}` : stem
 }
 
 function looksLikeUrl(s: string): boolean {
@@ -574,6 +588,10 @@ export function DownloadPage() {
                 <span style={{color: 'var(--danger)'}}>{problem}</span>
               ) : playlist ? (
                 `${plural(selectedEntries.length, 'video')} will be added to the queue`
+              ) : video && opts && plannedName(video, opts) ? (
+                <span title={`${opts.outputDir || settings?.downloadDir || ''}\\${plannedName(video, opts)}`}>
+                  Saves as <b>{plannedName(video, opts)}</b>
+                </span>
               ) : (
                 'Ready to download'
               )}

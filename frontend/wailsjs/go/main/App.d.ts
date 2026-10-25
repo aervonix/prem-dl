@@ -39,6 +39,8 @@ export function InspectCookieFile(arg1:string):Promise<ytdlp.CookieInfo>;
 
 export function InstallFFmpeg():Promise<main.UpdateResult>;
 
+export function MoveJobToTop(arg1:string):Promise<void>;
+
 export function OpenChromeExtensions():Promise<void>;
 
 export function OpenDataFolder():Promise<void>;
@@ -70,6 +72,8 @@ export function RemoveJob(arg1:string):Promise<void>;
 export function ResumeAll():Promise<void>;
 
 export function ResumeJob(arg1:string):Promise<void>;
+
+export function RetryFailed():Promise<number>;
 
 export function RetryJob(arg1:string):Promise<void>;
 

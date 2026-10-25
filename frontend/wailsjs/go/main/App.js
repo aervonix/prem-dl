@@ -70,6 +70,10 @@ export function InstallFFmpeg() {
   return window['go']['main']['App']['InstallFFmpeg']();
 }
 
+export function MoveJobToTop(arg1) {
+  return window['go']['main']['App']['MoveJobToTop'](arg1);
+}
+
 export function OpenChromeExtensions() {
   return window['go']['main']['App']['OpenChromeExtensions']();
 }
@@ -132,6 +136,10 @@ export function ResumeAll() {
 
 export function ResumeJob(arg1) {
   return window['go']['main']['App']['ResumeJob'](arg1);
+}
+
+export function RetryFailed() {
+  return window['go']['main']['App']['RetryFailed']();
 }
 
 export function RetryJob(arg1) {

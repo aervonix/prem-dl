@@ -735,3 +735,52 @@ func TestAutomaticRetriesCanBeSwitchedOff(t *testing.T) {
 		t.Fatalf("retried %d times with automatic retries off", g.AutoRetries)
 	}
 }
+
+func TestMoveToTopStartsNext(t *testing.T) {
+	h := newHarness(t, 1)
+	a := h.add(t, "/slow")
+	waitFor(t, "a to run", func() bool { return h.status(a.ID) == StatusDownloading })
+	b := h.add(t, "/1/ok")
+	c := h.add(t, "/2/ok")
+	if err := h.m.MoveToTop(c.ID); err != nil {
+		t.Fatal(err)
+	}
+	list := h.m.List()
+	if list[0].ID != c.ID {
+		t.Fatalf("c should be listed first, got %s", list[0].Title)
+	}
+	gc, _ := h.m.Get(c.ID)
+	ga, _ := h.m.Get(a.ID)
+	if gc.Seq >= ga.Seq {
+		t.Fatalf("c's position %d should come before a's %d", gc.Seq, ga.Seq)
+	}
+	_ = h.m.Cancel(a.ID)
+	waitFor(t, "both to finish", func() bool { return h.status(b.ID) == StatusCompleted && h.status(c.ID) == StatusCompleted })
+	gb, _ := h.m.Get(b.ID)
+	gc, _ = h.m.Get(c.ID)
+	if !gc.StartedAt.Before(gb.StartedAt) {
+		t.Fatalf("c started at %v, after b at %v, although c was moved to the top", gc.StartedAt, gb.StartedAt)
+	}
+}
+
+func TestRetryFailedRetriesOnlyFailed(t *testing.T) {
+	h := newHarness(t, 2)
+	f1 := h.add(t, "/1/fail403")
+	f2 := h.add(t, "/2/fail403")
+	c := h.add(t, "/slow")
+	waitFor(t, "failures", func() bool { return h.status(f1.ID) == StatusFailed && h.status(f2.ID) == StatusFailed })
+	waitFor(t, "slow to run", func() bool { return h.status(c.ID) == StatusDownloading })
+	_ = h.m.Cancel(c.ID)
+	waitFor(t, "cancel", func() bool { return h.status(c.ID) == StatusCancelled })
+	if n := h.m.RetryFailed(); n != 2 {
+		t.Fatalf("retried %d, want 2", n)
+	}
+	if h.status(c.ID) != StatusCancelled {
+		t.Fatal("a cancelled job must not be retried")
+	}
+	waitFor(t, "second attempts", func() bool {
+		g1, _ := h.m.Get(f1.ID)
+		g2, _ := h.m.Get(f2.ID)
+		return g1.Attempts == 1 && g2.Attempts == 1 && g1.Status == StatusFailed && g2.Status == StatusFailed
+	})
+}

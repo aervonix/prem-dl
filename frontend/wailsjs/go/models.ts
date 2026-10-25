@@ -903,6 +903,7 @@ export namespace ytdlp {
 	    uploader: string;
 	    thumbnail: string;
 	    thumbnailSmall: string;
+	    fileName: string;
 	    duration: number;
 	    uploadDate: string;
 	    viewCount: number;
@@ -926,6 +927,7 @@ export namespace ytdlp {
 	        this.uploader = source["uploader"];
 	        this.thumbnail = source["thumbnail"];
 	        this.thumbnailSmall = source["thumbnailSmall"];
+	        this.fileName = source["fileName"];
 	        this.duration = source["duration"];
 	        this.uploadDate = source["uploadDate"];
 	        this.viewCount = source["viewCount"];

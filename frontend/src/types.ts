@@ -195,6 +195,8 @@ export interface VideoInfo {
   thumbnail: string
   /** A smaller picture for list rows (the queue). */
   thumbnailSmall: string
+  /** The filename template expanded for this video; the extension is the one "Best" gives. */
+  fileName: string
   duration: number
   uploadDate: string
   viewCount: number

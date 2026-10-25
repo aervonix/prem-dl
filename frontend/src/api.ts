@@ -81,6 +81,8 @@ export const api = {
   pauseAll: App.PauseAll,
   resumeAll: App.ResumeAll,
   clearFinished: App.ClearFinished,
+  retryFailed: App.RetryFailed,
+  moveJobToTop: App.MoveJobToTop,
   jobLog: App.GetJobLog,
 
   openFile: App.OpenFile,

@@ -1,5 +1,5 @@
 import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react'
-import {api} from '../api'
+import {api, errMessage} from '../api'
 import {ErrorPanel} from '../components/ErrorPanel'
 import {Thumb} from '../components/Thumb'
 import {Button, Empty, IconButton, Modal, Progress, Segmented} from '../components/ui'
@@ -130,6 +130,7 @@ const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: 
       </div>
       <div className="jactions">
         {(live || s === 'queued') && <IconButton icon="pause" label="Pause" onClick={() => void run(() => api.pauseJob(job.id))} />}
+        {(s === 'queued' || s === 'paused') && <IconButton icon="toTop" label="Move to top" onClick={() => void run(() => api.moveJobToTop(job.id))} />}
         {s === 'paused' && <IconButton icon="play" label="Resume" onClick={() => void run(() => api.resumeJob(job.id))} />}
         {(s === 'failed' || s === 'cancelled') && <IconButton icon="retry" label="Retry" onClick={() => void run(() => api.retryJob(job.id))} />}
         {s === 'completed' && job.outputFile && (
@@ -222,30 +223,49 @@ function LogModal({job, onClose}: {job: Job; onClose: () => void}) {
 // The page unmounts while hidden (it would otherwise re-render on every progress tick), so the
 // chosen filter is kept here for the next visit.
 let lastFilter: Filter = 'all'
+let lastSearch = ''
 
 export function QueuePage() {
-  const {go, toast} = useApp()
+  const {go, toast, copy} = useApp()
   const jobs = useJobs()
   const [filter, setFilterState] = useState<Filter>(lastFilter)
   const setFilter = useCallback((f: Filter) => {
     lastFilter = f
     setFilterState(f)
   }, [])
+  const [search, setSearchState] = useState(lastSearch)
+  const setSearch = (q: string) => {
+    lastSearch = q
+    setSearchState(q)
+  }
   const [logJob, setLogJob] = useState<Job | null>(null)
 
   const counts = useMemo(() => {
-    const c = {all: jobs.length, active: 0, waiting: 0, done: 0, failed: 0}
+    // failed counts failed and cancelled (the Failed tab); failedOnly is what "Retry failed" retries.
+    const c = {all: jobs.length, active: 0, waiting: 0, done: 0, failed: 0, failedOnly: 0}
     for (const j of jobs) {
       if (ACTIVE.includes(j.status)) c.active++
       else if (j.status === 'queued' || j.status === 'paused') c.waiting++
       else if (j.status === 'completed') c.done++
       else c.failed++
+      if (j.status === 'failed') c.failedOnly++
     }
     return c
   }, [jobs])
 
   const totalSpeed = useMemo(() => jobs.reduce((n, j) => (j.status === 'downloading' ? n + j.speed : n), 0), [jobs])
-  const shown = useMemo(() => jobs.filter((j) => matches(j, filter)), [jobs, filter])
+  const shown = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return jobs.filter((j) => matches(j, filter) && (!q || [j.title, j.uploader, j.url, j.playlistTitle].some((t) => t.toLowerCase().includes(q))))
+  }, [jobs, filter, search])
+  const retryFailed = async () => {
+    try {
+      const n = await api.retryFailed()
+      if (n < counts.failedOnly) toast('info', `Retried ${n} of ${counts.failedOnly}; the others are already queued again.`)
+    } catch (e) {
+      toast('error', errMessage(e))
+    }
+  }
   const notify = useCallback((m: string) => toast('error', m), [toast])
   const canPause = counts.active > 0 || jobs.some((j) => j.status === 'queued')
   const canResume = jobs.some((j) => j.status === 'paused')
@@ -302,9 +322,34 @@ export function QueuePage() {
               Clear all finished
             </Button>
           </div>
+          <div className="q-toolbar">
+            <input
+              type="search"
+              className="q-search"
+              placeholder="Search titles, channels and links…"
+              aria-label="Search downloads"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <div className="summary" />
+            {counts.failedOnly > 0 && (
+              <Button size="sm" icon="retry" onClick={() => void retryFailed()}>
+                Retry {counts.failedOnly} failed
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              icon="copy"
+              disabled={shown.length === 0}
+              title="Copy the links of the downloads shown, one per line, to paste into the Download page later."
+              onClick={() => void copy(shown.map((j) => j.url).join('\n'), `Copied ${plural(shown.length, 'link')}`)}>
+              Copy links
+            </Button>
+          </div>
 
           {shown.length === 0 ? (
-            <div className="empty">Nothing here. {plural(counts.all, 'download')} in other tabs.</div>
+            <div className="empty">{search.trim() ? `Nothing matches “${search.trim()}”.` : `Nothing here. ${plural(counts.all, 'download')} in other tabs.`}</div>
           ) : (
             shown.map((j) => <JobRow key={j.id} job={j} onLog={setLogJob} notify={notify} />)
           )}
