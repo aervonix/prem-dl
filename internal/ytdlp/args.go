@@ -73,6 +73,16 @@ type Target struct {
 	PlaylistCount int
 }
 
+// thumbnailFits reports whether the output can hold an embedded thumbnail. WebM, WAV and raw AAC
+// can't, and the post-processor would fail the whole download. (With no container chosen,
+// yt-dlp itself switches video to MKV for this.)
+func thumbnailFits(o settings.DownloadOptions) bool {
+	if o.Preset == "audio" {
+		return o.AudioFormat != "wav" && o.AudioFormat != "aac"
+	}
+	return o.Container != "webm"
+}
+
 // DownloadArgs builds the full yt-dlp command line (without the executable) for one download.
 func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	s := e.Settings
@@ -92,12 +102,16 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	if o.EmbedMetadata {
 		a = append(a, "--embed-metadata")
 	}
+	// --embed-metadata also embeds chapters and any .info.json unless told not to.
 	if o.EmbedChapters {
 		a = append(a, "--embed-chapters")
+	} else if o.EmbedMetadata {
+		a = append(a, "--no-embed-chapters")
 	}
-	// WebM can't hold a thumbnail and the post-processor would fail the whole download. (With
-	// no container chosen, yt-dlp itself switches to MKV for this.)
-	if o.EmbedThumbnail && !(o.Container == "webm" && o.Preset != "audio") {
+	if o.EmbedMetadata && o.WriteInfoJSON {
+		a = append(a, "--no-embed-info-json")
+	}
+	if o.EmbedThumbnail && thumbnailFits(o) {
 		a = append(a, "--embed-thumbnail")
 	}
 	if o.WriteThumbnail {

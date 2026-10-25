@@ -174,9 +174,10 @@ export function SettingsPage() {
       toast('error', res.error)
       return false
     }
-    // Cookie changes are saved by the backend straight away; fold them into both copies so any
-    // other unsaved edits survive.
-    setSettings({...saved, cookies: res.settings.cookies})
+    // Cookie changes are saved by the backend straight away. Take its whole copy, not `saved`:
+    // the Chrome flow can wait minutes, and settings saved meanwhile would be rolled back. The
+    // effect above keeps unsaved edits in the draft.
+    setSettings(res.settings)
     setDraft((d) => (d ? {...d, cookies: res.settings.cookies} : d))
     setCookieInfo(res.info)
     setCookieTest(null)

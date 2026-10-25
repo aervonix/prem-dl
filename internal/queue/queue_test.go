@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -315,6 +316,69 @@ func TestRemoveRunningJob(t *testing.T) {
 	}
 	if h.m.ActiveCount() != 0 {
 		t.Fatal("the process should have been stopped")
+	}
+}
+
+func TestRetryRefusesALinkThatIsRunningAgain(t *testing.T) {
+	// Two runs of one link would fight over the same .part file.
+	h := newHarness(t, 2)
+	a := h.add(t, "/slow")
+	waitFor(t, "start", func() bool { return h.status(a.ID) == StatusDownloading })
+	_ = h.m.Cancel(a.ID)
+	waitFor(t, "cancel", func() bool { return h.status(a.ID) == StatusCancelled })
+	b := h.add(t, "/slow")
+	if err := h.m.Retry(a.ID); err == nil {
+		t.Fatal("retry must be refused while the same link is queued or running")
+	}
+	if h.status(a.ID) != StatusCancelled {
+		t.Fatalf("the refused job should stay cancelled, was %s", h.status(a.ID))
+	}
+	_ = h.m.Cancel(b.ID)
+	waitFor(t, "second cancel", func() bool { return h.status(b.ID) == StatusCancelled })
+	if err := h.m.Retry(a.ID); err != nil {
+		t.Fatalf("retry should work once the other run has stopped: %v", err)
+	}
+}
+
+func TestRemovedJobKeepsItsSlotUntilItExits(t *testing.T) {
+	// A process slow to die must not let the next job start beside it, or its link be re-added.
+	s := settings.Default()
+	s.MaxConcurrent = 1
+	m := New(Deps{
+		Settings: func() settings.Settings { return s },
+		Env: func(context.Context) (ytdlp.Env, func(), error) {
+			return ytdlp.Env{}, nil, errors.New("no yt-dlp here")
+		},
+	})
+	a := &entry{job: Job{ID: "a", URL: "https://fake.test/a", Status: StatusDownloading}, cancel: func() {}}
+	b := &entry{job: Job{ID: "b", URL: "https://fake.test/b", Status: StatusQueued}}
+	m.entries["a"], m.entries["b"], m.order = a, b, []string{"a", "b"}
+
+	orig := removeWait
+	removeWait = 100 * time.Millisecond
+	t.Cleanup(func() { removeWait = orig })
+	if err := m.Remove("a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.Get("a"); !ok {
+		t.Fatal("the entry must stay until its process has exited")
+	}
+	if _, skipped, _ := m.Add([]NewJob{{URL: "https://fake.test/a"}}, s.Defaults); skipped != 1 {
+		t.Fatal("the link of a job still winding down must not be queued again")
+	}
+	m.mu.Lock()
+	m.scheduleLocked()
+	m.mu.Unlock()
+	if st := m.entries["b"].job.Status; st != StatusQueued {
+		t.Fatalf("the next job started beside the dying one: %s", st)
+	}
+
+	m.finish(a, context.Background(), errors.New("killed"), nil)
+	if _, ok := m.Get("a"); ok {
+		t.Fatal("finish should delete a removed job")
+	}
+	if g, _ := m.Get("b"); g.Status == StatusQueued {
+		t.Fatal("the next job should start once the slot is free")
 	}
 }
 

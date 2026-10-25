@@ -121,11 +121,17 @@ const (
 	saveEvery = time.Second // queue.json is rewritten at most this often
 )
 
+// removeWait is how long Remove waits for a running job's process to exit (shortened in tests).
+var removeWait = 5 * time.Second
+
 type entry struct {
 	job    Job
 	log    []string
 	cancel context.CancelFunc
 	stop   stopReason
+	// remove is set when the job was removed while running; finish deletes the entry once the
+	// process has exited, so until then it still counts against the limit and blocks its URL.
+	remove bool
 }
 
 // Manager owns every job.
@@ -317,6 +323,12 @@ func (m *Manager) Retry(id string) error {
 		return errNoJob
 	}
 	if e.job.Status == StatusFailed || e.job.Status == StatusCancelled {
+		// Two runs of one link would write the same .part file.
+		for _, o := range m.entries {
+			if o != e && o.job.URL == e.job.URL && !o.job.Status.finished() {
+				return errAlreadyQueued
+			}
+		}
 		m.setLocked(e, func(j *Job) {
 			j.Status = StatusQueued
 			j.Stage = "Waiting"
@@ -342,28 +354,30 @@ func (m *Manager) Remove(id string) error {
 		m.mu.Unlock()
 		return errNoJob
 	}
-	if e.job.Status.active() {
-		e.stop = stopCancel
-		if e.cancel != nil {
-			e.cancel()
-		}
+	if !e.job.Status.active() {
+		m.removeLocked([]string{id})
 		m.mu.Unlock()
-		// Wait for the process to wind down so its goroutine does not write to a removed entry.
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			m.mu.Lock()
-			e2, still := m.entries[id]
-			done := !still || !e2.job.Status.active()
-			m.mu.Unlock()
-			if done {
-				break
-			}
-			time.Sleep(25 * time.Millisecond)
-		}
-		m.mu.Lock()
+		return nil
 	}
-	m.removeLocked([]string{id})
+	// finish deletes the entry once the process has exited. A process that is slow to die
+	// keeps its slot until then, so the queue can't go over the concurrency limit.
+	e.stop = stopCancel
+	e.remove = true
+	if e.cancel != nil {
+		e.cancel()
+	}
 	m.mu.Unlock()
+	// Usually that takes a moment; wait for it so the job is gone when this returns.
+	deadline := time.Now().Add(removeWait)
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		_, still := m.entries[id]
+		m.mu.Unlock()
+		if !still {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 	return nil
 }
 
@@ -454,18 +468,27 @@ func (m *Manager) Shutdown() {
 	case <-time.After(8 * time.Second):
 	}
 	m.mu.Lock()
-	for _, e := range m.entries {
+	var removing []string
+	for id, e := range m.entries {
+		if e.remove {
+			removing = append(removing, id)
+			continue
+		}
 		if e.job.Status.active() {
 			e.job.Status = StatusPaused
 			e.job.Stage = "Interrupted"
 		}
 	}
+	m.removeLocked(removing)
 	snap := m.snapshotLocked()
 	m.mu.Unlock()
 	m.writeSnapshot(snap)
 }
 
-var errNoJob = errors.New("that download no longer exists")
+var (
+	errNoJob         = errors.New("that download no longer exists")
+	errAlreadyQueued = errors.New("that link is already in the queue")
+)
 
 // ---- scheduling and running ----
 
@@ -601,6 +624,11 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 
 	stop := e.stop
 	e.cancel = nil
+	if e.remove {
+		m.removeLocked([]string{e.job.ID})
+		m.scheduleLocked()
+		return
+	}
 	now := time.Now()
 	if runErr == nil {
 		// yt-dlp finished before a pause, cancel or shutdown could stop it: the file is complete.

@@ -245,6 +245,31 @@ func TestNoThumbnailEmbedInWebM(t *testing.T) {
 	if !has(e.DownloadArgs(o, Target{URL: "https://example.com/v"}), "--embed-thumbnail") {
 		t.Error("with no container chosen yt-dlp handles it, so the flag stays")
 	}
+	o.Preset = "audio"
+	for format, want := range map[string]bool{"mp3": true, "m4a": true, "flac": true, "opus": true, "wav": false, "aac": false} {
+		o.AudioFormat = format
+		if got := has(e.DownloadArgs(o, Target{URL: "https://example.com/v"}), "--embed-thumbnail"); got != want {
+			t.Errorf("audio %s: --embed-thumbnail passed = %v, want %v", format, got, want)
+		}
+	}
+}
+
+func TestChaptersOffWithMetadataOn(t *testing.T) {
+	// --embed-metadata embeds chapters (and an .info.json) by itself unless told not to.
+	e := testEnv()
+	o := e.Settings.Defaults
+	o.EmbedMetadata, o.EmbedChapters, o.WriteInfoJSON = true, false, true
+	args := e.DownloadArgs(o, Target{URL: "https://example.com/v"})
+	if !has(args, "--no-embed-chapters") || has(args, "--embed-chapters") {
+		t.Errorf("chapters were switched off: %v", args)
+	}
+	if !has(args, "--no-embed-info-json") {
+		t.Errorf("the .info.json should stay a separate file: %v", args)
+	}
+	o.EmbedMetadata = false
+	if args := e.DownloadArgs(o, Target{URL: "https://example.com/v"}); has(args, "--no-embed-chapters") || has(args, "--no-embed-info-json") {
+		t.Errorf("nothing to switch off without --embed-metadata: %v", args)
+	}
 }
 
 func TestFormatPresets(t *testing.T) {

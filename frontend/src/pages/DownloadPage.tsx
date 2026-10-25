@@ -192,6 +192,12 @@ export function DownloadPage() {
     if (bulk && (phase === 'ready' || phase === 'error')) reset()
   }, [bulk, phase, reset])
 
+  // Editing the link drops the review of the old one, so Download can't queue a link that is no
+  // longer in the box.
+  useEffect(() => {
+    if (!bulk && phase !== 'idle' && links[0] !== probedUrl) reset()
+  }, [bulk, links, phase, probedUrl, reset])
+
   // A link handed over by a second launch of the app.
   useEffect(() => {
     if (state.incomingUrl) {

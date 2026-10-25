@@ -32,3 +32,20 @@ func TestFileLockedAtStartupIsNeverOverwritten(t *testing.T) {
 		t.Fatalf("settings.json was overwritten:\n%s", got)
 	}
 }
+
+func TestSaveToFolderMustBeAFullPath(t *testing.T) {
+	// yt-dlp resolves a relative --paths against the app's working directory.
+	for dir, ok := range map[string]bool{"": true, `  D:\Videos `: true, "videos": false, `\videos`: false, "   ": true} {
+		o := Default().Defaults
+		o.OutputDir = dir
+		if err := ValidateOptions(&o); (err == nil) != ok {
+			t.Errorf("%q: err = %v", dir, err)
+		}
+	}
+	o := Default().Defaults
+	o.OutputDir = `  D:\Videos `
+	_ = ValidateOptions(&o)
+	if o.OutputDir != `D:\Videos` {
+		t.Errorf("not trimmed: %q", o.OutputDir)
+	}
+}

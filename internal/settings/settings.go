@@ -196,6 +196,11 @@ func ValidateOptions(o *DownloadOptions) error {
 	if o.SectionEnd != "" && !timeRe.MatchString(o.SectionEnd) {
 		return fmt.Errorf("end time %q must look like 90, 1:30 or 1:02:03", o.SectionEnd)
 	}
+	// yt-dlp resolves a relative folder against the app's working directory.
+	o.OutputDir = strings.TrimSpace(o.OutputDir)
+	if o.OutputDir != "" && !filepath.IsAbs(o.OutputDir) {
+		return fmt.Errorf("the Save to folder %q must be a full path, like C:\\Videos", o.OutputDir)
+	}
 	return nil
 }
 
