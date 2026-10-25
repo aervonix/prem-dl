@@ -114,14 +114,24 @@ func (a *App) updateSettings(fn func(*settings.Settings)) (settings.Settings, er
 
 func (a *App) startup(ctx context.Context) {
 	a.ctxPtr.Store(&ctx)
+	// The window exists but isn't shown yet: move it to where it was last closed.
+	if p, ok := a.savedWindow(); ok {
+		sys.RestoreMainWindow(p)
+	}
 	a.q.Start()
 	a.applyTheme(a.store.Get().Theme)
 	a.detectOnce.Do(func() { go a.detectTools() })
 	go a.autoUpdateLoop()
 }
 
-// beforeClose asks for confirmation when downloads are still running.
+// beforeClose asks for confirmation when downloads are still running, and remembers where the
+// window was when it does close.
 func (a *App) beforeClose(ctx context.Context) (prevent bool) {
+	defer func() {
+		if !prevent {
+			a.saveWindow()
+		}
+	}()
 	n := a.q.ActiveCount()
 	opts := wr.MessageDialogOptions{
 		Type:          wr.QuestionDialog,

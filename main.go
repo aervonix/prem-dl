@@ -14,6 +14,10 @@ var assets embed.FS
 
 func main() {
 	app := NewApp()
+	start := options.Normal
+	if p, ok := app.savedWindow(); ok && p.Maximised {
+		start = options.Maximised
+	}
 
 	err := wails.Run(&options.App{
 		Title:     "Prem-dl",
@@ -21,6 +25,8 @@ func main() {
 		Height:    760,
 		MinWidth:  820,
 		MinHeight: 560,
+		// Its position and normal size are restored in startup (see window.go).
+		WindowStartState: start,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

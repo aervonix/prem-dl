@@ -30,3 +30,16 @@ func TestContainPutsTheProcessInTheJob(t *testing.T) {
 		t.Fatalf("process not in the job (err %v)", err)
 	}
 }
+
+func TestWindowPlacementOnScreen(t *testing.T) {
+	// The primary monitor always contains (0,0); nothing is 30 000 px to the left.
+	if !(WindowPlacement{Left: 50, Top: 50, Right: 900, Bottom: 650}).OnScreen() {
+		t.Error("a window on the primary monitor should count as on screen")
+	}
+	if (WindowPlacement{Left: -30000, Top: 50, Right: -29000, Bottom: 650}).OnScreen() {
+		t.Error("a window on a monitor that's gone should not be restored there")
+	}
+	if (WindowPlacement{Left: 50, Top: 50, Right: 60, Bottom: 60}).OnScreen() {
+		t.Error("a window too small to use should not be restored")
+	}
+}
