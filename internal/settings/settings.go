@@ -96,9 +96,12 @@ type Settings struct {
 	LatestYtdlpChannel  string          `json:"latestYtdlpChannel"` // the channel that check asked about
 	YtdlpPath           string          `json:"ytdlpPath"`
 	FfmpegPath          string          `json:"ffmpegPath"`
-	Theme               string          `json:"theme"`       // system | light | dark
-	NotifySound         bool            `json:"notifySound"` // a click when a download finishes
-	NotifyPopup         bool            `json:"notifyPopup"` // a card in the corner when one finishes
+	Theme               string          `json:"theme"`            // system | light | dark
+	NotifySound         bool            `json:"notifySound"`      // a click when a download finishes
+	NotifyPopup         bool            `json:"notifyPopup"`      // a card in the corner when one finishes
+	NotifySystem        bool            `json:"notifySystem"`     // a Windows notification when one finishes while the app is in the background
+	CloseToTray         bool            `json:"closeToTray"`      // closing the window keeps the app running in the tray
+	StartWithWindows    bool            `json:"startWithWindows"` // start in the tray when the user signs in
 	ExtraArgs           string          `json:"extraArgs"`
 	Defaults            DownloadOptions `json:"defaults"`
 }
@@ -123,6 +126,7 @@ func Default() Settings {
 		Theme:               "system",
 		NotifySound:         true,
 		NotifyPopup:         true,
+		NotifySystem:        true,
 		Defaults: DownloadOptions{
 			Preset:            "best",
 			AudioFormat:       "mp3",

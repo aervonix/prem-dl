@@ -16,3 +16,6 @@ func (p WindowPlacement) OnScreen() bool { return false }
 
 // RestoreMainWindow does nothing here.
 func RestoreMainWindow(WindowPlacement) bool { return false }
+
+// RaiseMainWindow does nothing here.
+func RaiseMainWindow() {}

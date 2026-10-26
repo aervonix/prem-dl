@@ -65,11 +65,19 @@ type App struct {
 
 	chromeMu     sync.Mutex
 	chromeCancel context.CancelFunc // set while GetChromeCookies waits for the user
+
+	// Running in the background; see background.go.
+	launch   launchArgs
+	act      *activity
+	shell    atomic.Pointer[sys.Shell] // nil until started, or if there's no tray
+	hidden   atomic.Bool               // the window is hidden, with the tray icon to bring it back
+	quitting atomic.Bool               // Quit from the tray: closing quits instead of hiding
+	toasts   atomic.Bool               // Windows notifications are set up
 }
 
 // NewApp loads settings and the saved queue. If the normal config folder can't be used it falls
 // back to a temp folder so the app still starts.
-func NewApp() *App {
+func NewApp(launch launchArgs) *App {
 	dir, err := settings.DefaultDir()
 	var store *settings.Store
 	if err == nil {
@@ -85,14 +93,18 @@ func NewApp() *App {
 		quit:       make(chan struct{}),
 		versions:   map[versionKey]string{},
 		toolsFirst: make(chan struct{}),
+		launch:     launch,
 	}
 	a.root, a.stopAll = context.WithCancel(context.Background())
 	a.q = queue.New(queue.Deps{
 		Settings:  store.Get,
 		Env:       a.buildEnv,
 		Emit:      a.emit,
+		Observe:   func(changed []queue.Job, removed []string) { a.act.observe(changed, removed) },
 		StatePath: filepath.Join(dir, "queue.json"),
 	})
+	a.act = newActivity(a.q.List(), 1200*time.Millisecond, a.updateShell, a.notifyFinished)
+	a.hidden.Store(launch.Background)
 	return a
 }
 
@@ -130,16 +142,19 @@ func (a *App) startup(ctx context.Context) {
 	a.applyTheme(a.store.Get().Theme)
 	a.detectOnce.Do(func() { go a.detectTools() })
 	go a.autoUpdateLoop()
+	go a.startBackground(ctx)
 }
 
 // CloseRequest is sent as "app:confirm-close" when closing needs the user's say-so.
 type CloseRequest struct {
-	Downloads int  `json:"downloads"` // running downloads that would be paused
-	Updating  bool `json:"updating"`  // yt-dlp is being replaced
+	Downloads  int  `json:"downloads"`  // running downloads that would be paused
+	Updating   bool `json:"updating"`   // yt-dlp is being replaced
+	Background bool `json:"background"` // the window can hide in the tray instead (HideWindow)
 }
 
 // beforeClose asks for confirmation when downloads are still running (or yt-dlp is updating),
-// and remembers where the window was when it does close.
+// and remembers where the window was when it does close. When the app is set to keep running in
+// the tray, closing the window only hides it; the tray icon's Quit closes for real.
 //
 // The question is the app's own dialog: the window stays open, "app:confirm-close" goes to the
 // page, and its buttons call ConfirmClose or CancelClose. A page that never confirms it showed
@@ -147,7 +162,8 @@ type CloseRequest struct {
 // asks with the system dialog instead.
 func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 	defer func() {
-		if !prevent {
+		// A hidden window's placement was saved when it was hidden.
+		if !prevent && !a.hidden.Load() {
 			a.saveWindow()
 		}
 	}()
@@ -156,6 +172,9 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 	a.closeMu.Unlock()
 	if confirmed {
 		return false
+	}
+	if !a.quitting.Load() && a.store.Get().CloseToTray && a.hideToTray() {
+		return true
 	}
 	n := a.q.ActiveCount()
 	updating := a.updating.Load()
@@ -167,7 +186,7 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 	a.closeAsked, a.closeShown = true, false
 	a.closeMu.Unlock()
 	if !unseen {
-		a.emit("app:confirm-close", CloseRequest{Downloads: n, Updating: updating})
+		a.emit("app:confirm-close", CloseRequest{Downloads: n, Updating: updating, Background: a.shell.Load() != nil})
 		return true
 	}
 
@@ -208,6 +227,7 @@ func (a *App) CancelClose() {
 	a.closeMu.Lock()
 	a.closeAsked, a.closeShown = false, false
 	a.closeMu.Unlock()
+	a.quitting.Store(false)
 }
 
 // ConfirmClose is the close dialog's "Quit": the app closes without asking again.
@@ -221,24 +241,28 @@ func (a *App) ConfirmClose() {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	if sh := a.shell.Load(); sh != nil {
+		sh.Close() // or the icon lingers in the tray until the pointer passes over it
+	}
 	a.stopAll()
 	close(a.quit)
 	a.cancelProbe()
 	a.q.Shutdown()
 }
 
+// onSecondInstance gets the command line of a second launch: the user starting the app again, a
+// prem-dl: link, or a link passed to the exe. It brings this window forward instead.
 func (a *App) onSecondInstance(data options.SecondInstanceData) {
-	ctx := a.rt()
-	if ctx == nil {
+	if a.rt() == nil {
 		return
 	}
-	wr.WindowUnminimise(ctx)
-	wr.WindowShow(ctx)
-	for _, arg := range data.Args {
-		if strings.HasPrefix(arg, "http://") || strings.HasPrefix(arg, "https://") {
-			a.emit("app:open-url", arg)
-			break
-		}
+	l := parseLaunch(data.Args)
+	if l.Background && l.Link == "" {
+		return // the sign-in entry, while the app is already running
+	}
+	a.showWindow()
+	if l.Link != "" {
+		a.emit("app:open-url", l.Link)
 	}
 }
 
@@ -266,6 +290,7 @@ type AppState struct {
 	Jobs     []queue.Job       `json:"jobs"`
 	Tools    ToolStatus        `json:"tools"`
 	DataDir  string            `json:"dataDir"`
+	OpenLink string            `json:"openLink"` // a link the app was started with, for the Download page
 }
 
 // GetState returns settings, the queue and tool status in one call.
@@ -276,6 +301,7 @@ func (a *App) GetState() AppState {
 		Jobs:     a.q.List(),
 		Tools:    a.currentTools(),
 		DataDir:  a.dataDir,
+		OpenLink: a.launch.Link,
 	}
 }
 
@@ -294,9 +320,22 @@ func (a *App) SaveSettings(s settings.Settings) SettingsResponse {
 	// Not user-editable; a draft opened before a check must not roll them back.
 	s.LastUpdateCheck = prev.LastUpdateCheck
 	s.LatestYtdlp, s.LatestYtdlpChannel = prev.LatestYtdlp, prev.LatestYtdlpChannel
+	// The sign-in entry is changed first, so a failure leaves the setting as it was.
+	startChanged := s.StartWithWindows != prev.StartWithWindows
+	if startChanged {
+		if err := setStartWithWindows(s.StartWithWindows); err != nil {
+			return SettingsResponse{Settings: prev, Error: "Couldn't change starting with Windows: " + err.Error()}
+		}
+	}
 	saved, err := a.store.Set(s)
 	if err != nil {
+		if startChanged {
+			_ = setStartWithWindows(prev.StartWithWindows)
+		}
 		return SettingsResponse{Settings: prev, Error: err.Error()}
+	}
+	if saved.CloseToTray != prev.CloseToTray {
+		a.updateShell(a.act.current())
 	}
 	if saved.UpdateChannel != prev.UpdateChannel {
 		a.republishUpToDate() // the last check was for the old channel

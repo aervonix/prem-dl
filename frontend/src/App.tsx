@@ -1,6 +1,7 @@
 import {useEffect, useMemo} from 'react'
 import {Banners} from './components/Banners'
 import {CloseConfirm} from './components/CloseConfirm'
+import {DropLinks} from './components/DropLinks'
 import {Toasts} from './components/Toasts'
 import {Spinner} from './components/ui'
 import {Icon} from './icons'
@@ -113,6 +114,7 @@ function Shell() {
       </main>
       <Toasts />
       <CloseConfirm />
+      <DropLinks />
     </div>
   )
 }

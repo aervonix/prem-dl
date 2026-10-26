@@ -30,7 +30,12 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
   (line parser + multi-stream `Tracker`), cookie file inspect/import.
 - `internal/queue` – scheduler, process control, persistence (`queue.json`), batched UI events.
 - `internal/settings` – `Settings` + `DownloadOptions`, validation, atomic writes. Data lives in `%APPDATA%\yt-dlp-gui`.
-- `internal/sys` – hidden consoles, process-tree kill (`taskkill /T`), open/reveal in Explorer.
+- `internal/sys` – hidden consoles, process-tree kill (`taskkill /T`), open/reveal in Explorer, the tray
+  icon + taskbar progress (`shell_windows.go`, raw Win32/COM on its own thread), per-user registry entries.
+- `internal/linkbridge` – loopback endpoint the Chrome helper posts links to (only its origin accepted).
+- `background.go`, `activity.go`, `launch.go` – tray, close-to-tray, notifications, start with Windows,
+  `prem-dl:` links and `--background`; `activity` turns queue changes into taskbar progress and toasts.
+- `chromehelper/` – the unpacked extension (cookies, toolbar button, right-click menu); embedded in the exe.
 - `frontend/src` – `api.ts` is the ONLY file that calls Go; `types.ts` mirrors the Go JSON by hand;
   `store.tsx` is the reducer fed by backend events; `pages/`, `components/`, one `styles.css`.
 
@@ -79,6 +84,13 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
   start. `ReadClipboard`/`CopyText` hold `App.clipMu`.
 - Single-instance lock: `wails dev` exits immediately if the packaged app is running, and `wails build`
   cannot overwrite a running exe. Never kill the user's running app; ask them to close it.
+- Dev builds (`-tags dev`, `devBuild`) never write the `prem-dl:` link type or the Run entry, so a dev exe
+  can't take over from the real one. Test those with a built exe, and the registry code with scratch keys.
+- Wails' notifications register the app under the exe's file name; we write `DisplayName` first or toasts
+  say "Prem-dl.exe". Toasts always play Windows' sound, so the page skips its click while unfocused.
+- Wails v2 has no tray. `sys.Shell` owns it: a hidden top-level window (not message-only, or Explorer's
+  `TaskbarCreated` broadcast is missed) on a locked thread. Its callbacks run on new goroutines because
+  Wails runtime calls from the shell thread could block it.
 - Editing Go files while `wails dev` runs triggers rebuilds that drop the bridge; wait for port 34115.
 - No C compiler on this machine, so `go test -race` is unavailable. Keep lock ordering simple
   (`lineHandler.mu` -> `Manager.mu` and `Manager.saveMu` -> `Manager.mu`, never the reverse).

@@ -232,14 +232,15 @@ export function DownloadPage() {
     if (!bulk && phase !== 'idle' && links[0] !== probedUrl) reset()
   }, [bulk, links, phase, probedUrl, reset])
 
-  // A link handed over by a second launch of the app.
+  // Links handed over by the Chrome helper or a second launch, or dropped on the window. One is
+  // analysed straight away; several fill the box, ready to add.
   useEffect(() => {
-    if (state.incomingUrl) {
-      setText(state.incomingUrl.url)
-      void analyze(state.incomingUrl.url)
-    }
+    const links = state.incoming?.links
+    if (!links || links.length === 0) return
+    setText(links.join('\n'))
+    if (links.length === 1) void analyze(links[0])
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.incomingUrl?.n])
+  }, [state.incoming?.n])
 
   const submit = useCallback(async () => {
     if (!opts || links.length === 0 || adding) return
@@ -466,7 +467,8 @@ export function DownloadPage() {
 
       {phase === 'idle' && !bulk && (
         <Empty title="Paste a link to get started">
-          Works with YouTube and the 1,800+ other sites yt-dlp supports. Playlists and channels show a checklist so you can pick what to download.
+          Works with YouTube and the 1,800+ other sites yt-dlp supports. Playlists and channels show a checklist so you can pick what to download. You can also drop links, or a
+          .txt file of them, anywhere on the window.
         </Empty>
       )}
 

@@ -88,6 +88,12 @@ export interface Settings {
   notifySound: boolean
   /** A card in the corner when a download finishes. */
   notifyPopup: boolean
+  /** A Windows notification when a download finishes while the app is in the background. */
+  notifySystem: boolean
+  /** Closing the window keeps the app running in the tray. */
+  closeToTray: boolean
+  /** Start in the tray when the user signs in to Windows. */
+  startWithWindows: boolean
   extraArgs: string
   defaults: DownloadOptions
 }
@@ -181,6 +187,8 @@ export interface AppState {
   jobs: Job[]
   tools: ToolStatus
   dataDir: string
+  /** A link the app was started with (a prem-dl: link from the Chrome helper), for the Download page. */
+  openLink: string
 }
 
 export interface FormatInfo {

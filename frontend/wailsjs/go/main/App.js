@@ -74,6 +74,10 @@ export function GetState() {
   return window['go']['main']['App']['GetState']();
 }
 
+export function HideWindow() {
+  return window['go']['main']['App']['HideWindow']();
+}
+
 export function ImportCookieFile(arg1) {
   return window['go']['main']['App']['ImportCookieFile'](arg1);
 }

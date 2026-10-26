@@ -26,13 +26,14 @@ export function FinishNotices() {
   const jobs = useJobs()
   const sound = state.settings?.notifySound ?? false
   const popup = state.settings?.notifyPopup ?? false
+  const system = state.settings?.notifySystem ?? false
   const [notices, setNotices] = useState<Notice[]>([])
   const seen = useRef<Map<string, string> | null>(null)
   const pending = useRef<Job[]>([])
   const timer = useRef(0)
   const nextId = useRef(0)
-  const prefs = useRef({sound, popup})
-  prefs.current = {sound, popup}
+  const prefs = useRef({sound, popup, system})
+  prefs.current = {sound, popup, system}
 
   useEffect(() => {
     if (!state.ready) return
@@ -46,7 +47,8 @@ export function FinishNotices() {
     timer.current = window.setTimeout(() => {
       const batch = pending.current
       pending.current = []
-      if (prefs.current.sound) playClick()
+      // In the background the Windows notification plays its own sound.
+      if (prefs.current.sound && !(prefs.current.system && !document.hasFocus())) playClick()
       if (prefs.current.popup) setNotices((n) => [...n, {id: ++nextId.current, jobs: batch}].slice(-MAX_CARDS))
     }, GATHER_MS)
   }, [jobs, state.ready])

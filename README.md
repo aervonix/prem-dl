@@ -16,7 +16,10 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
   range and a title filter. A channel's Playlists tab lists its playlists so you can open the one you
   want. Downloads can go into a folder per playlist, numbered in order.
 - **Lots of links at once.** Paste several links, one per line, and they're all queued. Playlists are
-  expanded for you.
+  expanded for you. You can also drop links, or a `.txt` file of them, anywhere on the window.
+- **Send links from Chrome.** With the helper extension, right-click a page or a link and choose
+  **Download with Prem-dl**, or click its toolbar button. Prem-dl opens the link, starting first if
+  it isn't running.
 - **Quality.** Best, 4K down to 360p, audio only (MP3, M4A, Opus, AAC, FLAC or WAV), or pick an
   exact format from the list. Container can be automatic, MP4, MKV or WebM. Within the same
   resolution, Best goes for the stream with the most data rather than the newest codec.
@@ -26,6 +29,9 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
   part of a video by start and end time.
 - **A real queue.** Several downloads at once, with pause, resume, cancel and retry, and a log for
   each one. The queue survives a restart; anything that was running comes back paused.
+- **Works in the background.** Progress shows on the taskbar button, and a Windows notification
+  (with Open and Show in folder) tells you when downloads finish while you're in another app. It can
+  keep running in the notification area when you close the window, and start there with Windows.
 - **Errors you can act on.** When yt-dlp fails, you get a plain explanation and, usually, a button for
   the fix: update yt-dlp, open the cookie settings, and so on.
 - **Stays current.** yt-dlp is checked for updates on launch and every few hours. New releases are
@@ -71,6 +77,9 @@ instead. You set it up once:
 3. In Chrome, turn on **Developer mode** (top right), click **Load unpacked** and choose that folder.
    Use the Chrome profile you're signed in to YouTube with.
 
+The same helper puts **Download with Prem-dl** on Chrome's toolbar and right-click menu. If you
+added it before that existed, click the reload arrow on it in `chrome://extensions` once.
+
 After that, click **Get cookies from Chrome** whenever you need fresh cookies. Chrome opens a page
 asking whether to share your YouTube cookies; click Allow and approve Chrome's own prompt.
 
@@ -92,6 +101,22 @@ browser extension and import it, or read cookies straight from Firefox, which st
 When Best is going to download a Premium stream, the quality picker shows a small "Premium" label
 above it. YouTube sometimes serves Premium streams without signing in too, so you may see the
 label even with cookies turned off.
+
+## Running in the background
+
+Settings → General has the options for this:
+
+- **Keep running when the window is closed.** Closing the window leaves Prem-dl in the notification
+  area (by the clock), where downloads carry on. Click the icon to bring the window back, or
+  right-click it to pause, resume or quit. Even with this off, closing while downloads run offers to
+  let them finish in the background.
+- **Start with Windows.** Prem-dl starts in the notification area when you sign in, without opening
+  the window.
+- **Windows notifications.** Shown when downloads finish while Prem-dl isn't the app you're in.
+
+On first start Prem-dl registers `prem-dl:` links for your Windows account (no admin rights needed),
+which is how the Chrome helper starts it with a link. If you move `Prem-dl.exe`, starting it once
+from the new place updates that.
 
 ## Where things are kept
 

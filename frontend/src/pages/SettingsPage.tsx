@@ -97,8 +97,8 @@ function ArchiveRow() {
   )
 }
 
-function PasteCookiesModal({onClose, onImport}: {onClose: () => void; onImport: (text: string) => Promise<boolean>}) {
-  const [text, setText] = useState('')
+function PasteCookiesModal({initial = '', onClose, onImport}: {initial?: string; onClose: () => void; onImport: (text: string) => Promise<boolean>}) {
+  const [text, setText] = useState(initial)
   const [busy, setBusy] = useState(false)
   return (
     <Modal
@@ -140,6 +140,8 @@ export function SettingsPage() {
   const [cookieTest, setCookieTest] = useState<CookieTest | null>(null)
   const [testing, setTesting] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
+  // A cookies.txt dropped on the window: shown in the paste dialog to be checked and imported.
+  const [pasteText, setPasteText] = useState('')
   const [checking, setChecking] = useState(false)
   const [updateInfo, setLocalUpdateInfo] = useState<UpdateInfo | null>(null)
   const [chromeBusy, setChromeBusy] = useState(false)
@@ -165,6 +167,12 @@ export function SettingsPage() {
       return next as unknown as Settings
     })
   }, [saved])
+
+  useEffect(() => {
+    if (!state.droppedCookies) return
+    setPasteText(state.droppedCookies.text)
+    setPasteOpen(true)
+  }, [state.droppedCookies])
 
   // One section shows at a time. Switching starts at the top of the page.
   const [tab, setTab] = useState<SectionId>('general')
@@ -389,6 +397,32 @@ export function SettingsPage() {
                     label="Play a sound when downloads finish"
                     description="A short click. A playlist finishing at once clicks once."
                   />
+                  <Switch
+                    checked={draft.notifySystem}
+                    onChange={(v) => upd({notifySystem: v})}
+                    label="Windows notifications"
+                    description="When a download finishes while you're in another app, with Open and Show in folder buttons."
+                  />
+                </div>
+              </div>
+            </Card>
+          )}
+          {tab === 'general' && (
+            <Card id="background" title="In the background">
+              <div className="stack">
+                <div className="grid2">
+                  <Switch
+                    checked={draft.closeToTray}
+                    onChange={(v) => upd({closeToTray: v})}
+                    label="Keep running when the window is closed"
+                    description="Downloads carry on and Prem-dl waits in the notification area for links from Chrome. Right-click its icon to quit."
+                  />
+                  <Switch
+                    checked={draft.startWithWindows}
+                    onChange={(v) => upd({startWithWindows: v})}
+                    label="Start with Windows"
+                    description="Starts in the notification area when you sign in, without opening the window."
+                  />
                 </div>
               </div>
             </Card>
@@ -461,6 +495,10 @@ export function SettingsPage() {
                     <li>Turn on Developer mode (top right), click Load unpacked, and choose the helper folder.</li>
                     <li>Come back here and click Get cookies from Chrome.</li>
                   </ol>
+                  <p className="hint" style={{marginTop: 8}}>
+                    The helper also adds Download with Prem-dl to Chrome's toolbar and to the menu you get when you right-click a page or a link. Already added it? After Prem-dl
+                    updates, click the reload arrow on the helper in chrome://extensions to get its new features.
+                  </p>
                   <p className="hint" style={{marginTop: 8}}>
                     The helper only reads youtube.com cookies, only after you click Allow and approve Chrome's prompt, and only sends them to this app on this computer. Chrome's access is
                     removed again straight after. Anyone with these cookies can use your signed-in YouTube session, so the app keeps them in its own folder.
@@ -821,7 +859,13 @@ export function SettingsPage() {
 
       {pasteOpen && (
         <PasteCookiesModal
-          onClose={() => setPasteOpen(false)}
+          // A new drop replaces what's in the dialog.
+          key={state.droppedCookies?.n ?? 0}
+          initial={pasteText}
+          onClose={() => {
+            setPasteOpen(false)
+            setPasteText('')
+          }}
           onImport={async (text) => {
             const res = await attempt(api.importCookieText(text))
             if (!res) return false

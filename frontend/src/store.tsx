@@ -30,7 +30,10 @@ interface State {
   page: Page
   /** Settings section to scroll to; `n` changes on every request so repeats still fire. */
   section: {id: string; n: number} | null
-  incomingUrl: {url: string; n: number} | null
+  /** Links for the Download page: from the Chrome helper, a second launch, or dropped on the window. */
+  incoming: {links: string[]; n: number} | null
+  /** A cookies.txt dropped on the window, for Settings to offer importing. */
+  droppedCookies: {text: string; n: number} | null
 }
 
 const emptyTools: ToolStatus = {
@@ -60,7 +63,8 @@ const initial: State = {
   toasts: [],
   page: 'download',
   section: null,
-  incomingUrl: null,
+  incoming: null,
+  droppedCookies: null,
 }
 
 type Action =
@@ -78,7 +82,8 @@ type Action =
   | {type: 'toast'; toast: Toast}
   | {type: 'toastDone'; id: number}
   | {type: 'page'; page: Page; section?: string}
-  | {type: 'incomingUrl'; url: string}
+  | {type: 'incoming'; links: string[]}
+  | {type: 'droppedCookies'; text: string}
 
 // Jobs live in their own reducer and context: they change several times a second while
 // downloading, and only the queue, sidebar and banners need them.
@@ -114,6 +119,7 @@ function reducer(s: State, a: Action): State {
         dataDir: a.state.dataDir,
         settings: a.state.settings,
         tools: a.state.tools,
+        ...(a.state.openLink ? {page: 'download' as const, incoming: {links: [a.state.openLink], n: (s.incoming?.n ?? 0) + 1}} : {}),
       }
     case 'initFailed':
       return {...s, ready: true, loadError: a.error}
@@ -145,14 +151,20 @@ function reducer(s: State, a: Action): State {
         page: a.page,
         section: a.section ? {id: a.section, n: (s.section?.n ?? 0) + 1} : s.section,
       }
-    case 'incomingUrl':
-      return {...s, page: 'download', incomingUrl: {url: a.url, n: (s.incomingUrl?.n ?? 0) + 1}}
+    case 'incoming':
+      return {...s, page: 'download', incoming: {links: a.links, n: (s.incoming?.n ?? 0) + 1}}
+    case 'droppedCookies':
+      return {...s, page: 'settings', section: {id: 'cookies', n: (s.section?.n ?? 0) + 1}, droppedCookies: {text: a.text, n: (s.droppedCookies?.n ?? 0) + 1}}
   }
 }
 
 interface Ctx {
   state: State
   go: (p: Page, section?: string) => void
+  /** Put links on the Download page; one is analysed straight away. */
+  openLinks: (links: string[]) => void
+  /** Show Settings → Cookies, offering to import a dropped cookies.txt. */
+  offerCookies: (text: string) => void
   toast: (kind: ToastKind, text: string, action?: Toast['action']) => void
   dismissToast: (id: number) => void
   dismiss: (key: string) => void
@@ -218,13 +230,17 @@ export function AppProvider({children}: {children: ReactNode}) {
       on('tools:update-available', (info) => dispatch({type: 'updateAvailable', info})),
       on('tools:auto-updated', (res) => dispatch({type: 'autoUpdated', res})),
       on('settings:changed', (settings) => dispatch({type: 'settings', settings})),
-      on('app:open-url', (url) => dispatch({type: 'incomingUrl', url})),
+      on('app:open-url', (url) => dispatch({type: 'incoming', links: [url]})),
+      on('app:navigate', (page) => {
+        if (page === 'download' || page === 'queue' || page === 'settings') dispatch({type: 'page', page})
+      }),
+      on('app:error', (msg) => toast('error', msg)),
     ]
     return () => {
       cancelled = true
       offs.forEach((off) => off())
     }
-  }, [dispatch])
+  }, [dispatch, toast])
 
   // Keep the theme attribute in sync with the setting.
   const theme = state.settings?.theme ?? 'system'
@@ -299,6 +315,8 @@ export function AppProvider({children}: {children: ReactNode}) {
   const actions = useMemo<Omit<Ctx, 'state'>>(
     () => ({
       go: (page, section) => dispatch({type: 'page', page, section}),
+      openLinks: (links) => dispatch({type: 'incoming', links}),
+      offerCookies: (text) => dispatch({type: 'droppedCookies', text}),
       toast,
       dismissToast: (id) => dispatch({type: 'toastDone', id}),
       dismiss: (key) => dispatch({type: 'dismiss', key}),

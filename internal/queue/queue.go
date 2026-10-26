@@ -107,6 +107,9 @@ type Deps struct {
 	Env func(ctx context.Context) (ytdlp.Env, func(), error)
 	// Emit delivers an event to the UI.
 	Emit func(event string, payload any)
+	// Observe, if set, gets the same changes as the UI: jobs that changed and IDs removed. It is
+	// called from one goroutine, without the manager's lock held.
+	Observe func(changed []Job, removed []string)
 	// StatePath is where the job list is persisted ("" disables persistence).
 	StatePath string
 }
@@ -1057,6 +1060,9 @@ func (m *Manager) flush() {
 		if len(removed) > 0 {
 			m.deps.Emit("jobs:remove", removed)
 		}
+	}
+	if m.deps.Observe != nil && (len(batch) > 0 || len(removed) > 0) {
+		m.deps.Observe(batch, removed)
 	}
 	m.writeSnapshot(snap)
 }

@@ -81,6 +81,7 @@ export namespace main {
 	    jobs: queue.Job[];
 	    tools: ToolStatus;
 	    dataDir: string;
+	    openLink: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppState(source);
@@ -93,6 +94,7 @@ export namespace main {
 	        this.jobs = this.convertValues(source["jobs"], queue.Job);
 	        this.tools = this.convertValues(source["tools"], ToolStatus);
 	        this.dataDir = source["dataDir"];
+	        this.openLink = source["openLink"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -648,6 +650,9 @@ export namespace settings {
 	    theme: string;
 	    notifySound: boolean;
 	    notifyPopup: boolean;
+	    notifySystem: boolean;
+	    closeToTray: boolean;
+	    startWithWindows: boolean;
 	    extraArgs: string;
 	    defaults: DownloadOptions;
 	
@@ -679,6 +684,9 @@ export namespace settings {
 	        this.theme = source["theme"];
 	        this.notifySound = source["notifySound"];
 	        this.notifyPopup = source["notifyPopup"];
+	        this.notifySystem = source["notifySystem"];
+	        this.closeToTray = source["closeToTray"];
+	        this.startWithWindows = source["startWithWindows"];
 	        this.extraArgs = source["extraArgs"];
 	        this.defaults = this.convertValues(source["defaults"], DownloadOptions);
 	    }

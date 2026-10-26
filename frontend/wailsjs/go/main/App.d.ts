@@ -41,6 +41,8 @@ export function GetJobLog(arg1:string):Promise<Array<string>>;
 
 export function GetState():Promise<main.AppState>;
 
+export function HideWindow():Promise<void>;
+
 export function ImportCookieFile(arg1:string):Promise<main.CookieResponse>;
 
 export function ImportCookieText(arg1:string):Promise<main.CookieResponse>;

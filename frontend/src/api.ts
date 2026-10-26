@@ -93,6 +93,7 @@ export const api = {
   closeShown: App.CloseShown,
   cancelClose: App.CancelClose,
   confirmClose: App.ConfirmClose,
+  hideWindow: App.HideWindow,
   getArchiveInfo: () => cast<T.ArchiveInfo>(App.GetArchiveInfo()),
   clearArchive: () => cast<T.ArchiveInfo>(App.ClearArchive()),
   revealArchive: App.RevealArchive,
@@ -130,12 +131,18 @@ export interface BackendEvents {
   'settings:changed': T.Settings
   'app:open-url': string
   'app:confirm-close': CloseRequest
+  /** Show a page: a click on a Windows notification. */
+  'app:navigate': string
+  /** Something the user asked for outside the window failed (a notification's button). */
+  'app:error': string
 }
 
 /** Why closing needs confirming (main.CloseRequest; only sent as an event, so not generated). */
 export interface CloseRequest {
   downloads: number
   updating: boolean
+  /** The window can hide in the tray instead (api.hideWindow). */
+  background: boolean
 }
 
 export function on<K extends keyof BackendEvents>(event: K, fn: (data: BackendEvents[K]) => void): () => void {

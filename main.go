@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	"os"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -13,7 +14,8 @@ import (
 var assets embed.FS
 
 func main() {
-	app := NewApp()
+	launch := parseLaunch(os.Args[1:])
+	app := NewApp(launch)
 	start := options.Normal
 	if p, ok := app.savedWindow(); ok && p.Maximised {
 		start = options.Maximised
@@ -27,6 +29,8 @@ func main() {
 		MinHeight: 560,
 		// Its position and normal size are restored in startup (see window.go).
 		WindowStartState: start,
+		// Started with Windows: the tray icon shows the window when wanted.
+		StartHidden: launch.Background,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

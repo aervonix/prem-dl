@@ -1,10 +1,16 @@
 {
   "manifest_version": 3,
-  "name": "Prem-dl cookie helper",
-  "version": "1.0.0",
-  "description": "Hands your YouTube cookies to Prem-dl when you approve it, so downloads can use your account (Premium quality, age-restricted videos).",
+  "name": "Prem-dl helper",
+  "version": "1.1.0",
+  "description": "Sends pages and links to Prem-dl from the toolbar and the right-click menu, and hands it your YouTube cookies when you approve it.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8dHaS2CheIBnho4WIC/14iyJwoV4mK607XsMJLpgPJPdEiY1GI12Yx4p+Y+KIVIwLA3WlHfZKsMbn9+imXGox9ovOR6y3hMhWcoYdwtKLDV7Ww3S5K9TAr8Isuj46tGS/nvncW9y62IMBSSQhf4ubimnjFWdArsjSveD011DVQT06y8b9mTm/A6BZOrkErZYG2c0MI7hzTkOaoZOhmM7viZx8sVGxvHCFAnxJ++veu36UKnFF2GjC3QmIbL/4vjq3JUF3RVhV3Yjx+z8GSUY5kLtvUrWXwl/QLDrs196omeJA9R0co7jZiDkvSqnI+FaRzGUOMv2dYfIBt27/lS5sQIDAQAB",
-  "permissions": ["cookies"],
+  "permissions": ["cookies", "contextMenus", "activeTab"],
   "optional_host_permissions": ["https://*.youtube.com/*"],
-  "host_permissions": ["http://127.0.0.1/*"]
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {
+    "default_title": "Download with Prem-dl",
+    "default_icon": {"16": "icon16.png", "32": "icon32.png"}
+  },
+  "icons": {"16": "icon16.png", "32": "icon32.png", "48": "icon48.png", "128": "icon128.png"}
 }

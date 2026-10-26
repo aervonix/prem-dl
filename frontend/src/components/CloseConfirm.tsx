@@ -27,6 +27,10 @@ export function CloseConfirm() {
     void api.cancelClose()
   }
   const quit = () => void api.confirmClose()
+  const hide = () => {
+    setAsk(null)
+    void api.hideWindow()
+  }
 
   const updating = ask.downloads === 0 && ask.updating
   return (
@@ -38,6 +42,7 @@ export function CloseConfirm() {
           <Button variant="danger" onClick={quit}>
             Quit anyway
           </Button>
+          {!updating && ask.background && <Button onClick={hide}>Download in the background</Button>}
           <Button variant="primary" autoFocus onClick={stay}>
             {updating ? 'Wait' : 'Keep downloading'}
           </Button>
@@ -51,6 +56,7 @@ export function CloseConfirm() {
             {plural(ask.downloads, 'download')} {ask.downloads === 1 ? 'is' : 'are'} still running. Quit Prem-dl anyway?
           </p>
           <p className="muted">{ask.downloads === 1 ? 'It will be paused' : 'They will be paused'}; partial files are kept, so you can resume next time.</p>
+          {ask.background && <p className="muted">Or close the window and let them finish: Prem-dl stays in the notification area until you quit it there.</p>}
         </>
       )}
     </Modal>

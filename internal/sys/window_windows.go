@@ -36,6 +36,7 @@ var (
 	procGetWindowPlacement = user32.NewProc("GetWindowPlacement")
 	procSetWindowPlacement = user32.NewProc("SetWindowPlacement")
 	procMonitorFromRect    = user32.NewProc("MonitorFromRect")
+	procSetWindowPos       = user32.NewProc("SetWindowPos")
 )
 
 // mainWindow finds this process's Wails window.
@@ -93,4 +94,19 @@ func RestoreMainWindow(p WindowPlacement) bool {
 	wp := winPlacement{length: uint32(unsafe.Sizeof(winPlacement{})), showCmd: swHide, normal: [4]int32{p.Left, p.Top, p.Right, p.Bottom}}
 	r, _, _ := procSetWindowPlacement.Call(uintptr(h), uintptr(unsafe.Pointer(&wp)))
 	return r != 0
+}
+
+// RaiseMainWindow puts the main window above the others and asks for the foreground. Windows only
+// grants that to the app the user is in, so a window raised for a link sent from the browser may
+// end up on top without focus, which is still better than behind the browser.
+func RaiseMainWindow() {
+	h := mainWindow()
+	if h == 0 {
+		return
+	}
+	const swpNoSize, swpNoMove, swpNoActivate = 0x1, 0x2, 0x10
+	topmost, notTopmost := ^uintptr(0), ^uintptr(1) // HWND_TOPMOST (-1), HWND_NOTOPMOST (-2)
+	procSetWindowPos.Call(uintptr(h), topmost, 0, 0, 0, 0, swpNoSize|swpNoMove|swpNoActivate)
+	procSetWindowPos.Call(uintptr(h), notTopmost, 0, 0, 0, 0, swpNoSize|swpNoMove|swpNoActivate)
+	procSetForegroundWindow.Call(uintptr(h))
 }
