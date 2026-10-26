@@ -51,6 +51,50 @@ const SOURCE_LABEL: Record<string, string> = {
 
 const COOKIE_FAQ = 'https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp'
 
+/** Prem-dl's own version, with a check for a newer release and a way to get it. */
+function AppVersionRow() {
+  const {state, checkAppUpdate, installAppUpdate} = useApp()
+  const [checking, setChecking] = useState(false)
+  const [error, setError] = useState('')
+  const installing = state.appUpdateProgress !== null
+  const u = state.appUpdate
+
+  const check = async () => {
+    setChecking(true)
+    setError('')
+    const res = await checkAppUpdate()
+    setError(res?.error ?? '')
+    setChecking(false)
+  }
+
+  return (
+    <>
+      <dt>Prem-dl</dt>
+      <dd>
+        <b>{state.version}</b>
+        {u && !u.available && <span className="muted"> · up to date</span>}
+        {u?.available && <span className="muted"> · {u.latest} is available</span>}
+        {error && <div className="muted">Couldn't check: {error}</div>}
+        <div className="row wrap" style={{marginTop: 6}}>
+          <Button size="sm" variant="secondary" icon="search" loading={checking} onClick={() => void check()}>
+            Check for a new version
+          </Button>
+          {u?.available &&
+            (u.canInstall ? (
+              <Button size="sm" variant="primary" icon="download" loading={installing} onClick={() => void installAppUpdate()}>
+                Update to {u.latest}
+              </Button>
+            ) : (
+              <Button size="sm" variant="primary" icon="external" onClick={() => void api.openExternal(u.page)}>
+                Download {u.latest}
+              </Button>
+            ))}
+        </div>
+      </dd>
+    </>
+  )
+}
+
 /** How many videos "Remember downloaded videos" knows, with the file and a way to forget them. */
 function ArchiveRow() {
   const {state, toast} = useApp()
@@ -687,6 +731,7 @@ export function SettingsPage() {
             <Card id="updates" title="Updates & tools" sub="Sites change often, so keeping yt-dlp current is the best fix for “it stopped working”.">
               <div className="stack">
                 <dl className="kv">
+                  <AppVersionRow />
                   <dt>yt-dlp</dt>
                   <dd>
                     {tools.checking ? (
@@ -798,6 +843,12 @@ export function SettingsPage() {
                       <option value="master">Master (bleeding edge)</option>
                     </select>
                   </Field>
+                  <Switch
+                    checked={draft.checkAppUpdates}
+                    onChange={(v) => upd({checkAppUpdates: v})}
+                    label="Check for Prem-dl updates"
+                    description="Looks for a new release shortly after launch and twice a day, and says so at the top of the window. Nothing installs without you."
+                  />
                 </div>
               </div>
             </Card>

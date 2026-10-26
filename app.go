@@ -52,6 +52,10 @@ type App struct {
 	updating   atomic.Bool
 	ffmpegBusy atomic.Bool
 
+	// Prem-dl's own updates; see app_update.go.
+	appUpdate    atomic.Pointer[AppUpdate] // the last successful check
+	selfUpdating atomic.Bool
+
 	probeMu     sync.Mutex
 	probeCancel context.CancelFunc
 	// jobProbe is ProbeJob's, apart from probeCancel so the Download page's analysis carries on.
@@ -152,6 +156,7 @@ func (a *App) startup(ctx context.Context) {
 	a.applyTheme(a.store.Get().Theme)
 	a.detectOnce.Do(func() { go a.detectTools() })
 	go a.autoUpdateLoop()
+	go a.appUpdateLoop()
 	go a.startBackground(ctx)
 }
 
@@ -303,6 +308,8 @@ type AppState struct {
 	Tools    ToolStatus        `json:"tools"`
 	DataDir  string            `json:"dataDir"`
 	OpenLink string            `json:"openLink"` // a link the app was started with, for the Download page
+	// AppUpdate is the last successful check for a new Prem-dl, nil until one has run.
+	AppUpdate *AppUpdate `json:"appUpdate"`
 }
 
 // GetState returns settings, the queue and tool status in one call.
@@ -315,6 +322,8 @@ func (a *App) GetState() AppState {
 		Tools:    a.currentTools(),
 		DataDir:  a.dataDir,
 		OpenLink: a.launch.Link,
+		// The check runs after launch, so a page reloaded later still learns what it found.
+		AppUpdate: a.appUpdate.Load(),
 	}
 }
 

@@ -2,7 +2,7 @@ import {createContext, useCallback, useContext, useEffect, useMemo, useReducer, 
 import type {ReactNode} from 'react'
 import {api, errMessage, on} from './api'
 import {plural} from './format'
-import type {AppState, Feed, Job, Settings, ToolStatus, UpdateInfo, UpdateResult} from './types'
+import type {AppState, AppUpdate, Feed, Job, Settings, ToolStatus, UpdateInfo, UpdateResult} from './types'
 
 export type Page = 'download' | 'queue' | 'following' | 'settings'
 const PAGES: Page[] = ['download', 'queue', 'following', 'settings']
@@ -29,6 +29,12 @@ interface State {
   ffmpegProgress: {done: number; total: number} | null
   updateAvailable: UpdateInfo | null
   autoUpdated: UpdateResult | null
+  /** The last check for a new Prem-dl. */
+  appUpdate: AppUpdate | null
+  /** Set while the new Prem-dl's installer downloads. */
+  appUpdateProgress: {done: number; total: number} | null
+  /** The installer is running and the app is about to quit. */
+  appRestarting: boolean
   dismissed: Record<string, boolean>
   toasts: Toast[]
   page: Page
@@ -64,6 +70,9 @@ const initial: State = {
   ffmpegProgress: null,
   updateAvailable: null,
   autoUpdated: null,
+  appUpdate: null,
+  appUpdateProgress: null,
+  appRestarting: false,
   dismissed: {},
   toasts: [],
   page: 'download',
@@ -84,6 +93,9 @@ type Action =
   | {type: 'feeds'; feeds: Feed[]}
   | {type: 'updateAvailable'; info: UpdateInfo | null}
   | {type: 'autoUpdated'; res: UpdateResult | null}
+  | {type: 'appUpdate'; info: AppUpdate}
+  | {type: 'appUpdateProgress'; p: State['appUpdateProgress']}
+  | {type: 'appRestarting'}
   | {type: 'dismiss'; key: string}
   | {type: 'toast'; toast: Toast}
   | {type: 'toastDone'; id: number}
@@ -126,6 +138,7 @@ function reducer(s: State, a: Action): State {
         settings: a.state.settings,
         feeds: a.state.feeds,
         tools: a.state.tools,
+        appUpdate: a.state.appUpdate ?? s.appUpdate,
         ...(a.state.openLink ? {page: 'download' as const, incoming: {links: [a.state.openLink], n: (s.incoming?.n ?? 0) + 1}} : {}),
       }
     case 'initFailed':
@@ -148,6 +161,12 @@ function reducer(s: State, a: Action): State {
     case 'autoUpdated':
       // The background update sent progress events too; nothing else clears them.
       return {...s, autoUpdated: a.res, toolProgress: null, updateAvailable: a.res?.ok ? null : s.updateAvailable}
+    case 'appUpdate':
+      return {...s, appUpdate: a.info}
+    case 'appUpdateProgress':
+      return {...s, appUpdateProgress: a.p}
+    case 'appRestarting':
+      return {...s, appRestarting: true}
     case 'dismiss':
       return {...s, dismissed: {...s.dismissed, [a.key]: true}}
     case 'toast':
@@ -188,6 +207,10 @@ interface Ctx {
   /** Install (or update) the app's own ffmpeg, reporting the outcome with a toast. */
   installFfmpeg: () => Promise<void>
   setUpdateAvailable: (i: UpdateInfo | null) => void
+  /** Check for a new Prem-dl now; failures come back in the result's error. */
+  checkAppUpdate: () => Promise<AppUpdate | undefined>
+  /** Download and run the new Prem-dl's installer; the app restarts when it works. */
+  installAppUpdate: () => Promise<void>
 }
 
 const AppCtx = createContext<Ctx | null>(null)
@@ -238,6 +261,8 @@ export function AppProvider({children}: {children: ReactNode}) {
       on('ffmpeg:progress', (p) => installing.current && dispatch({type: 'ffmpegProgress', p})),
       on('tools:update-available', (info) => dispatch({type: 'updateAvailable', info})),
       on('tools:auto-updated', (res) => dispatch({type: 'autoUpdated', res})),
+      on('app:update', (info) => dispatch({type: 'appUpdate', info})),
+      on('app:update-progress', (p) => updatingApp.current && dispatch({type: 'appUpdateProgress', p})),
       on('settings:changed', (settings) => dispatch({type: 'settings', settings})),
       on('feeds:update', (feeds) => dispatch({type: 'feeds', feeds})),
       on('feeds:found', (f) =>
@@ -324,6 +349,39 @@ export function AppProvider({children}: {children: ReactNode}) {
     }
   }, [dispatch, toast])
 
+  const updatingApp = useRef(false)
+  const installAppUpdate = useCallback(async () => {
+    if (updatingApp.current) return
+    updatingApp.current = true
+    dispatch({type: 'appUpdateProgress', p: {done: 0, total: 0}})
+    let ok = false
+    try {
+      const res = await api.installAppUpdate()
+      ok = res.ok
+      if (res.ok) dispatch({type: 'appRestarting'})
+      else if (res.error) toast('error', `${res.error.title}: ${res.error.message} ${res.error.hint}`.trim())
+    } catch (e) {
+      toast('error', errMessage(e))
+    } finally {
+      // Once the installer runs the app is quitting; keep the bar until it's gone.
+      if (!ok) {
+        updatingApp.current = false
+        dispatch({type: 'appUpdateProgress', p: null})
+      }
+    }
+  }, [dispatch, toast])
+
+  const checkAppUpdate = useCallback(async () => {
+    try {
+      const info = await api.checkAppUpdate()
+      if (!info.error) dispatch({type: 'appUpdate', info})
+      return info
+    } catch (e) {
+      toast('error', errMessage(e))
+      return undefined
+    }
+  }, [dispatch, toast])
+
   // Actions never change identity, so effects and memoised children that take them don't rerun.
   const actions = useMemo<Omit<Ctx, 'state'>>(
     () => ({
@@ -340,8 +398,10 @@ export function AppProvider({children}: {children: ReactNode}) {
       updateYtdlp,
       installFfmpeg,
       setUpdateAvailable: (info) => dispatch({type: 'updateAvailable', info}),
+      checkAppUpdate,
+      installAppUpdate,
     }),
-    [dispatch, toast, attempt, copy, updateYtdlp, installFfmpeg],
+    [dispatch, toast, attempt, copy, updateYtdlp, installFfmpeg, checkAppUpdate, installAppUpdate],
   )
   const ctx = useMemo<Ctx>(() => ({state, ...actions}), [state, actions])
 

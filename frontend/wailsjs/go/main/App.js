@@ -30,6 +30,10 @@ export function CancelProbe() {
   return window['go']['main']['App']['CancelProbe']();
 }
 
+export function CheckAppUpdate() {
+  return window['go']['main']['App']['CheckAppUpdate']();
+}
+
 export function CheckFeed(arg1) {
   return window['go']['main']['App']['CheckFeed'](arg1);
 }
@@ -112,6 +116,10 @@ export function InspectCookieFile(arg1) {
 
 export function InspectFeed(arg1) {
   return window['go']['main']['App']['InspectFeed'](arg1);
+}
+
+export function InstallAppUpdate() {
+  return window['go']['main']['App']['InstallAppUpdate']();
 }
 
 export function InstallFFmpeg() {

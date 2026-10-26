@@ -46,7 +46,8 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
   the fix: update yt-dlp, open the cookie settings, and so on.
 - **Stays current.** yt-dlp is checked for updates on launch and every few hours. New releases are
   verified against their published SHA-256 checksums before they replace the old one, and updates
-  wait until nothing is downloading.
+  wait until nothing is downloading. Prem-dl also tells you when a new version of itself is out; a
+  copy installed with Prem-dl-Setup.exe downloads the new installer, checks it and restarts updated.
 
 ## Getting started
 

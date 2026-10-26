@@ -148,6 +148,32 @@ export namespace follow {
 
 export namespace main {
 	
+	export class AppUpdate {
+	    current: string;
+	    latest: string;
+	    available: boolean;
+	    page: string;
+	    notes: string;
+	    size: number;
+	    canInstall: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppUpdate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.current = source["current"];
+	        this.latest = source["latest"];
+	        this.available = source["available"];
+	        this.page = source["page"];
+	        this.notes = source["notes"];
+	        this.size = source["size"];
+	        this.canInstall = source["canInstall"];
+	        this.error = source["error"];
+	    }
+	}
 	export class ToolStatus {
 	    checking: boolean;
 	    ytdlp?: ytdlp.Binary;
@@ -202,6 +228,7 @@ export namespace main {
 	    tools: ToolStatus;
 	    dataDir: string;
 	    openLink: string;
+	    appUpdate?: AppUpdate;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppState(source);
@@ -216,6 +243,7 @@ export namespace main {
 	        this.tools = this.convertValues(source["tools"], ToolStatus);
 	        this.dataDir = source["dataDir"];
 	        this.openLink = source["openLink"];
+	        this.appUpdate = this.convertValues(source["appUpdate"], AppUpdate);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -236,6 +264,7 @@ export namespace main {
 		    return a;
 		}
 	}
+	
 	export class ArchiveInfo {
 	    path: string;
 	    count: number;
@@ -904,6 +933,7 @@ export namespace settings {
 	    lastUpdateCheck: string;
 	    latestYtdlp: string;
 	    latestYtdlpChannel: string;
+	    checkAppUpdates: boolean;
 	    ytdlpPath: string;
 	    ffmpegPath: string;
 	    theme: string;
@@ -940,6 +970,7 @@ export namespace settings {
 	        this.lastUpdateCheck = source["lastUpdateCheck"];
 	        this.latestYtdlp = source["latestYtdlp"];
 	        this.latestYtdlpChannel = source["latestYtdlpChannel"];
+	        this.checkAppUpdates = source["checkAppUpdates"];
 	        this.ytdlpPath = source["ytdlpPath"];
 	        this.ffmpegPath = source["ffmpegPath"];
 	        this.theme = source["theme"];

@@ -95,6 +95,8 @@ export interface Settings {
   lastUpdateCheck: string
   latestYtdlp: string
   latestYtdlpChannel: string
+  /** Look for new Prem-dl releases. */
+  checkAppUpdates: boolean
   ytdlpPath: string
   ffmpegPath: string
   theme: 'system' | 'light' | 'dark'
@@ -209,6 +211,8 @@ export interface AppState {
   dataDir: string
   /** A link the app was started with (a prem-dl: link from the Chrome helper), for the Download page. */
   openLink: string
+  /** The last successful check for a new Prem-dl; null until one has run. */
+  appUpdate?: AppUpdate | null
 }
 
 export interface FormatInfo {
@@ -388,6 +392,22 @@ export interface UpdateInfo {
   latest: string
   available: boolean
   channel: string
+  error: string
+}
+
+/** What a check for a new Prem-dl found (main.AppUpdate). */
+export interface AppUpdate {
+  current: string
+  latest: string
+  available: boolean
+  /** The release on GitHub. */
+  page: string
+  /** The release's description, as Markdown. */
+  notes: string
+  /** The installer's size in bytes. */
+  size: number
+  /** This copy came from the installer, so the update can download and install itself. */
+  canInstall: boolean
   error: string
 }
 

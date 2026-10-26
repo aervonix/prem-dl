@@ -25,7 +25,7 @@ function Banner({tone, icon, title, children, actions}: {tone: 'warn' | 'bad' | 
 
 /** Status notices that sit above every page: missing tools, updates, interrupted downloads. */
 export function Banners() {
-  const {state, dismiss, updateYtdlp, go, setUpdateAvailable, attempt} = useApp()
+  const {state, dismiss, updateYtdlp, go, setUpdateAvailable, attempt, installAppUpdate} = useApp()
   const jobs = useJobs()
   const {tools, dismissed, toolProgress, updateAvailable, autoUpdated} = state
   const ready = !tools.checking
@@ -114,6 +114,62 @@ export function Banners() {
           </>
         }>
         You have {updateAvailable.current || 'an older version'}. Updates need no active downloads.
+      </Banner>,
+    )
+  }
+
+  const app = state.appUpdate
+  const appProgress = state.appUpdateProgress
+  if (app?.available && (appProgress || !dismissed[`app-${app.latest}`])) {
+    const fetching = appProgress !== null && !state.appRestarting
+    out.push(
+      <Banner
+        key="appupdate"
+        tone="info"
+        icon={state.appRestarting ? 'refresh' : 'download'}
+        title={state.appRestarting ? `Installing Prem-dl ${app.latest}…` : `Prem-dl ${app.latest} is available`}
+        actions={
+          appProgress ? null : (
+            <>
+              {app.canInstall ? (
+                <>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon="download"
+                    disabled={running > 0 || updating}
+                    title={running > 0 ? 'Pause or finish the active downloads first' : updating ? 'Wait for the yt-dlp update to finish' : undefined}
+                    onClick={() => void installAppUpdate()}>
+                    Update now
+                  </Button>
+                  <Button size="sm" variant="ghost" icon="external" onClick={() => void api.openExternal(app.page)}>
+                    What's new
+                  </Button>
+                </>
+              ) : (
+                <Button variant="primary" size="sm" icon="external" onClick={() => void api.openExternal(app.page)}>
+                  Download
+                </Button>
+              )}
+              <IconButton icon="x" label="Dismiss" onClick={() => dismiss(`app-${app.latest}`)} />
+            </>
+          )
+        }>
+        {state.appRestarting ? (
+          'Prem-dl closes now and starts again when the update is installed.'
+        ) : fetching ? (
+          <div style={{marginTop: 6, maxWidth: 360}}>
+            <Progress percent={appProgress.total > 0 ? (appProgress.done / appProgress.total) * 100 : -1} label={`Downloading Prem-dl ${app.latest}`} />
+            <div style={{marginTop: 4}}>{appProgress.total > 0 ? `${bytes(appProgress.done)} of ${bytes(appProgress.total)}` : 'Starting…'}</div>
+          </div>
+        ) : app.canInstall ? (
+          <>
+            You have {app.current}. Update now downloads the installer{app.size > 0 && ` (${bytes(app.size)})`}, checks it and restarts Prem-dl with the new version. Your settings, queue and
+            followed channels stay.
+          </>
+        ) : (
+          <>You have {app.current}. Download the new version from its release page.</>
+        )}
       </Banner>,
     )
   }

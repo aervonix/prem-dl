@@ -45,6 +45,7 @@ export type _Guards = [
   Expect<Guard<main.ChromeHelperInfo, T.ChromeHelperInfo>>,
   Expect<Guard<main.UpdateInfo, T.UpdateInfo>>,
   Expect<Guard<main.UpdateResult, T.UpdateResult>>,
+  Expect<Guard<main.AppUpdate, T.AppUpdate>>,
   Expect<Guard<main.ArchiveInfo, T.ArchiveInfo>>,
   Expect<Guard<ytdlp.Binary, T.Binary>>,
   Expect<Guard<ytdlp.FFmpeg, T.FFmpeg>>,
@@ -127,6 +128,9 @@ export const api = {
   checkUpdate: () => cast<T.UpdateInfo>(App.CheckUpdate()),
   updateYtdlp: () => cast<T.UpdateResult>(App.UpdateYtdlp()),
   installFfmpeg: () => cast<T.UpdateResult>(App.InstallFFmpeg()),
+  checkAppUpdate: () => cast<T.AppUpdate>(App.CheckAppUpdate()),
+  /** Download the new Prem-dl's installer and run it; on success the app quits and restarts. */
+  installAppUpdate: () => cast<T.UpdateResult>(App.InstallAppUpdate()),
 
   listFeeds: () => cast<T.Feed[]>(App.ListFeeds()),
   inspectFeed: (url: string) => cast<T.TargetResponse>(App.InspectFeed(url)),
@@ -152,6 +156,9 @@ export interface BackendEvents {
   'ffmpeg:progress': {done: number; total: number}
   'tools:update-available': T.UpdateInfo
   'tools:auto-updated': T.UpdateResult
+  /** A check for a new Prem-dl ran (only sent when it worked). */
+  'app:update': T.AppUpdate
+  'app:update-progress': {done: number; total: number}
   'settings:changed': T.Settings
   'feeds:update': T.Feed[]
   'feeds:found': T.FeedFound

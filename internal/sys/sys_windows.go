@@ -70,6 +70,18 @@ func Open(path string) error {
 	return cmd.Start()
 }
 
+// StartCommandLine starts exe with a command line built by hand, for programs that read it in
+// ways Go's quoting would break (an NSIS installer's /D= must come last and unquoted). It isn't
+// tied to the app (see Contain), so it keeps running after the app quits.
+func StartCommandLine(exe, cmdline string) error {
+	cmd := exec.Command(exe)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CmdLine: cmdline}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
+}
+
 // Reveal opens Explorer with the file selected.
 func Reveal(path string) error {
 	cmd := exec.Command("explorer.exe")

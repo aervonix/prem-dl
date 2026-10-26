@@ -2,8 +2,10 @@ package sys
 
 import (
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 
 	"golang.org/x/sys/windows/registry"
@@ -125,5 +127,39 @@ func TestShellStartsAndStops(t *testing.T) {
 		default:
 			t.Fatal("the shell thread didn't stop")
 		}
+	}
+}
+
+func TestInstalledDir(t *testing.T) {
+	root := scratchKeys(t)
+	old := uninstallKey
+	uninstallKey = root + `\Uninstall`
+	t.Cleanup(func() { uninstallKey = old })
+
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "Prem-dl.exe")
+	if got := InstalledDir("Prem-dl", exe); got != "" {
+		t.Fatalf("no uninstall entry: got %q", got)
+	}
+	uninst := filepath.Join(dir, "uninstall.exe")
+	if err := setString(uninstallKey+`\Prem-dl`, "UninstallString", `"`+uninst+`"`); err != nil {
+		t.Fatal(err)
+	}
+	if got := InstalledDir("Prem-dl", exe); got != "" {
+		t.Fatalf("uninstall.exe missing: got %q", got)
+	}
+	if err := os.WriteFile(uninst, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := InstalledDir("Prem-dl", exe); got != dir {
+		t.Fatalf("installed copy: got %q, want %q", got, dir)
+	}
+	// Folder names compare like Windows does.
+	if got := InstalledDir("Prem-dl", strings.ToUpper(exe)); got == "" {
+		t.Error("a differently cased path is the same folder")
+	}
+	// A portable copy elsewhere isn't the installed one.
+	if got := InstalledDir("Prem-dl", filepath.Join(t.TempDir(), "Prem-dl.exe")); got != "" {
+		t.Errorf("portable copy: got %q", got)
 	}
 }

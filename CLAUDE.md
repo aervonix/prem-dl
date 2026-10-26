@@ -118,6 +118,11 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
   uninstaller deletes `%APPDATA%\Prem-dl.exe` (WebView2 data, shared with any other copy named
   Prem-dl.exe): back it up before test-uninstalling on a dev machine, and use `uninstall.exe /S
   _?=<dir>` so it runs synchronously.
+- Prem-dl's own update (`app_update.go`, `internal/selfupdate`) reads GitHub's `releases/latest`
+  anonymously, so it only works while the repo is public; a private repo answers 404. Installed
+  copies (found by the uninstall entry's `uninstall.exe` next to the exe) run the new setup as
+  `/update /D=<dir>`: it skips its pages, waits for the app to close and starts it again.
+  Try the flow in dev with `$env:PREMDL_UPDATE_API` pointing at a fake API (dev builds only).
 - Editing Go files while `wails dev` runs triggers rebuilds that drop the bridge; wait for port 34115.
 - No C compiler on this machine, so `go test -race` is unavailable. Keep lock ordering simple
   (`lineHandler.mu` -> `Manager.mu` and `Manager.saveMu` -> `Manager.mu`, never the reverse).

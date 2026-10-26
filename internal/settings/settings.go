@@ -115,6 +115,7 @@ type Settings struct {
 	LastUpdateCheck     time.Time       `json:"lastUpdateCheck" ts_type:"string"`
 	LatestYtdlp         string          `json:"latestYtdlp"`        // newest release the last successful check found
 	LatestYtdlpChannel  string          `json:"latestYtdlpChannel"` // the channel that check asked about
+	CheckAppUpdates     bool            `json:"checkAppUpdates"`    // look for new Prem-dl releases
 	YtdlpPath           string          `json:"ytdlpPath"`
 	FfmpegPath          string          `json:"ffmpegPath"`
 	Theme               string          `json:"theme"`            // system | light | dark
@@ -145,6 +146,7 @@ func Default() Settings {
 		UseArchive:          false,
 		Cookies:             Cookies{Mode: "none", Browser: "firefox"},
 		AutoUpdate:          true,
+		CheckAppUpdates:     true,
 		UpdateChannel:       "stable",
 		Theme:               "system",
 		NotifySound:         true,

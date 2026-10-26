@@ -20,6 +20,13 @@ Unicode true
 
 !include "wails_tools.nsh"
 !include "LogicLib.nsh"
+!include "FileFunc.nsh"
+
+# "1" when the app started this installer to update itself (app_update.go):
+#   Prem-dl-Setup.exe /update /D=<the folder it's installed in>
+# The app quits right after, so the installer waits for it, skips its pages and starts the new
+# version when it's done.
+Var updating
 
 # The version information for this two must consist of 4 parts
 VIProductVersion "${INFO_PRODUCTVERSION}.0"
@@ -43,9 +50,12 @@ ManifestDPIAware true
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXECUTABLE}"
 !define MUI_FINISHPAGE_RUN_TEXT "Start ${INFO_PRODUCTNAME}"
 
+!define MUI_PAGE_CUSTOMFUNCTION_PRE skipWhenUpdating
 !insertmacro MUI_PAGE_WELCOME
+!define MUI_PAGE_CUSTOMFUNCTION_PRE skipWhenUpdating
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
+!define MUI_PAGE_CUSTOMFUNCTION_PRE skipWhenUpdating
 !insertmacro MUI_PAGE_FINISH
 
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -71,18 +81,39 @@ ShowUninstDetails show
 
 Function .onInit
    !insertmacro wails.checkArchitecture
+   ${GetParameters} $0
+   ClearErrors
+   ${GetOptions} $0 "/update" $1
+   ${IfNot} ${Errors}
+       StrCpy $updating "1"
+   ${EndIf}
+FunctionEnd
+
+Function skipWhenUpdating
+    ${If} $updating == "1"
+        Abort
+    ${EndIf}
 FunctionEnd
 
 # A running copy holds its exe open, so it can't be replaced or removed. It may only be in the tray.
 !macro CLOSE_APP UN
 Function ${UN}closeApp
+    StrCpy $1 0
     retry:
     IfFileExists "$INSTDIR\${PRODUCT_EXECUTABLE}" 0 done
     ClearErrors
     FileOpen $0 "$INSTDIR\${PRODUCT_EXECUTABLE}" a
-    IfErrors 0 +3
+    IfErrors 0 opened
+        # An updating app quits just after starting the installer: give it half a minute.
+        ${If} $updating == "1"
+        ${AndIf} $1 < 60
+            IntOp $1 $1 + 1
+            Sleep 500
+            Goto retry
+        ${EndIf}
         MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "${INFO_PRODUCTNAME} is running. Quit it first: right-click its icon in the notification area and choose Quit ${INFO_PRODUCTNAME}. Then click Retry." /SD IDCANCEL IDRETRY retry
         Abort
+    opened:
     FileClose $0
     done:
 FunctionEnd
@@ -101,12 +132,20 @@ Section
     !insertmacro wails.files
 
     CreateShortcut "$SMPROGRAMS\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
-    CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    # An update leaves the desktop as it is: the user may have deleted the shortcut.
+    ${If} $updating != "1"
+        CreateShortCut "$DESKTOP\${INFO_PRODUCTNAME}.lnk" "$INSTDIR\${PRODUCT_EXECUTABLE}"
+    ${EndIf}
 
     !insertmacro wails.associateFiles
     !insertmacro wails.associateCustomProtocols
 
     !insertmacro wails.writeUninstaller
+
+    ${If} $updating == "1"
+        SetAutoClose true
+        Exec '"$INSTDIR\${PRODUCT_EXECUTABLE}"'
+    ${EndIf}
 SectionEnd
 
 Section "uninstall"

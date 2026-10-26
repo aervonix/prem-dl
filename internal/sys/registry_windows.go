@@ -4,6 +4,9 @@ package sys
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"golang.org/x/sys/windows/registry"
 )
@@ -13,7 +16,27 @@ import (
 var (
 	classesKey = `Software\Classes`
 	runKey     = `Software\Microsoft\Windows\CurrentVersion\Run`
+	// Where the per-user installer registers its uninstaller (wails_tools.nsh).
+	uninstallKey = `Software\Microsoft\Windows\CurrentVersion\Uninstall`
 )
+
+// InstalledDir returns exe's folder if the installer registered as name put it there, else "":
+// the portable exe, a dev build, or a copy next to an older install elsewhere. The installer's
+// uninstall entry points at the uninstall.exe it wrote next to exe.
+func InstalledDir(name, exe string) string {
+	u := strings.Trim(getString(uninstallKey+`\`+name, "UninstallString"), `"`)
+	if u == "" || !strings.EqualFold(filepath.Base(u), "uninstall.exe") {
+		return ""
+	}
+	dir := filepath.Dir(exe)
+	if !strings.EqualFold(filepath.Clean(filepath.Dir(u)), filepath.Clean(dir)) {
+		return ""
+	}
+	if _, err := os.Stat(u); err != nil {
+		return ""
+	}
+	return dir
+}
 
 // RegisterURLScheme makes links like scheme://… start exe with the link as its only argument.
 // Registering again, after the exe has moved, just points the scheme at the new path.

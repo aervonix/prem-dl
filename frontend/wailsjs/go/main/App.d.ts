@@ -20,6 +20,8 @@ export function CancelJob(arg1:string):Promise<void>;
 
 export function CancelProbe():Promise<void>;
 
+export function CheckAppUpdate():Promise<main.AppUpdate>;
+
 export function CheckFeed(arg1:string):Promise<void>;
 
 export function CheckUpdate():Promise<main.UpdateInfo>;
@@ -61,6 +63,8 @@ export function ImportCookieText(arg1:string):Promise<main.CookieResponse>;
 export function InspectCookieFile(arg1:string):Promise<ytdlp.CookieInfo>;
 
 export function InspectFeed(arg1:string):Promise<main.TargetResponse>;
+
+export function InstallAppUpdate():Promise<main.UpdateResult>;
 
 export function InstallFFmpeg():Promise<main.UpdateResult>;
 
