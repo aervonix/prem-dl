@@ -92,6 +92,8 @@ type Settings struct {
 	AutoUpdate          bool            `json:"autoUpdate"`
 	UpdateChannel       string          `json:"updateChannel"` // stable | nightly | master
 	LastUpdateCheck     time.Time       `json:"lastUpdateCheck" ts_type:"string"`
+	LatestYtdlp         string          `json:"latestYtdlp"`        // newest release the last successful check found
+	LatestYtdlpChannel  string          `json:"latestYtdlpChannel"` // the channel that check asked about
 	YtdlpPath           string          `json:"ytdlpPath"`
 	FfmpegPath          string          `json:"ffmpegPath"`
 	Theme               string          `json:"theme"`       // system | light | dark

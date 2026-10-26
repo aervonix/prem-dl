@@ -26,6 +26,9 @@ type ToolStatus struct {
 	// folder; CanInstallFFmpeg when there is a build for this computer.
 	FFmpegManaged    bool `json:"ffmpegManaged"`
 	CanInstallFFmpeg bool `json:"canInstallFfmpeg"`
+	// UpToDate is set when the last successful update check, on the current channel, found
+	// nothing newer than the installed yt-dlp. False when no check has run or the last one failed.
+	UpToDate bool `json:"upToDate"`
 }
 
 // UpdateInfo is the result of comparing the installed yt-dlp with the newest release.
@@ -78,6 +81,7 @@ func (a *App) detectTools() {
 		if bin.Version == "" {
 			st.YtdlpError = "yt-dlp was found but didn't run. The file may be damaged. Reinstall it from Settings → Updates."
 		}
+		st.UpToDate = a.upToDate(bin.Version)
 	}
 	ytPath := ""
 	if st.Ytdlp != nil {
@@ -212,8 +216,50 @@ func (a *App) checkUpdate(ctx context.Context) UpdateInfo {
 	}
 	info.Latest = latest
 	info.Available = ytdlp.UpdateAvailable(info.Current, latest, s.UpdateChannel)
-	_, _ = a.updateSettings(func(v *settings.Settings) { v.LastUpdateCheck = time.Now() })
+	_, _ = a.updateSettings(func(v *settings.Settings) {
+		v.LastUpdateCheck = time.Now()
+		v.LatestYtdlp, v.LatestYtdlpChannel = latest, s.UpdateChannel
+	})
+	a.republishUpToDate()
 	return info
+}
+
+// upToDate reports whether the last successful check, made on the current channel, found nothing
+// newer than the installed version. Checks run at most every few hours, so this is what lets the
+// UI say "up to date" between them.
+func (a *App) upToDate(installed string) bool {
+	s := a.store.Get()
+	return installed != "" && s.LatestYtdlp != "" && s.LatestYtdlpChannel == s.UpdateChannel &&
+		!ytdlp.UpdateAvailable(installed, s.LatestYtdlp, s.UpdateChannel)
+}
+
+// republishUpToDate recomputes ToolStatus.UpToDate after a check or a channel change, without a
+// full detection pass, and tells the UI if it changed.
+func (a *App) republishUpToDate() {
+	installed := ""
+	a.toolsMu.Lock()
+	ready := a.toolsReady
+	if a.tools.Ytdlp != nil {
+		installed = a.tools.Ytdlp.Version
+	}
+	a.toolsMu.Unlock()
+	if !ready {
+		return // the first detection pass computes it
+	}
+	// Settings are read outside toolsMu, so no lock is taken while holding it.
+	up := a.upToDate(installed)
+
+	a.toolsMu.Lock()
+	same := a.tools.Ytdlp != nil && a.tools.Ytdlp.Version == installed // no newer pass replaced it
+	changed := same && a.tools.UpToDate != up
+	if changed {
+		a.tools.UpToDate = up
+	}
+	st := a.tools
+	a.toolsMu.Unlock()
+	if changed {
+		a.emit("tools:status", st)
+	}
 }
 
 // installOrUpdate downloads the newest yt-dlp over the current one (or into the managed folder).
@@ -282,7 +328,11 @@ func (a *App) installOrUpdate(ctx context.Context) UpdateResult {
 	default:
 		res.Message += "yt-dlp updated from " + res.Previous + " to " + version + "."
 	}
-	_, _ = a.updateSettings(func(v *settings.Settings) { v.LastUpdateCheck = time.Now() })
+	// What was just installed is the channel's latest release.
+	_, _ = a.updateSettings(func(v *settings.Settings) {
+		v.LastUpdateCheck = time.Now()
+		v.LatestYtdlp, v.LatestYtdlpChannel = version, s.UpdateChannel
+	})
 	a.detectTools()
 	return res
 }

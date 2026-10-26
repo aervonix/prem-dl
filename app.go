@@ -291,10 +291,15 @@ func (a *App) SaveSettings(s settings.Settings) SettingsResponse {
 		return SettingsResponse{Settings: a.store.Get(), Error: err.Error()}
 	}
 	prev := a.store.Get()
-	s.LastUpdateCheck = prev.LastUpdateCheck // not user-editable
+	// Not user-editable; a draft opened before a check must not roll them back.
+	s.LastUpdateCheck = prev.LastUpdateCheck
+	s.LatestYtdlp, s.LatestYtdlpChannel = prev.LatestYtdlp, prev.LatestYtdlpChannel
 	saved, err := a.store.Set(s)
 	if err != nil {
 		return SettingsResponse{Settings: prev, Error: err.Error()}
+	}
+	if saved.UpdateChannel != prev.UpdateChannel {
+		a.republishUpToDate() // the last check was for the old channel
 	}
 	a.applyTheme(saved.Theme)
 	a.q.Kick() // a changed concurrency limit takes effect immediately

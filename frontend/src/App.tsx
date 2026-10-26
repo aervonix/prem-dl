@@ -51,8 +51,10 @@ function Sidebar() {
           <button type="button" className="foot-link" onClick={() => go('settings', 'updates')}>
             PREM-DL - UPDATE AVAILABLE
           </button>
+        ) : tools.upToDate ? (
+          <span>PREM-DL - UP TO DATE ({tools.ytdlp.version})</span>
         ) : (
-          // The installed version, not "updated": no check may have run, or it may have failed.
+          // Only the installed version: no check has run on this channel, or the last one failed.
           <span>PREM-DL - YT-DLP {tools.ytdlp.version}</span>
         )}
       </div>

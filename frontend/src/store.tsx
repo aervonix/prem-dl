@@ -42,6 +42,7 @@ const emptyTools: ToolStatus = {
   managedPath: '',
   ffmpegManaged: false,
   canInstallFfmpeg: false,
+  upToDate: false,
 }
 
 const initial: State = {

@@ -38,6 +38,7 @@ export namespace main {
 	    managedPath: string;
 	    ffmpegManaged: boolean;
 	    canInstallFfmpeg: boolean;
+	    upToDate: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ToolStatus(source);
@@ -53,6 +54,7 @@ export namespace main {
 	        this.managedPath = source["managedPath"];
 	        this.ffmpegManaged = source["ffmpegManaged"];
 	        this.canInstallFfmpeg = source["canInstallFfmpeg"];
+	        this.upToDate = source["upToDate"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -639,6 +641,8 @@ export namespace settings {
 	    autoUpdate: boolean;
 	    updateChannel: string;
 	    lastUpdateCheck: string;
+	    latestYtdlp: string;
+	    latestYtdlpChannel: string;
 	    ytdlpPath: string;
 	    ffmpegPath: string;
 	    theme: string;
@@ -668,6 +672,8 @@ export namespace settings {
 	        this.autoUpdate = source["autoUpdate"];
 	        this.updateChannel = source["updateChannel"];
 	        this.lastUpdateCheck = source["lastUpdateCheck"];
+	        this.latestYtdlp = source["latestYtdlp"];
+	        this.latestYtdlpChannel = source["latestYtdlpChannel"];
 	        this.ytdlpPath = source["ytdlpPath"];
 	        this.ffmpegPath = source["ffmpegPath"];
 	        this.theme = source["theme"];

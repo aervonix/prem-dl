@@ -79,6 +79,8 @@ export interface Settings {
   autoUpdate: boolean
   updateChannel: 'stable' | 'nightly' | 'master'
   lastUpdateCheck: string
+  latestYtdlp: string
+  latestYtdlpChannel: string
   ytdlpPath: string
   ffmpegPath: string
   theme: 'system' | 'light' | 'dark'
@@ -169,6 +171,8 @@ export interface ToolStatus {
   /** The ffmpeg in use is the one the app installed. */
   ffmpegManaged: boolean
   canInstallFfmpeg: boolean
+  /** The last successful update check on this channel found nothing newer. */
+  upToDate: boolean
 }
 
 export interface AppState {
