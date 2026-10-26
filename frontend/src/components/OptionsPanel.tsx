@@ -144,6 +144,9 @@ export function OptionsPanel({
         <div className={video?.bestPremium ? 'seg-tagged' : undefined}>
           <Segmented label="Quality" value={value.preset} options={presetOptions} onChange={(v) => set('preset', v)} />
         </div>
+        {maxHeight > 0 && PRESET_HEIGHTS[value.preset] > maxHeight && (
+          <div className="hint">This video tops out at {maxHeight}p, so that's what it downloads.</div>
+        )}
 
         {isAudio && (
           <div className="grid3" style={{marginTop: 4}}>

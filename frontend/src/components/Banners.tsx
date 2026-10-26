@@ -25,7 +25,7 @@ function Banner({tone, icon, title, children, actions}: {tone: 'warn' | 'bad' | 
 
 /** Status notices that sit above every page: missing tools, updates, interrupted downloads. */
 export function Banners() {
-  const {state, dismiss, updateYtdlp, go, setUpdateAvailable} = useApp()
+  const {state, dismiss, updateYtdlp, go, setUpdateAvailable, attempt} = useApp()
   const jobs = useJobs()
   const {tools, dismissed, toolProgress, updateAvailable, autoUpdated} = state
   const ready = !tools.checking
@@ -139,7 +139,7 @@ export function Banners() {
               variant="primary"
               size="sm"
               onClick={() => {
-                void api.resumeAll()
+                void attempt(api.resumeAll())
                 dismiss('interrupted')
                 go('queue')
               }}>

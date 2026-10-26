@@ -99,11 +99,13 @@ const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}
   )
 })
 
-// A thumbnail that failed to load shows the empty placeholder instead of a broken image.
+// A thumbnail that failed to load shows the empty placeholder instead of a broken image. Rows are
+// keyed by position, so the failure is remembered per URL: the next playlist's image in this row
+// still loads.
 function PlaylistThumb({src}: {src: string}) {
-  const [failed, setFailed] = useState(false)
-  if (!src || failed) return <span className="pthumb" />
-  return <img className="pthumb" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailed(true)} />
+  const [failedSrc, setFailedSrc] = useState('')
+  if (!src || failedSrc === src) return <span className="pthumb" />
+  return <img className="pthumb" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedSrc(src)} />
 }
 
 export function DownloadPage() {
@@ -283,12 +285,14 @@ export function DownloadPage() {
   }, [adding, analyze, go, links, opts, toast])
 
   const paste = useCallback(async () => {
-    const t = (await api.readClipboard()).trim()
+    const read = await attempt(api.readClipboard())
+    if (read === undefined) return
+    const t = read.trim()
     if (!t) return toast('info', 'The clipboard is empty')
     const next = text.trim() ? `${text.trim()}\n${t}` : t
     setText(next)
     if (splitLinks(next).length === 1 && looksLikeUrl(t)) void analyze(t)
-  }, [analyze, text, toast])
+  }, [analyze, attempt, text, toast])
 
   // ---- playlist selection ----
   const playlist = result?.kind === 'playlist' ? result.playlist : null

@@ -506,6 +506,11 @@ input[type='checkbox'] {
   opacity: 0.4;
   cursor: default;
 }
+/* A saved choice this video can't offer (1080p on a 720p video) stays plainly selected; a hint
+   below says what it gets instead. Faded, it looked like nothing was selected. */
+.seg button[aria-pressed='true']:disabled {
+  opacity: 1;
+}
 
 .chips {
   display: flex;

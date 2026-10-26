@@ -95,7 +95,12 @@ const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: 
         <div className="jsub truncate">
           {sub && <>{sub} · </>}
           <span style={{color: s === 'failed' ? 'var(--danger)' : s === 'completed' ? 'var(--ok)' : undefined}}>{statusText(job)}</span>
-          {s === 'completed' && job.outputFile && <span className="muted"> · {basename(job.outputFile)}</span>}
+          {s === 'completed' && job.outputFile && (
+            <span className="muted" title={job.outputFile}>
+              {' · '}
+              {basename(job.outputFile)}
+            </span>
+          )}
         </div>
         {s !== 'failed' && s !== 'cancelled' && <Progress percent={percent} state={progressState(job)} label={job.title} />}
         {due && (
@@ -226,7 +231,7 @@ let lastFilter: Filter = 'all'
 let lastSearch = ''
 
 export function QueuePage() {
-  const {go, toast, copy} = useApp()
+  const {go, toast, copy, attempt} = useApp()
   const jobs = useJobs()
   const [filter, setFilterState] = useState<Filter>(lastFilter)
   const setFilter = useCallback((f: Filter) => {
@@ -305,13 +310,13 @@ export function QueuePage() {
             />
             <div className="summary">{totalSpeed > 0 ? `${speed(totalSpeed)} total` : counts.active > 0 ? 'Working…' : ''}</div>
             <div className="q-actions">
-              <Button size="sm" icon="pause" disabled={!canPause} onClick={() => void api.pauseAll()}>
+              <Button size="sm" icon="pause" disabled={!canPause} onClick={() => void attempt(api.pauseAll())}>
                 Pause all
               </Button>
-              <Button size="sm" icon="play" disabled={!canResume} onClick={() => void api.resumeAll()}>
+              <Button size="sm" icon="play" disabled={!canResume} onClick={() => void attempt(api.resumeAll())}>
                 Resume all
               </Button>
-              <Button size="sm" icon="trash" disabled={counts.done === 0} title="Remove completed downloads from the list. Files on disk are kept." onClick={() => void api.clearFinished(true)}>
+              <Button size="sm" icon="trash" disabled={counts.done === 0} title="Remove completed downloads from the list. Files on disk are kept." onClick={() => void attempt(api.clearFinished(true))}>
                 Clear completed
               </Button>
               <Button
@@ -319,7 +324,7 @@ export function QueuePage() {
                 variant="ghost"
                 disabled={counts.done === 0 && counts.failed === 0}
                 title="Also remove failed and cancelled downloads, which can then no longer be retried. Files on disk are kept."
-                onClick={() => void api.clearFinished(false)}>
+                onClick={() => void attempt(api.clearFinished(false))}>
                 Clear all finished
               </Button>
             </div>

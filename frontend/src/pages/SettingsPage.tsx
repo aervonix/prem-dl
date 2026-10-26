@@ -144,6 +144,8 @@ export function SettingsPage() {
   const [updateInfo, setLocalUpdateInfo] = useState<UpdateInfo | null>(null)
   const [chromeBusy, setChromeBusy] = useState(false)
   const [helperPath, setHelperPath] = useState('')
+  // "Custom template…" was picked but the template still matches a preset (not edited yet).
+  const [customPicked, setCustomPicked] = useState(false)
 
   const dirty = useMemo(() => !!saved && !!draft && JSON.stringify(saved) !== JSON.stringify(draft), [saved, draft])
 
@@ -288,7 +290,7 @@ export function SettingsPage() {
   const tools = state.tools
   const updating = state.toolProgress !== null
   const pct = state.toolProgress && state.toolProgress.total > 0 ? (state.toolProgress.done / state.toolProgress.total) * 100 : -1
-  const templatePreset = TEMPLATES.some((t) => t.value === draft.filenameTemplate) ? draft.filenameTemplate : 'custom'
+  const templatePreset = !customPicked && TEMPLATES.some((t) => t.value === draft.filenameTemplate) ? draft.filenameTemplate : 'custom'
 
   return (
     <div className="settings-layout" ref={rootRef}>
@@ -330,6 +332,7 @@ export function SettingsPage() {
                     <select
                       value={templatePreset}
                       onChange={(e) => {
+                        setCustomPicked(e.target.value === 'custom')
                         if (e.target.value !== 'custom') return upd({filenameTemplate: e.target.value})
                         // The template field below is where a custom one is written.
                         templateInput.current?.focus()
@@ -801,7 +804,12 @@ export function SettingsPage() {
         {dirty && (
           <div className="savebar" role="region" aria-label="Unsaved changes">
             <span className="grow">You have unsaved changes</span>
-            <Button variant="ghost" onClick={() => setDraft(saved)}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setDraft(saved)
+                setCustomPicked(false)
+              }}>
               Discard
             </Button>
             <Button variant="primary" icon="save" loading={saving} onClick={() => void save()}>
