@@ -2,7 +2,7 @@
 import type {DownloadOptions, NamedPreset} from './types'
 
 /** Choices tied to the video they were made on; presets never carry them. */
-const PER_VIDEO = {sectionStart: '', sectionEnd: '', ignoreArchive: false, liveFromStart: false, waitForVideo: false, audioLang: ''} satisfies Partial<DownloadOptions>
+const PER_VIDEO = {sectionStart: '', sectionEnd: '', chapters: [] as string[], ignoreArchive: false, liveFromStart: false, waitForVideo: false, audioLang: ''} satisfies Partial<DownloadOptions>
 
 /** Options as a preset keeps them (as the Go side does): a copy, with nothing tied to one video. */
 export function forPreset(o: DownloadOptions): DownloadOptions {

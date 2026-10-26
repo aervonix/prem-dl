@@ -1436,6 +1436,39 @@ input[type='checkbox'] {
   grid-column: 1 / -1;
 }
 
+/* ---------- chapters (part of the video) ---------- */
+.ch-list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  max-height: 280px;
+  overflow: auto;
+  background: var(--bg);
+}
+.ch-row {
+  display: grid;
+  grid-template-columns: 22px 28px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.ch-row:last-child {
+  border-bottom: 0;
+}
+.ch-row:hover {
+  background: var(--panel-2);
+}
+.ch-row .idx {
+  color: var(--faint);
+  font-size: 12px;
+  text-align: right;
+}
+.ch-row .muted {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- presets (settings) ---------- */
 .preset {
   background: var(--panel);

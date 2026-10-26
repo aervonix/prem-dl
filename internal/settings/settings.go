@@ -53,6 +53,9 @@ type DownloadOptions struct {
 
 	SectionStart string `json:"sectionStart"` // e.g. 1:30 — empty means from the start
 	SectionEnd   string `json:"sectionEnd"`   // empty means until the end
+	// Chapters downloads only these chapters (by title), each as its own file. Not with a
+	// time range.
+	Chapters []string `json:"chapters"`
 
 	OutputDir         string `json:"outputDir"` // "" uses Settings.DownloadDir
 	PlaylistFolder    bool   `json:"playlistFolder"`
@@ -79,6 +82,8 @@ type NamedPreset struct {
 	Sites   []string        `json:"sites"` // host names; each also covers its subdomains
 	Options DownloadOptions `json:"options"`
 }
+
+const maxChapters = 500
 
 // MaxPresets bounds Settings.Presets.
 const MaxPresets = 50
@@ -291,6 +296,24 @@ func ValidateOptions(o *DownloadOptions) error {
 	if o.SectionEnd != "" && !timeRe.MatchString(o.SectionEnd) {
 		return fmt.Errorf("end time %q must look like 90, 1:30 or 1:02:03", o.SectionEnd)
 	}
+	if o.Chapters == nil {
+		o.Chapters = []string{}
+	}
+	if len(o.Chapters) > 0 {
+		if o.SectionStart != "" || o.SectionEnd != "" {
+			return errors.New("choose chapters or a time range, not both")
+		}
+		if len(o.Chapters) > maxChapters {
+			return fmt.Errorf("at most %d chapters can be picked", maxChapters)
+		}
+		for _, c := range o.Chapters {
+			if strings.TrimSpace(c) == "" || len(c) > 500 {
+				return errors.New("a picked chapter has no usable title")
+			}
+		}
+		// Each chapter is saved as its own file already.
+		o.SplitChapters = false
+	}
 	o.AudioLang = strings.TrimSpace(o.AudioLang)
 	if o.AudioLang != "" && !audioLangRe.MatchString(o.AudioLang) {
 		return fmt.Errorf("%q is not a language code", o.AudioLang)
@@ -415,7 +438,7 @@ func validatePresets(ps *[]NamedPreset) error {
 		p.Sites = sites
 
 		o := &p.Options
-		o.SectionStart, o.SectionEnd = "", ""
+		o.SectionStart, o.SectionEnd, o.Chapters = "", "", nil
 		o.IgnoreArchive, o.LiveFromStart, o.WaitForVideo, o.AudioLang = false, false, false, ""
 		if o.Preset == "custom" {
 			// A format picked from one video's list means nothing for the next.
@@ -609,6 +632,7 @@ func clone(v Settings) Settings {
 func cloneOptions(o DownloadOptions) DownloadOptions {
 	o.Subtitles.Langs = append([]string{}, o.Subtitles.Langs...)
 	o.SponsorBlock = append([]string{}, o.SponsorBlock...)
+	o.Chapters = append([]string{}, o.Chapters...)
 	return o
 }
 

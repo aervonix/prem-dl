@@ -56,7 +56,7 @@ function isVideoInPlaylist(link: string): boolean {
  */
 function forNewVideo(o: DownloadOptions, defaults: DownloadOptions): DownloadOptions {
   const fallback = defaults.preset === 'custom' ? {preset: 'best' as const, formatId: '', formatAudioOnly: false} : {preset: defaults.preset, formatId: defaults.formatId, formatAudioOnly: false}
-  return {...o, sectionStart: '', sectionEnd: '', ignoreArchive: false, liveFromStart: false, waitForVideo: false, audioLang: '', ...(o.preset === 'custom' ? fallback : {})}
+  return {...o, sectionStart: '', sectionEnd: '', chapters: [], ignoreArchive: false, liveFromStart: false, waitForVideo: false, audioLang: '', ...(o.preset === 'custom' ? fallback : {})}
 }
 
 type View = 'grid' | 'list'
@@ -419,7 +419,7 @@ export function DownloadPage() {
     const off = on('bulk:progress', setBulkProgress)
     try {
       // A link whose site has a preset of its own is queued with that; the rest with the form.
-      const rest = {...opts, sectionStart: '', sectionEnd: ''}
+      const rest = {...opts, sectionStart: '', sectionEnd: '', chapters: []}
       const items: BulkLink[] = links.map((url) => {
         const m = presetFor(url, presets)
         return {url, options: m && m.preset.name !== presetName ? presetOptions(m.preset) : rest}
@@ -521,7 +521,7 @@ export function DownloadPage() {
       if (video.upcoming) options = {...opts, waitForVideo: true}
       items = [{url: video.url || probedUrl, title: video.title, uploader: video.uploader, thumbnail: video.thumbnailSmall || video.thumbnail, duration: video.duration, playlistTitle: '', playlistIndex: 0, playlistCount: 0}]
     } else if (playlist) {
-      options = {...opts, sectionStart: '', sectionEnd: ''}
+      options = {...opts, sectionStart: '', sectionEnd: '', chapters: []}
       items = selectedEntries.map((e) => ({
         url: e.url,
         title: e.title,
@@ -873,7 +873,7 @@ export function DownloadPage() {
           {following && playlist && (
             <FeedDialog
               link={{url: probedUrl, title: playlist.title, uploader: playlist.uploader}}
-              options={{...opts, sectionStart: '', sectionEnd: ''}}
+              options={{...opts, sectionStart: '', sectionEnd: '', chapters: []}}
               onClose={() => setFollowing(false)}
             />
           )}
@@ -888,6 +888,8 @@ export function DownloadPage() {
                 ) : (
                   `${plural(selectedEntries.length, 'video')} will be added to the queue`
                 )
+              ) : video && opts.chapters.length > 0 ? (
+                `${plural(opts.chapters.length, 'chapter')}, each saved as its own file`
               ) : video && opts && plannedName(video, opts) ? (
                 <span title={`${opts.outputDir || settings?.downloadDir || ''}\\${plannedName(video, opts)}`}>
                   Saves as <b>{plannedName(video, opts)}</b>

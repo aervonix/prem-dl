@@ -69,6 +69,9 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
   We pass `webm/mkv` + `webm>webm/mkv` and skip `--embed-thumbnail` for WebM.
 - `--download-sections` fetches all streams in ONE ffmpeg run into the final file (no `.fNNN` parts)
   and reports a single `finished` event sized for the cut, not the plan's full size (`Tracker.Cut`).
+- Several `--download-sections` are separate downloads. As time ranges (`*0-67`) they get the same
+  name and only the first is kept; picked chapters go by title regex (`^Title$`), which fills
+  `section_title`/`section_number`. That number counts from 0 there (1 for `--split-chapters`).
 - yt-dlp's default ranking prefers newer codecs before bitrate. Signed in, YouTube offers two
   "1080p Premium" streams (VP9 ~2.8 Mbps, AV1 ~0.4 Mbps) and the default picked AV1. Quality presets
   and the probe pass `--format-sort=res,fps,hdr:12,vbr` (`ytdlp.QualitySort`); keep them in step.

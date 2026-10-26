@@ -769,7 +769,8 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, e *entry) 
 	sys.Contain(cmd)
 
 	h := &lineHandler{m: m, e: e}
-	h.tracker.Cut = job.Options.SectionStart != "" || job.Options.SectionEnd != ""
+	h.tracker.Cut = job.Options.SectionStart != "" || job.Options.SectionEnd != "" || len(job.Options.Chapters) > 0
+	h.tracker.Sections = len(job.Options.Chapters)
 	var rw sync.WaitGroup
 	rw.Add(2)
 	go func() { defer rw.Done(); h.consume(stdout, false) }()

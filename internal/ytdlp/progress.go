@@ -2,6 +2,7 @@ package ytdlp
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -230,6 +231,9 @@ type Tracker struct {
 	// Cut is set for a time-range download. The plan's sizes are for the whole video, and yt-dlp
 	// fetches every stream in one ffmpeg run into the final file, reporting only that file.
 	Cut bool
+	// Sections is how many cuts one run downloads (chosen chapters), one file after another,
+	// each reported 0-100% on its own; 0 or 1 for a single cut.
+	Sections int
 
 	streams   []Stream
 	planTotal int64
@@ -320,6 +324,9 @@ func (t *Tracker) Update(p Progress) (Snapshot, bool) {
 	// A file that isn't one of the per-stream parts means the streams were fetched together.
 	merged := !formatFileRe.MatchString(strings.TrimSuffix(p.Filename, ".part"))
 	t.allDone = p.Status == "finished" && (len(t.streams) <= 1 || t.idx >= len(t.streams)-1 || merged)
+	if t.Cut && t.Sections > 1 {
+		t.allDone = p.Status == "finished" && t.idx >= t.Sections-1
+	}
 
 	snap := Snapshot{
 		Downloaded: t.doneBytes + p.Downloaded,
@@ -335,6 +342,15 @@ func (t *Tracker) Update(p Progress) (Snapshot, bool) {
 	if total > 0 {
 		snap.Total = total
 		snap.Percent = float64(snap.Downloaded) / float64(total) * 100
+	}
+	if t.Cut && t.Sections > 1 {
+		// Only the section in flight has a size: count each as an equal share.
+		snap.Total = t.doneBytes + max(p.Total, p.TotalEstimate)
+		snap.Percent = float64(min(t.idx, t.Sections-1)) / float64(t.Sections) * 100
+		if cs := max(p.Total, p.TotalEstimate); cs > 0 {
+			snap.Percent += min(float64(p.Downloaded)/float64(cs), 1) / float64(t.Sections) * 100
+		}
+		snap.Stage = fmt.Sprintf("Downloading chapter %d of %d", min(t.idx, t.Sections-1)+1, t.Sections)
 	}
 	if n := len(t.streams); n > 1 && !t.Cut && !merged && !t.sizesKnown() {
 		// Only the stream in flight has a size: count each stream as an equal share, so the bar

@@ -3,6 +3,7 @@ package ytdlp
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -106,7 +107,11 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	if dir == "" {
 		dir = s.DownloadDir
 	}
-	a = append(a, "--paths="+dir, "--output="+OutputTemplate(s.FilenameTemplate, o, t))
+	out := OutputTemplate(s.FilenameTemplate, o, t)
+	if len(o.Chapters) > 0 {
+		out = SectionTemplate(o, t)
+	}
+	a = append(a, "--paths="+dir, "--output="+out)
 	a = append(a, "--trim-filenames=180")
 
 	a = append(a, FormatArgs(o)...)
@@ -156,6 +161,13 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	if o.WaitForVideo {
 		// yt-dlp sleeps until the scheduled start, then looks again every minute until it's live.
 		a = append(a, "--wait-for-video="+WaitInterval)
+	}
+	for _, c := range o.Chapters {
+		// A chapter is picked by a regex on its title (yt-dlp matches with Python's re, which
+		// reads Go's escapes the same way). Only that way does yt-dlp fill in section_title and
+		// section_number for the file name; time ranges would all get the same name and only
+		// the first would be kept. Two chapters with the same title both match.
+		a = append(a, "--download-sections=^"+regexp.QuoteMeta(c)+"$")
 	}
 	if o.SectionStart != "" || o.SectionEnd != "" {
 		start, end := o.SectionStart, o.SectionEnd
@@ -328,6 +340,16 @@ func withAudioLang(expr, lang string) string {
 		return expr
 	}
 	return first + "/" + expr
+}
+
+// SectionTemplate names the files of a download of chosen chapters like ChapterTemplate does.
+// For --download-sections, section_number counts from 0 (it is 1-based for --split-chapters).
+func SectionTemplate(o settings.DownloadOptions, t Target) string {
+	prefix := ""
+	if t.PlaylistTitle != "" && o.PlaylistFolder {
+		prefix = sanitizeSegment(t.PlaylistTitle) + "/"
+	}
+	return prefix + "%(title)s [%(id)s]/%(section_number+1)02d - %(section_title)s.%(ext)s"
 }
 
 // ChapterTemplate names the files --split-chapters writes: a folder named like the video (inside

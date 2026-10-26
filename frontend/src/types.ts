@@ -40,6 +40,8 @@ export interface DownloadOptions {
   sponsorBlock: string[]
   sectionStart: string
   sectionEnd: string
+  /** Download only these chapters (by title), each as its own file. Not with a time range. */
+  chapters: string[]
   outputDir: string
   playlistFolder: boolean
   playlistNumbering: boolean
@@ -265,6 +267,14 @@ export interface VideoInfo {
   upcoming: boolean
   /** When it is due, in Unix seconds; 0 when unknown. */
   releaseTimestamp: number
+  chapters: Chapter[]
+}
+
+/** A chapter of a video (ytdlp.Chapter); times in seconds. */
+export interface Chapter {
+  title: string
+  start: number
+  end: number
 }
 
 export interface PlaylistEntry {

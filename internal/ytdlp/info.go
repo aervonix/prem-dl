@@ -78,6 +78,15 @@ type VideoInfo struct {
 	// yet. ReleaseTimestamp is when it is due, in Unix seconds (0 when unknown).
 	Upcoming         bool  `json:"upcoming"`
 	ReleaseTimestamp int64 `json:"releaseTimestamp"`
+	// Chapters are the video's chapters in order; empty when it has none.
+	Chapters []Chapter `json:"chapters"`
+}
+
+// Chapter is one chapter of a video; times are in seconds.
+type Chapter struct {
+	Title string  `json:"title"`
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
 }
 
 // PlaylistEntry is one item of a playlist.
@@ -147,6 +156,12 @@ func NormalizeURL(raw string) (string, error) {
 	return u, nil
 }
 
+type rawChapter struct {
+	Title string  `json:"title"`
+	Start float64 `json:"start_time"`
+	End   float64 `json:"end_time"`
+}
+
 type rawThumb struct {
 	URL   string  `json:"url"`
 	Width float64 `json:"width"`
@@ -198,7 +213,8 @@ type rawInfo struct {
 	LiveStatus string     `json:"live_status"`
 	Release    float64    `json:"release_timestamp"`
 
-	Availability string `json:"availability"`
+	Availability string       `json:"availability"`
+	Chapters     []rawChapter `json:"chapters"`
 
 	Formats           []rawFormat         `json:"formats"`
 	FormatNote        string              `json:"format_note"`       // of the default choice
@@ -358,6 +374,10 @@ func buildVideo(r *rawInfo) *VideoInfo {
 		Formats:   []FormatInfo{}, Heights: []int{}, Subtitles: []SubtitleTrack{}, AutoCaptions: []SubtitleTrack{},
 		AudioLanguages: []string{},
 		Upcoming:       r.LiveStatus == "is_upcoming", ReleaseTimestamp: int64(r.Release),
+		Chapters: []Chapter{},
+	}
+	for _, c := range r.Chapters {
+		v.Chapters = append(v.Chapters, Chapter{Title: c.Title, Start: c.Start, End: c.End})
 	}
 	if v.URL == "" {
 		v.URL = r.URL

@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -183,6 +184,60 @@ func TestTrackerTimeRangeIsOneMergedFile(t *testing.T) {
 	}
 	if snap.Percent != 100 || snap.Total != 364835 || snap.Stage != "Downloading" {
 		t.Fatalf("want 100%% of the cut: %+v", snap)
+	}
+}
+
+func TestTrackerChaptersAreOneShareEach(t *testing.T) {
+	// Observed with two --download-sections chapters: each is its own file, reported 0-100%.
+	tr := Tracker{Cut: true, Sections: 2}
+	dir := `C:\dl\But what is a neural network [aircAruvnKk]\`
+	steps := []struct {
+		p    Progress
+		want float64
+		done bool
+	}{
+		{Progress{Status: "downloading", Downloaded: 768545, Total: 1537091, Filename: dir + "01 - Introduction example.webm"}, 25, false},
+		{Progress{Status: "finished", Downloaded: 1537091, Total: 1537091, Filename: dir + "01 - Introduction example.webm"}, 50, false},
+		{Progress{Status: "downloading", Downloaded: 690582, Total: 1381165, Filename: dir + "03 - What are neurons？.webm"}, 75, false},
+		{Progress{Status: "finished", Downloaded: 1381165, Total: 1381165, Filename: dir + "03 - What are neurons？.webm"}, 100, true},
+	}
+	for i, s := range steps {
+		snap, _ := tr.Update(s.p)
+		if math.Abs(snap.Percent-s.want) > 0.1 || tr.AllDone() != s.done {
+			t.Fatalf("step %d: %.1f%% done=%v, want %.0f%% done=%v", i, snap.Percent, tr.AllDone(), s.want, s.done)
+		}
+	}
+	snap, _ := tr.Update(steps[3].p)
+	if snap.Stage != "Downloading chapter 2 of 2" || snap.Total != 1537091+1381165 {
+		t.Fatalf("%+v", snap)
+	}
+}
+
+func TestChapterArgs(t *testing.T) {
+	e := testEnv()
+	o := e.Settings.Defaults
+	o.Chapters = []string{"Introduction example", "What are neurons?"}
+	args := e.DownloadArgs(o, Target{URL: "https://example.com/v"})
+	for _, want := range []string{
+		`--download-sections=^Introduction example$`,
+		`--download-sections=^What are neurons\?$`,
+		"--output=%(title)s [%(id)s]/%(section_number+1)02d - %(section_title)s.%(ext)s",
+	} {
+		if !has(args, want) {
+			t.Errorf("missing %s in %v", want, args)
+		}
+	}
+
+	res, err := ParseProbe([]byte(`{"_type":"video","id":"aircAruvnKk","title":"t","chapters":[
+		{"start_time":0,"title":"Introduction example","end_time":67},{"start_time":67,"title":"Series preview","end_time":162}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := res.Video.Chapters; len(c) != 2 || c[1] != (Chapter{Title: "Series preview", Start: 67, End: 162}) {
+		t.Fatalf("%+v", c)
+	}
+	if res, _ := ParseProbe([]byte(`{"_type":"video","id":"x","title":"t","chapters":null}`)); res.Video.Chapters == nil {
+		t.Error("no chapters must be an empty list, not null")
 	}
 }
 

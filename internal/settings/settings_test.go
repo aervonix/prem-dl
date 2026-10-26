@@ -200,3 +200,32 @@ func TestRepairKeepsTheGoodPresets(t *testing.T) {
 		t.Errorf("only the broken preset should go, got %+v", got)
 	}
 }
+
+func TestChapterOptions(t *testing.T) {
+	o := Default().Defaults
+	o.Chapters, o.SplitChapters = []string{"Intro", "What are neurons?"}, true
+	if err := ValidateOptions(&o); err != nil {
+		t.Fatal(err)
+	}
+	if o.SplitChapters {
+		t.Error("picked chapters are saved one file each already; the split must be off")
+	}
+	o.SectionStart = "1:00"
+	if err := ValidateOptions(&o); err == nil {
+		t.Error("chapters and a time range together must be refused")
+	}
+	o.SectionStart, o.Chapters = "", []string{" "}
+	if err := ValidateOptions(&o); err == nil {
+		t.Error("a blank chapter title must be refused")
+	}
+	o.Chapters = nil
+	if err := ValidateOptions(&o); err != nil || o.Chapters == nil {
+		t.Errorf("no chapters must be an empty list, not null: %v", err)
+	}
+
+	s := Default()
+	s.Presets[0].Options.Chapters = []string{"Intro"}
+	if err := s.Validate(); err != nil || len(s.Presets[0].Options.Chapters) != 0 {
+		t.Errorf("presets must not keep chapters: %v %v", err, s.Presets[0].Options.Chapters)
+	}
+}

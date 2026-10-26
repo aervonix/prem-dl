@@ -3,6 +3,7 @@ import {api} from '../api'
 import {bytes, parseTime} from '../format'
 import {Icon} from '../icons'
 import type {AudioFormat, DownloadOptions, FormatInfo, Preset, SubMode, VideoInfo} from '../types'
+import {PartPicker} from './PartPicker'
 import {Button, Chip, Field, Segmented, Switch} from './ui'
 import type {SegOption} from './ui'
 
@@ -132,14 +133,6 @@ export function OptionsPanel({
   const manualLangs = video?.subtitles ?? []
   const autoLangs = video?.autoCaptions ?? []
   const langLabel = (l: string) => manualLangs.find((t) => t.lang === l)?.name ?? autoLangs.find((t) => t.lang === l)?.name ?? l
-
-  const startOk = value.sectionStart === '' || parseTime(value.sectionStart) !== null
-  const endOk = value.sectionEnd === '' || parseTime(value.sectionEnd) !== null
-  const orderOk = (() => {
-    const s = parseTime(value.sectionStart)
-    const e = parseTime(value.sectionEnd)
-    return s === null || e === null || s < e
-  })()
 
   const isAudio = value.preset === 'audio'
   // The download is an audio file: "Audio only", or an audio format picked from the list.
@@ -363,6 +356,9 @@ export function OptionsPanel({
         )}
       </div>
 
+      {/* ---- part of the video ---- */}
+      {mode === 'download' && !playlist && <PartPicker value={value} onChange={onChange} video={video} />}
+
       {/* ---- extras ---- */}
       <div className="optgroup">
         <button type="button" className="collapse-btn" aria-expanded={extrasOpen} onClick={() => setExtrasOpen(!extrasOpen)}>
@@ -425,12 +421,14 @@ export function OptionsPanel({
             </div>
 
             <div className="grid2">
-              <Switch
-                checked={value.splitChapters}
-                onChange={(v) => set('splitChapters', v)}
-                label="Also save each chapter as its own file"
-                description="In a folder named after the video, as “01 - Chapter title”. Needs ffmpeg."
-              />
+              {value.chapters.length === 0 && (
+                <Switch
+                  checked={value.splitChapters}
+                  onChange={(v) => set('splitChapters', v)}
+                  label="Also save each chapter as its own file"
+                  description="In a folder named after the video, as “01 - Chapter title”. Needs ffmpeg."
+                />
+              )}
               {mode === 'download' && video?.isLive && (
                 <Switch
                   checked={value.liveFromStart}
@@ -440,38 +438,6 @@ export function OptionsPanel({
                 />
               )}
             </div>
-
-            {mode === 'download' && !playlist && (
-              <div>
-                <div className="section-title">
-                  <Icon name="scissors" size={13} /> Download only part of the video
-                </div>
-                <div className="row wrap">
-                  <Field label="From" hint="e.g. 1:30">
-                    <input
-                      type="text"
-                      value={value.sectionStart}
-                      placeholder="0:00"
-                      aria-invalid={!startOk}
-                      style={{width: 110, ...(startOk ? {} : {borderColor: 'var(--danger)'})}}
-                      onChange={(e) => set('sectionStart', e.target.value)}
-                    />
-                  </Field>
-                  <Field label="To" hint="blank = until the end">
-                    <input
-                      type="text"
-                      value={value.sectionEnd}
-                      placeholder="end"
-                      aria-invalid={!endOk}
-                      style={{width: 110, ...(endOk ? {} : {borderColor: 'var(--danger)'})}}
-                      onChange={(e) => set('sectionEnd', e.target.value)}
-                    />
-                  </Field>
-                </div>
-                {(!startOk || !endOk) && <div className="hint" style={{color: 'var(--danger)'}}>Use seconds (90), minutes:seconds (1:30) or h:mm:ss.</div>}
-                {startOk && endOk && !orderOk && <div className="hint" style={{color: 'var(--danger)'}}>The start must be before the end.</div>}
-              </div>
-            )}
 
             {feed ? (
               <Switch

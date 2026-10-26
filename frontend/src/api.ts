@@ -53,6 +53,7 @@ export type _Guards = [
   Expect<Guard<ytdlp.CookieInfo, T.CookieInfo>>,
   Expect<Guard<ytdlp.FormatInfo, T.FormatInfo>>,
   Expect<Guard<ytdlp.SubtitleTrack, T.SubtitleTrack>>,
+  Expect<Guard<ytdlp.Chapter, T.Chapter>>,
   Expect<Guard<ytdlp.VideoInfo, T.VideoInfo>>,
   Expect<Guard<ytdlp.PlaylistEntry, T.PlaylistEntry>>,
   Expect<Guard<ytdlp.PlaylistInfo, T.PlaylistInfo>>,

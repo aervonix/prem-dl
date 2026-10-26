@@ -789,6 +789,7 @@ export namespace settings {
 	    sponsorBlock: string[];
 	    sectionStart: string;
 	    sectionEnd: string;
+	    chapters: string[];
 	    outputDir: string;
 	    playlistFolder: boolean;
 	    playlistNumbering: boolean;
@@ -821,6 +822,7 @@ export namespace settings {
 	        this.sponsorBlock = source["sponsorBlock"];
 	        this.sectionStart = source["sectionStart"];
 	        this.sectionEnd = source["sectionEnd"];
+	        this.chapters = source["chapters"];
 	        this.outputDir = source["outputDir"];
 	        this.playlistFolder = source["playlistFolder"];
 	        this.playlistNumbering = source["playlistNumbering"];
@@ -989,6 +991,22 @@ export namespace ytdlp {
 	        this.path = source["path"];
 	        this.source = source["source"];
 	        this.version = source["version"];
+	    }
+	}
+	export class Chapter {
+	    title: string;
+	    start: number;
+	    end: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Chapter(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.title = source["title"];
+	        this.start = source["start"];
+	        this.end = source["end"];
 	    }
 	}
 	export class CookieInfo {
@@ -1240,6 +1258,7 @@ export namespace ytdlp {
 	    audioLanguages: string[];
 	    upcoming: boolean;
 	    releaseTimestamp: number;
+	    chapters: Chapter[];
 	
 	    static createFrom(source: any = {}) {
 	        return new VideoInfo(source);
@@ -1267,6 +1286,7 @@ export namespace ytdlp {
 	        this.audioLanguages = source["audioLanguages"];
 	        this.upcoming = source["upcoming"];
 	        this.releaseTimestamp = source["releaseTimestamp"];
+	        this.chapters = this.convertValues(source["chapters"], Chapter);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -20,7 +20,7 @@ const INTERVALS: {hours: number; label: string}[] = [
 
 /** Options that don't belong to one video, for following something from scratch. */
 function feedDefaults(d: DownloadOptions): DownloadOptions {
-  return {...d, preset: d.preset === 'custom' ? 'best' : d.preset, formatId: '', sectionStart: '', sectionEnd: '', ignoreArchive: false, liveFromStart: false, audioLang: '', outputDir: ''}
+  return {...d, preset: d.preset === 'custom' ? 'best' : d.preset, formatId: '', sectionStart: '', sectionEnd: '', chapters: [], ignoreArchive: false, liveFromStart: false, audioLang: '', outputDir: ''}
 }
 
 /** What new uploads download as: "1080p · MP4", "Audio only · MP3", plus the folder when it isn't the default. */
