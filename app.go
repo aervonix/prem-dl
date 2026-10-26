@@ -55,6 +55,10 @@ type App struct {
 	bulkMu     sync.Mutex
 	bulkCancel context.CancelFunc // set while EnqueueLinks runs
 
+	// Wails' Windows clipboard calls aren't safe to overlap: a second OpenClipboard fails, so
+	// concurrent reads came back empty.
+	clipMu sync.Mutex
+
 	// The close dialog's state; see beforeClose.
 	closeMu                                sync.Mutex
 	closeAsked, closeShown, closeConfirmed bool
@@ -729,6 +733,8 @@ func (a *App) ReadClipboard() string {
 	if !a.ready() {
 		return ""
 	}
+	a.clipMu.Lock()
+	defer a.clipMu.Unlock()
 	t, err := wr.ClipboardGetText(a.rt())
 	if err != nil {
 		return ""
@@ -741,6 +747,8 @@ func (a *App) CopyText(text string) error {
 	if !a.ready() {
 		return errors.New("the app is still starting")
 	}
+	a.clipMu.Lock()
+	defer a.clipMu.Unlock()
 	return wr.ClipboardSetText(a.rt(), text)
 }
 

@@ -950,7 +950,11 @@ input[type='checkbox'] {
   place-items: center;
   color: var(--faint);
 }
+/* Positioned, not sized by height: 100%: that doesn't resolve against an aspect-ratio box, so a
+   4:3 thumbnail kept its own height and showed its letterbox bar while the bottom was clipped. */
 .thumb img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;

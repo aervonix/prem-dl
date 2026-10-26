@@ -597,7 +597,12 @@ export function DownloadPage() {
                 'Ready to download'
               )}
             </div>
-            <Button variant="ghost" onClick={reset}>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setText('')
+                reset()
+              }}>
               Clear
             </Button>
             <Button variant="primary" size="lg" icon="download" loading={adding} disabled={!!problem || (!!playlist && selectedEntries.length === 0)} onClick={() => void download()}>

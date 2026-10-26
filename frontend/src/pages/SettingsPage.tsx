@@ -181,8 +181,9 @@ export function SettingsPage() {
     if (isSection(state.section.id)) openTab(state.section.id)
   }, [state.section, state.page, openTab])
 
-  // Summarise the cookie file whenever it changes.
-  const cookieFile = saved?.cookies.mode === 'file' ? saved.cookies.file : ''
+  // Summarise the cookie file whenever it changes. The file stays saved when cookies are turned
+  // off, so picking "cookies.txt file" again shows it before the change is saved.
+  const cookieFile = draft?.cookies.mode === 'file' ? (saved?.cookies.file ?? '') : ''
   useEffect(() => {
     let alive = true
     setCookieTest(null)
@@ -195,6 +196,11 @@ export function SettingsPage() {
       alive = false
     }
   }, [cookieFile])
+
+  // A check's result describes the version it ran against; once yt-dlp changes (updated here, from
+  // the banner or automatically) it would still say "available" and offer "Update now".
+  const ytdlpVersion = state.tools.ytdlp?.version
+  useEffect(() => setLocalUpdateInfo(null), [ytdlpVersion])
 
   const upd = useCallback((patch: Partial<Settings>) => setDraft((d) => (d ? {...d, ...patch} : d)), [])
   const templateInput = useRef<HTMLInputElement>(null)

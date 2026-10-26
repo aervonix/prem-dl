@@ -74,6 +74,9 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 **Wails / Go**
 - Wails runtime helpers (`ClipboardGetText`, dialogs, ...) call `log.Fatal` on a nil/bad context, killing
   the app. Guard with `a.ready()`; the context is an atomic pointer set in `startup`.
+- Wails' Windows clipboard calls must not overlap: two at once crashed the process with
+  `0xC0000374` (heap corruption, no log). StrictMode's double effect made `wails dev` die ~1 s after
+  start. `ReadClipboard`/`CopyText` hold `App.clipMu`.
 - Single-instance lock: `wails dev` exits immediately if the packaged app is running, and `wails build`
   cannot overwrite a running exe. Never kill the user's running app; ask them to close it.
 - Editing Go files while `wails dev` runs triggers rebuilds that drop the bridge; wait for port 34115.

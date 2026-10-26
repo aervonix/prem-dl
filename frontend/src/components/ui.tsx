@@ -172,6 +172,9 @@ export function Modal({title, onClose, children, footer}: {title: ReactNode; onC
     // A child with autoFocus has already taken focus by now; keep it.
     if (!box.current?.contains(document.activeElement)) box.current?.focus()
     const onKey = (e: KeyboardEvent) => {
+      // A dialog on a hidden page (Ctrl+1 away from Settings) stays mounted; it must not keep
+      // Tab and Escape from the page that is showing.
+      if (!box.current || box.current.getClientRects().length === 0) return
       if (e.key === 'Escape') return close.current()
       if (e.key !== 'Tab' || !box.current) return
       const items = [...box.current.querySelectorAll<HTMLElement>(FOCUSABLE)]
