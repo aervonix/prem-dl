@@ -472,20 +472,28 @@ type BulkProgress struct {
 	Total int `json:"total"`
 }
 
+// BulkLink is one link of a bulk add, with the options it is queued with (a site's preset can
+// differ from the rest).
+type BulkLink struct {
+	URL     string                   `json:"url"`
+	Options settings.DownloadOptions `json:"options"`
+}
+
 // EnqueueLinks analyses each link, expands playlists in full, and queues everything. It is meant
 // for pasting a batch of links without reviewing each one. Links are analysed a few at a time and
 // queued in the order given, each as soon as it and the ones before it are ready.
-func (a *App) EnqueueLinks(links []string, opts settings.DownloadOptions) BulkResponse {
+func (a *App) EnqueueLinks(links []BulkLink) BulkResponse {
 	out := BulkResponse{Failed: []LinkFailure{}}
-	if err := settings.ValidateOptions(&opts); err != nil {
-		out.Error = err.Error()
-		return out
-	}
-	var clean []string
+	var clean []BulkLink
 	for _, l := range links {
-		if l = strings.TrimSpace(l); l != "" {
-			clean = append(clean, l)
+		if l.URL = strings.TrimSpace(l.URL); l.URL == "" {
+			continue
 		}
+		if err := settings.ValidateOptions(&l.Options); err != nil {
+			out.Error = err.Error()
+			return out
+		}
+		clean = append(clean, l)
 	}
 
 	ctx, cancel := context.WithCancel(a.root)
@@ -507,11 +515,11 @@ func (a *App) EnqueueLinks(links []string, opts settings.DownloadOptions) BulkRe
 		if ctx.Err() != nil {
 			return result{err: ctx.Err()}
 		}
-		items, failed, err := a.bulkItems(ctx, clean[i], false)
+		items, failed, err := a.bulkItems(ctx, clean[i].URL, false)
 		return result{items, failed, err}
 	}, func(i int, r result) {
 		defer a.emit("bulk:progress", BulkProgress{Done: i + 1, Total: len(clean)})
-		l := clean[i]
+		l, opts := clean[i].URL, clean[i].Options
 		if ctx.Err() != nil {
 			// Cancelled: the links not yet queued stay in the box to be added later.
 			out.Cancelled = true

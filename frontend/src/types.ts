@@ -53,6 +53,14 @@ export interface DownloadOptions {
   audioLang: string
 }
 
+/** A saved set of options picked by name on the Download page (settings.NamedPreset). */
+export interface NamedPreset {
+  name: string
+  /** Host names (music.youtube.com); a link to one, or a subdomain of one, picks this preset. */
+  sites: string[]
+  options: DownloadOptions
+}
+
 export interface Cookies {
   mode: 'none' | 'browser' | 'file'
   browser: string
@@ -98,6 +106,7 @@ export interface Settings {
   followEvery: number
   extraArgs: string
   defaults: DownloadOptions
+  presets: NamedPreset[]
 }
 
 export type JobStatus =
@@ -296,6 +305,12 @@ export interface EnqueueResponse {
   added: number
   skipped: number
   error: string
+}
+
+/** A link of a bulk add and the options it is queued with. */
+export interface BulkLink {
+  url: string
+  options: DownloadOptions
 }
 
 export interface LinkFailure {

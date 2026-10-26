@@ -67,6 +67,17 @@ type DownloadOptions struct {
 	AudioLang string `json:"audioLang"`
 }
 
+// NamedPreset is a saved set of download options the Download page offers by name. A link to
+// one of its Sites (music.youtube.com) picks it automatically.
+type NamedPreset struct {
+	Name    string          `json:"name"`
+	Sites   []string        `json:"sites"` // host names; each also covers its subdomains
+	Options DownloadOptions `json:"options"`
+}
+
+// MaxPresets bounds Settings.Presets.
+const MaxPresets = 50
+
 // Cookies describes where yt-dlp should read login cookies from.
 type Cookies struct {
 	Mode    string `json:"mode"`    // none | browser | file
@@ -105,6 +116,7 @@ type Settings struct {
 	FollowEvery         int             `json:"followEvery"`      // hours between checks of followed channels; 0 = only when asked
 	ExtraArgs           string          `json:"extraArgs"`
 	Defaults            DownloadOptions `json:"defaults"`
+	Presets             []NamedPreset   `json:"presets"`
 }
 
 // Default returns first-run settings.
@@ -140,6 +152,47 @@ func Default() Settings {
 			PlaylistFolder:    true,
 			PlaylistNumbering: true,
 		},
+		Presets: StarterPresets(),
+	}
+}
+
+// StarterPresets are the presets a new install (or one from before presets) begins with.
+func StarterPresets() []NamedPreset {
+	return []NamedPreset{
+		{
+			Name:  "Music",
+			Sites: []string{"music.youtube.com"},
+			Options: DownloadOptions{
+				Preset:            "audio",
+				AudioFormat:       "mp3",
+				AudioQuality:      "0",
+				Subtitles:         SubtitleOptions{Mode: "none", Langs: []string{"en"}},
+				EmbedMetadata:     true,
+				EmbedThumbnail:    true,
+				EmbedChapters:     true,
+				PlaylistFolder:    true,
+				PlaylistNumbering: true,
+			},
+		},
+		{
+			Name:  "Archive",
+			Sites: []string{},
+			Options: DownloadOptions{
+				Preset:            "best",
+				Container:         "mkv",
+				AudioFormat:       "mp3",
+				AudioQuality:      "0",
+				Subtitles:         SubtitleOptions{Mode: "both", Langs: []string{"en"}},
+				EmbedMetadata:     true,
+				EmbedThumbnail:    true,
+				EmbedChapters:     true,
+				WriteDescription:  true,
+				WriteInfoJSON:     true,
+				WriteThumbnail:    true,
+				PlaylistFolder:    true,
+				PlaylistNumbering: true,
+			},
+		},
 	}
 }
 
@@ -150,6 +203,7 @@ var (
 	rateLimitRe = regexp.MustCompile(`^\d+(\.\d+)?[KkMmGg]?$`)
 	timeRe      = regexp.MustCompile(`^(\d+:){0,2}\d+(\.\d+)?$`)
 	audioLangRe = regexp.MustCompile(`^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$`)
+	siteRe      = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$`)
 	langRe      = regexp.MustCompile(`^[A-Za-z0-9_.*\-\[\]()|?+^$]+$`)
 	sponsorCats = map[string]bool{
 		"sponsor": true, "intro": true, "outro": true, "selfpromo": true, "preview": true,
@@ -300,7 +354,87 @@ func (s *Settings) Validate() error {
 	if !FollowIntervals[s.FollowEvery] {
 		return errors.New("choose how often to check followed channels from the list")
 	}
-	return ValidateOptions(&s.Defaults)
+	if err := ValidateOptions(&s.Defaults); err != nil {
+		return err
+	}
+	return validatePresets(&s.Presets)
+}
+
+// validatePresets normalises the presets in place: names are trimmed and unique, sites are bare
+// host names that belong to one preset each, and the options carry nothing tied to one video.
+func validatePresets(ps *[]NamedPreset) error {
+	if *ps == nil {
+		*ps = []NamedPreset{}
+	}
+	if len(*ps) > MaxPresets {
+		return fmt.Errorf("you can keep up to %d presets", MaxPresets)
+	}
+	names := map[string]bool{}
+	owner := map[string]string{}
+	for i := range *ps {
+		p := &(*ps)[i]
+		p.Name = strings.TrimSpace(p.Name)
+		if p.Name == "" {
+			return errors.New("every preset needs a name")
+		}
+		if len([]rune(p.Name)) > 40 {
+			return fmt.Errorf("the preset name %q is too long (40 characters at most)", p.Name)
+		}
+		key := strings.ToLower(p.Name)
+		if names[key] {
+			return fmt.Errorf("there are two presets called %q", p.Name)
+		}
+		names[key] = true
+
+		sites := make([]string, 0, len(p.Sites))
+		for _, raw := range p.Sites {
+			site := CleanSite(raw)
+			if site == "" {
+				continue
+			}
+			if !siteRe.MatchString(site) {
+				return fmt.Errorf("%q in the %s preset isn't a site name like music.youtube.com", strings.TrimSpace(raw), p.Name)
+			}
+			if prev, ok := owner[site]; ok {
+				if prev == p.Name {
+					continue
+				}
+				return fmt.Errorf("%s is set for both the %s and %s presets", site, prev, p.Name)
+			}
+			owner[site] = p.Name
+			sites = append(sites, site)
+		}
+		p.Sites = sites
+
+		o := &p.Options
+		o.SectionStart, o.SectionEnd = "", ""
+		o.IgnoreArchive, o.LiveFromStart, o.AudioLang = false, false, ""
+		if o.Preset == "custom" {
+			// A format picked from one video's list means nothing for the next.
+			o.Preset, o.FormatID = "best", ""
+		}
+		if err := ValidateOptions(o); err != nil {
+			return fmt.Errorf("the %s preset: %w", p.Name, err)
+		}
+	}
+	return nil
+}
+
+// CleanSite turns what was typed as a preset's site into a host name: it drops a scheme, a path,
+// a port and a leading "www.", and lowercases it. "https://www.Example.com/x" -> "example.com".
+func CleanSite(raw string) string {
+	s := strings.ToLower(strings.TrimSpace(raw))
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	}
+	if i := strings.IndexAny(s, "/?#"); i >= 0 {
+		s = s[:i]
+	}
+	if i := strings.LastIndex(s, ":"); i >= 0 {
+		s = s[:i]
+	}
+	s = strings.TrimSuffix(strings.TrimPrefix(s, "www."), ".")
+	return s
 }
 
 // Store persists Settings under the user's config directory and is safe for concurrent use.
@@ -374,13 +508,18 @@ func repair(s Settings) Settings {
 	// format) is picked up once its partner is in place.
 	for pass := 0; pass < 2; pass++ {
 		for i := 0; i < src.NumField(); i++ {
-			if src.Type().Field(i).Name != "Defaults" {
+			if name := src.Type().Field(i).Name; name != "Defaults" && name != "Presets" {
 				keep(func(t *Settings) { reflect.ValueOf(t).Elem().Field(i).Set(src.Field(i)) })
 			}
 		}
 		for i := 0; i < defs.NumField(); i++ {
 			keep(func(t *Settings) { reflect.ValueOf(&t.Defaults).Elem().Field(i).Set(defs.Field(i)) })
 		}
+	}
+	// Presets one by one, so a bad one costs only itself.
+	out.Presets = []NamedPreset{}
+	for _, p := range s.Presets {
+		keep(func(t *Settings) { t.Presets = append(t.Presets, p) })
 	}
 	return clone(out)
 }
@@ -448,9 +587,21 @@ func (s *Store) write(v Settings) error {
 }
 
 func clone(v Settings) Settings {
-	v.Defaults.Subtitles.Langs = append([]string{}, v.Defaults.Subtitles.Langs...)
-	v.Defaults.SponsorBlock = append([]string{}, v.Defaults.SponsorBlock...)
+	v.Defaults = cloneOptions(v.Defaults)
+	presets := make([]NamedPreset, len(v.Presets))
+	for i, p := range v.Presets {
+		p.Sites = append([]string{}, p.Sites...)
+		p.Options = cloneOptions(p.Options)
+		presets[i] = p
+	}
+	v.Presets = presets
 	return v
+}
+
+func cloneOptions(o DownloadOptions) DownloadOptions {
+	o.Subtitles.Langs = append([]string{}, o.Subtitles.Langs...)
+	o.SponsorBlock = append([]string{}, o.SponsorBlock...)
+	return o
 }
 
 // WriteFileAtomic writes via a temp file and rename so a crash never leaves a half-written file.

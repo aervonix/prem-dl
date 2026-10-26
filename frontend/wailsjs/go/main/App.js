@@ -70,8 +70,8 @@ export function Enqueue(arg1, arg2) {
   return window['go']['main']['App']['Enqueue'](arg1, arg2);
 }
 
-export function EnqueueLinks(arg1, arg2) {
-  return window['go']['main']['App']['EnqueueLinks'](arg1, arg2);
+export function EnqueueLinks(arg1) {
+  return window['go']['main']['App']['EnqueueLinks'](arg1);
 }
 
 export function FollowFeed(arg1) {

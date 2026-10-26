@@ -1436,6 +1436,30 @@ input[type='checkbox'] {
   grid-column: 1 / -1;
 }
 
+/* ---------- presets (settings) ---------- */
+.preset {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.preset-head {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(180px, 2fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+.preset-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.preset-body {
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
 /* ---------- following ---------- */
 .feed {
   display: grid;

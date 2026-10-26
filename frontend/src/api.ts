@@ -29,6 +29,7 @@ export type _Guards = [
   Expect<Guard<settings.DownloadOptions, T.DownloadOptions>>,
   Expect<Guard<settings.SubtitleOptions, T.SubtitleOptions>>,
   Expect<Guard<settings.Cookies, T.Cookies>>,
+  Expect<Guard<settings.NamedPreset, T.NamedPreset>>,
   Expect<Guard<settings.Settings, T.Settings>>,
   Expect<Guard<queue.Job, T.Job>>,
   Expect<Guard<queue.NewJob, T.NewJob>>,
@@ -38,6 +39,7 @@ export type _Guards = [
   Expect<Guard<main.EnqueueResponse, T.EnqueueResponse>>,
   Expect<Guard<main.BulkResponse, T.BulkResponse>>,
   Expect<Guard<main.LinkFailure, T.LinkFailure>>,
+  Expect<Guard<main.BulkLink, T.BulkLink>>,
   Expect<Guard<main.SettingsResponse, T.SettingsResponse>>,
   Expect<Guard<main.CookieResponse, T.CookieResponse>>,
   Expect<Guard<main.ChromeHelperInfo, T.ChromeHelperInfo>>,
@@ -75,8 +77,7 @@ export const api = {
   cancelProbe: () => App.CancelProbe(),
   enqueue: (items: T.NewJob[], opts: T.DownloadOptions) =>
     cast<T.EnqueueResponse>(App.Enqueue(items as unknown as queue.NewJob[], opts as unknown as settings.DownloadOptions)),
-  enqueueLinks: (links: string[], opts: T.DownloadOptions) =>
-    cast<T.BulkResponse>(App.EnqueueLinks(links, opts as unknown as settings.DownloadOptions)),
+  enqueueLinks: (links: T.BulkLink[]) => cast<T.BulkResponse>(App.EnqueueLinks(links as unknown as main.BulkLink[])),
   cancelBulk: App.CancelBulk,
 
   pauseJob: App.PauseJob,

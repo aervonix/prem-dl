@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -99,5 +100,103 @@ func TestAudioLangIsALanguageCode(t *testing.T) {
 		if err := ValidateOptions(&o); (err == nil) != ok {
 			t.Errorf("%q: err = %v", lang, err)
 		}
+	}
+}
+
+func TestPresetsAreNormalised(t *testing.T) {
+	s := Default()
+	music := s.Presets[0].Options
+	music.Preset, music.FormatID = "custom", "251"
+	music.SectionStart, music.IgnoreArchive, music.AudioLang = "1:00", true, "de"
+	s.Presets = []NamedPreset{{Name: "  Music ", Sites: []string{"https://www.Music.YouTube.com/watch?v=x", "", "music.youtube.com"}, Options: music}}
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	p := s.Presets[0]
+	if p.Name != "Music" || len(p.Sites) != 1 || p.Sites[0] != "music.youtube.com" {
+		t.Errorf("name and sites not cleaned: %+v", p)
+	}
+	if o := p.Options; o.Preset != "best" || o.FormatID != "" || o.SectionStart != "" || o.IgnoreArchive || o.AudioLang != "" {
+		t.Errorf("choices tied to one video must not be kept in a preset: %+v", o)
+	}
+
+	s.Presets = nil
+	if err := s.Validate(); err != nil || s.Presets == nil {
+		t.Errorf("no presets must be an empty list, not null: %v", err)
+	}
+}
+
+func TestPresetProblems(t *testing.T) {
+	base := StarterPresets()
+	for name, edit := range map[string]func(ps []NamedPreset) []NamedPreset{
+		"no name":     func(ps []NamedPreset) []NamedPreset { ps[0].Name = " "; return ps },
+		"same name":   func(ps []NamedPreset) []NamedPreset { ps[1].Name = "music"; return ps },
+		"shared site": func(ps []NamedPreset) []NamedPreset { ps[1].Sites = []string{"music.youtube.com"}; return ps },
+		"not a site":  func(ps []NamedPreset) []NamedPreset { ps[1].Sites = []string{"my site"}; return ps },
+		"bare word":   func(ps []NamedPreset) []NamedPreset { ps[1].Sites = []string{"localhost"}; return ps },
+		"bad options": func(ps []NamedPreset) []NamedPreset { ps[1].Options.Subtitles.Langs = nil; return ps },
+		"too many":    func(ps []NamedPreset) []NamedPreset { return make([]NamedPreset, MaxPresets+1) },
+		"long name":   func(ps []NamedPreset) []NamedPreset { ps[0].Name = strings.Repeat("x", 41); return ps },
+	} {
+		s := Default()
+		s.Presets = edit(clone(Settings{Presets: base}).Presets)
+		if err := s.Validate(); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+func TestCleanSite(t *testing.T) {
+	for in, want := range map[string]string{
+		"music.youtube.com":                   "music.youtube.com",
+		" HTTPS://www.YouTube.com/@x/videos ": "youtube.com",
+		"vimeo.com:443":                       "vimeo.com",
+		"example.org.":                        "example.org",
+		"":                                    "",
+	} {
+		if got := CleanSite(in); got != want {
+			t.Errorf("CleanSite(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestOldSettingsGetStarterPresets(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"downloadDir":"D:\dl","theme":"dark"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := st.Get().Presets; len(got) != 2 || got[0].Name != "Music" {
+		t.Errorf("a file from before presets should start with the starters, got %+v", got)
+	}
+
+	// Deleting them all sticks.
+	if _, err := st.Update(func(s *Settings) { s.Presets = nil }); err != nil {
+		t.Fatal(err)
+	}
+	again, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := again.Get().Presets; len(got) != 0 {
+		t.Errorf("deleted presets came back: %+v", got)
+	}
+}
+
+func TestRepairKeepsTheGoodPresets(t *testing.T) {
+	dir := t.TempDir()
+	s := Default()
+	s.Presets = append(s.Presets, NamedPreset{Name: "Broken", Sites: []string{"not a site"}, Options: s.Defaults})
+	writeSettings(t, dir, s)
+	st, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := st.Get().Presets
+	if len(got) != 2 || got[0].Name != "Music" || got[1].Name != "Archive" {
+		t.Errorf("only the broken preset should go, got %+v", got)
 	}
 }

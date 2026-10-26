@@ -40,7 +40,7 @@ export function EditFeed(arg1:string,arg2:Array<string>,arg3:settings.DownloadOp
 
 export function Enqueue(arg1:Array<queue.NewJob>,arg2:settings.DownloadOptions):Promise<main.EnqueueResponse>;
 
-export function EnqueueLinks(arg1:Array<string>,arg2:settings.DownloadOptions):Promise<main.BulkResponse>;
+export function EnqueueLinks(arg1:Array<main.BulkLink>):Promise<main.BulkResponse>;
 
 export function FollowFeed(arg1:follow.NewFeed):Promise<main.FeedResponse>;
 

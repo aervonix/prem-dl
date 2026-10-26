@@ -252,6 +252,38 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	export class BulkLink {
+	    url: string;
+	    options: settings.DownloadOptions;
+	
+	    static createFrom(source: any = {}) {
+	        return new BulkLink(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.options = this.convertValues(source["options"], settings.DownloadOptions);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class LinkFailure {
 	    url: string;
 	    error?: apperr.AppError;
@@ -812,6 +844,40 @@ export namespace settings {
 		    return a;
 		}
 	}
+	export class NamedPreset {
+	    name: string;
+	    sites: string[];
+	    options: DownloadOptions;
+	
+	    static createFrom(source: any = {}) {
+	        return new NamedPreset(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.sites = source["sites"];
+	        this.options = this.convertValues(source["options"], DownloadOptions);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Settings {
 	    downloadDir: string;
 	    filenameTemplate: string;
@@ -841,6 +907,7 @@ export namespace settings {
 	    followEvery: number;
 	    extraArgs: string;
 	    defaults: DownloadOptions;
+	    presets: NamedPreset[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -876,6 +943,7 @@ export namespace settings {
 	        this.followEvery = source["followEvery"];
 	        this.extraArgs = source["extraArgs"];
 	        this.defaults = this.convertValues(source["defaults"], DownloadOptions);
+	        this.presets = this.convertValues(source["presets"], NamedPreset);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

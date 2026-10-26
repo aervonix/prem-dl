@@ -79,14 +79,15 @@ export function OptionsPanel({
   onChange: (v: DownloadOptions) => void
   video?: VideoInfo | null
   playlist?: boolean
-  mode: 'download' | 'defaults'
+  /** defaults and preset hold saved options, with nothing tied to one video; a preset can have its own folder. */
+  mode: 'download' | 'defaults' | 'preset'
   /** "Remember downloaded videos" is on, so this download can choose to ignore it. */
   archiveOn?: boolean
   /** Options for a followed channel or playlist: its new uploads, which have no position to number. */
   feed?: boolean
 }) {
   const set = <K extends keyof DownloadOptions>(k: K, v: DownloadOptions[K]) => onChange({...value, [k]: v})
-  const [extrasOpen, setExtrasOpen] = useState(mode === 'defaults')
+  const [extrasOpen, setExtrasOpen] = useState(mode !== 'download')
   const [langDraft, setLangDraft] = useState('')
 
   const maxHeight = video && video.heights.length > 0 ? video.heights[0] : 0
@@ -471,7 +472,7 @@ export function OptionsPanel({
               </div>
             ) : null}
 
-            {mode === 'download' && (
+            {mode !== 'defaults' && (
               <Field label="Save to" hint="Leave empty to use your default download folder.">
                 <div className="row">
                   <input type="text" className="grow" value={value.outputDir} placeholder="Default download folder" onChange={(e) => set('outputDir', e.target.value)} />

@@ -34,6 +34,9 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
   without auto-generated captions, and optionally converted to SRT, VTT or ASS.
 - **Extras.** Embed metadata, chapters and cover art, cut out SponsorBlock segments, or download just
   part of a video by start and end time.
+- **Presets.** Save option sets under a name, like "Music" (MP3 with cover art) or "Archive" (MKV,
+  subtitles, info JSON), and pick one on the Download page. Tie a preset to a site and its links pick
+  it by themselves: music.youtube.com links start as Music.
 - **A real queue.** Several downloads at once, with pause, resume, cancel and retry, and a log for
   each one. The queue survives a restart; anything that was running comes back paused.
 - **Works in the background.** Progress shows on the taskbar button, and a Windows notification

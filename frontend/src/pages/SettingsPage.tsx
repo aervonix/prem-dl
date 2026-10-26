@@ -3,6 +3,7 @@ import {api, errMessage} from '../api'
 import {ErrorPanel, EJS_DOCS} from '../components/ErrorPanel'
 import {FfmpegProgress, InstallFfmpegButton} from '../components/FfmpegInstall'
 import {OptionsPanel} from '../components/OptionsPanel'
+import {PresetList} from '../components/PresetList'
 import {Button, Card, Field, Modal, Progress, Switch} from '../components/ui'
 import {bytes, plural} from '../format'
 import {Icon} from '../icons'
@@ -12,6 +13,7 @@ import type {ArchiveInfo, CookieInfo, CookieTest, Settings, UpdateInfo} from '..
 const SECTIONS = [
   {id: 'general', label: 'General'},
   {id: 'defaults', label: 'Default options'},
+  {id: 'presets', label: 'Presets'},
   {id: 'cookies', label: 'Cookies'},
   {id: 'network', label: 'Network'},
   {id: 'updates', label: 'Updates & tools'},
@@ -432,6 +434,13 @@ export function SettingsPage() {
           {tab === 'defaults' && (
             <Card id="defaults" title="Default options" sub="What new downloads start with. You can still change them for each download.">
               <OptionsPanel value={draft.defaults} onChange={(defaults) => upd({defaults})} mode="defaults" playlist />
+            </Card>
+          )}
+
+          {/* ---------------- presets ---------------- */}
+          {tab === 'presets' && (
+            <Card id="presets" title="Presets" sub="Named sets of options to pick on the Download page. A preset tied to a site is picked by itself for links from it.">
+              <PresetList presets={draft.presets} defaults={draft.defaults} onChange={(presets) => upd({presets})} />
             </Card>
           )}
 

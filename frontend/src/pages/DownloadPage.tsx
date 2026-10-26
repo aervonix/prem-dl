@@ -5,11 +5,12 @@ import {FeedDialog} from '../components/FeedDialog'
 import {VideoGrid, selectable} from '../components/VideoGrid'
 import {OptionsPanel, optionsProblem} from '../components/OptionsPanel'
 import {Thumb} from '../components/Thumb'
-import {Button, Card, Empty, Segmented, Spinner} from '../components/ui'
+import {Button, Card, Empty, Field, Modal, Segmented, Spinner} from '../components/ui'
 import {compactCount, duration, hostOf, plural, uploadDate} from '../format'
 import {Icon} from '../icons'
+import {forPreset, parseSites, presetFor, presetOptions, sameOptions, switchTo} from '../presets'
 import {useApp} from '../store'
-import type {AppError, DownloadOptions, NewJob, PlaylistEntry, ProbeResult, VideoInfo} from '../types'
+import type {AppError, BulkLink, DownloadOptions, NamedPreset, NewJob, PlaylistEntry, ProbeResult, VideoInfo} from '../types'
 
 type Phase = 'idle' | 'analyzing' | 'ready' | 'error'
 
@@ -122,6 +123,69 @@ function PlaylistThumb({src}: {src: string}) {
   return <img className="pthumb" src={src} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedSrc(src)} />
 }
 
+/** Picks the preset the form starts from; '' is the default options. */
+function PresetSelect({presets, value, onChange}: {presets: NamedPreset[]; value: string; onChange: (name: string) => void}) {
+  if (presets.length === 0) return null
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Preset" title="Preset" style={{width: 'auto', minWidth: 170}}>
+      <option value="">Default options</option>
+      {presets.map((p) => (
+        <option key={p.name} value={p.name}>
+          {p.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+/** Names the form's options and saves them as a new preset, or over the one with that name. */
+function SavePresetDialog({presets, initialName, host, onClose, onSave}: {presets: NamedPreset[]; initialName: string; host: string; onClose: () => void; onSave: (name: string, sites: string[]) => Promise<boolean>}) {
+  const [name, setName] = useState(initialName)
+  // Until edited, the sites shown are those of the preset the name matches.
+  const [sitesText, setSitesText] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const match = presets.find((p) => p.name.toLowerCase() === name.trim().toLowerCase())
+  const sites = sitesText ?? match?.sites.join(', ') ?? ''
+  const save = async () => {
+    if (!name.trim() || busy) return
+    setBusy(true)
+    const ok = await onSave(name.trim(), parseSites(sites))
+    setBusy(false)
+    if (ok) onClose()
+  }
+  return (
+    <Modal
+      title="Save as preset"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" loading={busy} disabled={!name.trim()} onClick={() => void save()}>
+            {match ? `Replace ${match.name}` : 'Save preset'}
+          </Button>
+        </>
+      }>
+      <form
+        className="stack"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void save()
+        }}>
+        <Field label="Name" hint={match ? `This replaces the options saved in ${match.name}.` : 'Pick it from the preset list on the Download page.'}>
+          <input type="text" autoFocus maxLength={40} value={name} placeholder="Music, Archive, Podcasts…" onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Use it for links from" hint="Optional. Links from these sites (and their subdomains) pick this preset by themselves. Separate several with commas.">
+          <input type="text" value={sites} placeholder={host ? `e.g. ${host}` : 'e.g. music.youtube.com'} spellCheck={false} onChange={(e) => setSitesText(e.target.value)} />
+        </Field>
+        {/* With two fields, Enter only submits when the form has a submit button. */}
+        <button type="submit" hidden />
+      </form>
+    </Modal>
+  )
+}
+
 export function DownloadPage() {
   const {state, go, toast, attempt, setSettings} = useApp()
   const settings = state.settings
@@ -149,20 +213,99 @@ export function DownloadPage() {
   const defaults = settings?.defaults
   const defaultsRef = useRef(defaults)
   const seeded = useRef<DownloadOptions | null>(null)
+  /** The preset the form started from; '' is the defaults. */
+  const [presetName, setPresetName] = useState('')
+  /** The site whose link picked the preset; '' when it was chosen by hand. */
+  const [auto, setAuto] = useState('')
+  const [savingPreset, setSavingPreset] = useState(false)
+  const presets = useMemo(() => settings?.presets ?? [], [settings?.presets])
+  const chosen = presetName ? presets.find((p) => p.name === presetName) : undefined
+  const base = useMemo(() => (chosen ? presetOptions(chosen) : defaults ? forNewVideo(structuredClone(defaults), defaults) : null), [chosen, defaults])
+  const changed = !!opts && !!base && !sameOptions(opts, base)
+  // The latest of each, for callbacks that run later (analysing a link).
+  const latest = useRef({presets, presetName, base, auto, opts})
+  latest.current = {presets, presetName, base, auto, opts}
 
-  // Seed the form from the saved defaults, and follow later changes to them unless the user has
-  // changed the form since.
+  // A preset deleted or renamed in Settings: back to the defaults.
+  useEffect(() => {
+    if (presetName && settings && !chosen) {
+      setPresetName('')
+      setAuto('')
+    }
+  }, [presetName, settings, chosen])
+
+  // Seed the form from the chosen preset or the saved defaults, and follow later changes to them
+  // unless the user has changed the form since.
   useEffect(() => {
     defaultsRef.current = defaults
-    if (!defaults) return
-    const fresh = forNewVideo(structuredClone(defaults), defaults)
-    const base = seeded.current
-    setOpts((o) => (!o || (base && JSON.stringify(o) === JSON.stringify(base)) ? fresh : o))
-    seeded.current = fresh
-  }, [defaults])
+    if (!base) return
+    const prev = seeded.current
+    setOpts((o) => (!o || (prev && JSON.stringify(o) === JSON.stringify(prev)) ? base : o))
+    seeded.current = base
+  }, [base, defaults])
+
+  const choosePreset = (name: string) => {
+    const p = presets.find((x) => x.name === name)
+    const next = p ? presetOptions(p) : defaults ? forNewVideo(structuredClone(defaults), defaults) : null
+    if (!next) return
+    setPresetName(p ? p.name : '')
+    setAuto('')
+    setOpts((o) => switchTo(next, o))
+  }
+
+  // The link whose site picked the preset is gone: back to the defaults, unless the form was
+  // changed since (then it is the user's choice). Reports whether the form was reset.
+  const dropAuto = useCallback(() => {
+    const {base, auto, opts} = latest.current
+    const d = defaultsRef.current
+    if (!auto) return false
+    setAuto('')
+    if (!d || !opts || !base || !sameOptions(opts, base)) return false
+    setPresetName('')
+    setOpts(forNewVideo(structuredClone(d), d))
+    return true
+  }, [])
+
+  // A new link: its site's preset if it has one, unless that preset is already on the form.
+  const pickFor = useCallback(
+    (link: string) => {
+      const d = defaultsRef.current
+      const m = presetFor(link, latest.current.presets)
+      if (m && m.preset.name !== latest.current.presetName) {
+        setPresetName(m.preset.name)
+        setAuto(m.site)
+        setOpts(presetOptions(m.preset))
+        return
+      }
+      if (m) setAuto(m.site)
+      else if (dropAuto()) return
+      if (d) setOpts((o) => (o ? forNewVideo(o, d) : o))
+    },
+    [dropAuto],
+  )
 
   const links = useMemo(() => splitLinks(text), [text])
   const bulk = links.length > 1
+
+  // Several links: site presets apply link by link, so one link's pick doesn't stay on the form
+  // for the rest. Back at one link, it is picked again.
+  useEffect(() => {
+    if (!bulk) return
+    lastLink.current = ''
+    dropAuto()
+  }, [bulk, dropAuto])
+
+  /** Links in the box whose site picks a preset other than the form's, counted per preset. */
+  const bySite = useMemo(() => {
+    const counts = new Map<string, number>()
+    if (!bulk) return counts
+    for (const l of links) {
+      const m = presetFor(l, presets)
+      if (m && m.preset.name !== presetName) counts.set(m.preset.name, (counts.get(m.preset.name) ?? 0) + 1)
+    }
+    return counts
+  }, [bulk, links, presets, presetName])
+  const bySiteCount = [...bySite.values()].reduce((a, b) => a + b, 0)
 
   // ---- clipboard suggestion ----
   const refreshClip = useCallback(async () => {
@@ -188,8 +331,7 @@ export function DownloadPage() {
       const id = ++requestId.current
       if (link !== lastLink.current) {
         lastLink.current = link
-        const d = defaultsRef.current
-        if (d) setOpts((o) => (o ? forNewVideo(o, d) : o))
+        pickFor(link)
       }
       setPhase('analyzing')
       setError(null)
@@ -230,7 +372,7 @@ export function DownloadPage() {
         setPhase('error')
       }
     },
-    [],
+    [pickFor],
   )
 
   const reset = useCallback(() => {
@@ -276,7 +418,13 @@ export function DownloadPage() {
     setBulkProgress({done: 0, total: links.length})
     const off = on('bulk:progress', setBulkProgress)
     try {
-      const res = await api.enqueueLinks(links, {...opts, sectionStart: '', sectionEnd: ''})
+      // A link whose site has a preset of its own is queued with that; the rest with the form.
+      const rest = {...opts, sectionStart: '', sectionEnd: ''}
+      const items: BulkLink[] = links.map((url) => {
+        const m = presetFor(url, presets)
+        return {url, options: m && m.preset.name !== presetName ? presetOptions(m.preset) : rest}
+      })
+      const res = await api.enqueueLinks(items)
       if (res.error) return toast('error', res.error)
       if (res.added > 0 && res.failed.length === 0) {
         // Everything was queued: show it downloading. Otherwise stay, with the leftovers in the box.
@@ -304,7 +452,7 @@ export function DownloadPage() {
       setAdding(false)
       setBulkProgress(null)
     }
-  }, [adding, analyze, go, links, opts, toast])
+  }, [adding, analyze, go, links, opts, presetName, presets, toast])
 
   const paste = useCallback(async () => {
     const read = await attempt(api.readClipboard())
@@ -409,6 +557,36 @@ export function DownloadPage() {
     setSettings(res.settings)
     toast('success', 'Saved as your default options')
   }
+
+  const savePreset = async (name: string, sites: string[]): Promise<boolean> => {
+    if (!settings || !opts) return false
+    const preset: NamedPreset = {name, sites, options: forPreset(opts)}
+    const i = settings.presets.findIndex((p) => p.name.toLowerCase() === name.toLowerCase())
+    const list = i >= 0 ? settings.presets.map((p, j) => (j === i ? preset : p)) : [...settings.presets, preset]
+    const res = await attempt(api.saveSettings({...settings, presets: list}))
+    if (!res) return false
+    if (res.error) {
+      toast('error', res.error)
+      return false
+    }
+    setSettings(res.settings)
+    setPresetName(name)
+    setAuto('')
+    toast('success', i >= 0 ? `Updated the ${name} preset` : `Saved the ${name} preset`)
+    return true
+  }
+
+  const presetNote = changed ? (chosen ? `${chosen.name}, changed for this download` : '') : auto && chosen ? `${chosen.name}, picked for ${auto} links` : ''
+  const saveButtons = (
+    <div className="row wrap">
+      <Button variant="ghost" icon="save" onClick={() => setSavingPreset(true)}>
+        Save as preset…
+      </Button>
+      <Button variant="ghost" icon="save" onClick={() => void saveAsDefaults()}>
+        Save these options as my defaults
+      </Button>
+    </div>
+  )
 
   // Whether the analysed playlist or channel is followed, so the button can say so. Feeds changing
   // (followed from the dialog, or unfollowed) asks again.
@@ -520,12 +698,17 @@ export function DownloadPage() {
       )}
 
       {bulk && opts && phase !== 'analyzing' && (
-        <Card title={`${links.length} links`} sub="Each link is checked and queued. Playlists are expanded and queued in full. Use the options below for all of them.">
+        <Card
+          title={`${links.length} links`}
+          sub={
+            bySiteCount === 0
+              ? 'Each link is checked and queued. Playlists are expanded and queued in full. Use the options below for all of them.'
+              : `Each link is checked and queued, playlists in full. ${[...bySite].map(([name, n]) => `${plural(n, 'link')} ${n === 1 ? 'uses' : 'use'} the ${name} preset`).join(', ')} for ${bySiteCount === 1 ? 'its' : 'their'} site; ${bySiteCount === links.length ? 'none use the options below' : `the options below are for the other ${links.length - bySiteCount}`}.`
+          }
+          actions={<PresetSelect presets={presets} value={presetName} onChange={choosePreset} />}>
           <OptionsPanel value={opts} onChange={setOpts} playlist mode="download" archiveOn={settings?.useArchive} />
           <div className="divider" />
-          <Button variant="ghost" icon="save" onClick={() => void saveAsDefaults()}>
-            Save these options as my defaults
-          </Button>
+          {saveButtons}
         </Card>
       )}
 
@@ -656,12 +839,10 @@ export function DownloadPage() {
             </Card>
           )}
 
-          <Card title="Options">
+          <Card title="Options" sub={presetNote || undefined} actions={<PresetSelect presets={presets} value={presetName} onChange={choosePreset} />}>
             <OptionsPanel value={opts} onChange={setOpts} video={video} playlist={!!playlist} mode="download" archiveOn={settings?.useArchive} />
             <div className="divider" />
-            <Button variant="ghost" icon="save" onClick={() => void saveAsDefaults()}>
-              Save these options as my defaults
-            </Button>
+            {saveButtons}
           </Card>
 
           {following && playlist && (
@@ -703,6 +884,10 @@ export function DownloadPage() {
             </Button>
           </div>
         </div>
+      )}
+
+      {savingPreset && opts && (
+        <SavePresetDialog presets={presets} initialName={presetName} host={probedUrl && !bulk ? hostOf(probedUrl) : ''} onClose={() => setSavingPreset(false)} onSave={savePreset} />
       )}
     </div>
   )
