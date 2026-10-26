@@ -42,7 +42,8 @@ $out = Join-Path $root 'build\release'
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory $out | Out-Null
 
-Run 'Building Prem-dl.exe' { wails build }
+# -trimpath keeps this PC's folders (and the user name in them) out of the exe.
+Run 'Building Prem-dl.exe' { wails build -trimpath }
 Copy-Item $exe (Join-Path $out 'Prem-dl.exe')
 
 if (-not $SkipFetch -or -not (Test-Path 'bundle\yt-dlp.exe')) {
@@ -50,7 +51,7 @@ if (-not $SkipFetch -or -not (Test-Path 'bundle\yt-dlp.exe')) {
 }
 if (-not (Test-Path 'bundle\ffmpeg.zip')) { throw "bundle\ffmpeg.zip is missing; the installer must carry ffmpeg. Run without -SkipFetch." }
 Run 'Checking the built-in tools unpack' { go test -tags bundled . -run BuiltIn -count=1 }
-Run 'Building Prem-dl-Setup.exe' { wails build -tags bundled -nsis }
+Run 'Building Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis }
 Copy-Item (Join-Path $bin 'Prem-dl-Setup.exe') $out
 # wails fills in its template with this build's values; the template is what's committed.
 git checkout -- build/windows/installer/wails_tools.nsh
