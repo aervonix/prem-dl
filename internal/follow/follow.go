@@ -198,7 +198,7 @@ func (m *Manager) Inspect(raw string) (Target, error) {
 		return Target{}, err
 	}
 	t := Target{URL: link, Tabs: []string{}}
-	if home, tab, ok := youtubeChannel(link); ok && newestFirst(tab) {
+	if home, tab, ok := ytdlp.YoutubeChannel(link); ok && newestFirst(tab) {
 		t.URL, t.Channel = home, true
 		if tab == "" || tab == "featured" {
 			t.Tabs = []string{"videos"}
@@ -637,7 +637,7 @@ func (m *Manager) listFeed(f Feed, newTabs []string) (out []item, name string, e
 		tabs = []string{""}
 	}
 	limit := 0
-	if _, tab, ok := youtubeChannel(f.URL); ok && newestFirst(tab) {
+	if _, tab, ok := ytdlp.YoutubeChannel(f.URL); ok && newestFirst(tab) {
 		limit = checkLimit
 		if !f.Ready {
 			limit = baselineLimit
@@ -724,33 +724,6 @@ func (r *record) trim() {
 }
 
 // ---- links ----
-
-// youtubeChannel recognises a YouTube channel link (/@name, /channel/ID, /c/name, /user/name),
-// returning the channel's home page and the tab the link opens ("" for the home page).
-func youtubeChannel(link string) (home, tab string, ok bool) {
-	u, err := url.Parse(link)
-	if err != nil {
-		return "", "", false
-	}
-	host := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(u.Hostname()), "www."), "m.")
-	if host != "youtube.com" {
-		return "", "", false
-	}
-	segs := strings.FieldsFunc(u.Path, func(r rune) bool { return r == '/' })
-	n := 0
-	switch {
-	case len(segs) >= 1 && strings.HasPrefix(segs[0], "@") && len(segs[0]) > 1:
-		n = 1
-	case len(segs) >= 2 && (segs[0] == "channel" || segs[0] == "c" || segs[0] == "user"):
-		n = 2
-	default:
-		return "", "", false
-	}
-	if len(segs) > n {
-		tab = strings.ToLower(segs[n])
-	}
-	return "https://www.youtube.com/" + strings.Join(segs[:n], "/"), tab, true
-}
 
 // newestFirst reports whether a channel tab lists the newest uploads first.
 func newestFirst(tab string) bool {

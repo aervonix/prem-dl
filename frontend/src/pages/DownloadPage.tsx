@@ -215,7 +215,10 @@ export function DownloadPage() {
           // otherwise be applied to every entry (and fail where they don't have it).
           const d = defaultsRef.current
           if (d) setOpts((o) => (o ? forNewVideo(o, d) : o))
-          setSelected(new Set(res.result.playlist.entries.filter(selectable).map((e) => e.index)))
+          // A playlist opens with everything ticked; a channel with nothing, or Download would take
+          // all it ever posted.
+          const pl = res.result.playlist
+          setSelected(pl.channel ? new Set() : new Set(pl.entries.filter(selectable).map((e) => e.index)))
           setFilter('')
           setRangeFrom('')
           setRangeTo('')
@@ -674,7 +677,11 @@ export function DownloadPage() {
               {problem ? (
                 <span style={{color: 'var(--danger)'}}>{problem}</span>
               ) : playlist ? (
-                `${plural(selectedEntries.length, 'video')} will be added to the queue`
+                selectedEntries.length === 0 ? (
+                  'Tick the videos you want, or Select all'
+                ) : (
+                  `${plural(selectedEntries.length, 'video')} will be added to the queue`
+                )
               ) : video && opts && plannedName(video, opts) ? (
                 <span title={`${opts.outputDir || settings?.downloadDir || ''}\\${plannedName(video, opts)}`}>
                   Saves as <b>{plannedName(video, opts)}</b>

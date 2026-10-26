@@ -108,6 +108,9 @@ type PlaylistInfo struct {
 	URL      string          `json:"url"`
 	Uploader string          `json:"uploader"`
 	Entries  []PlaylistEntry `json:"entries"`
+	// Channel is set for a channel's uploads (or one of its tabs) rather than a playlist someone
+	// put together: nothing is ticked up front, since that would mean everything it ever posted.
+	Channel bool `json:"channel"`
 }
 
 // ProbeResult is what the UI shows after analysing a link.
@@ -178,6 +181,7 @@ type rawInfo struct {
 	WebpageURL string     `json:"webpage_url"`
 	Uploader   string     `json:"uploader"`
 	Channel    string     `json:"channel"`
+	ChannelID  string     `json:"channel_id"`
 	Thumbnail  string     `json:"thumbnail"`
 	Thumbnails []rawThumb `json:"thumbnails"`
 	Duration   float64    `json:"duration"`
@@ -267,6 +271,9 @@ func ParseProbe(data []byte) (*ProbeResult, error) {
 		if pl.URL == "" {
 			pl.URL = raw.URL
 		}
+		// A YouTube channel's link, or (on any site) a listing that is the channel itself.
+		_, _, yt := YoutubeChannel(pl.URL)
+		pl.Channel = yt || (raw.ChannelID != "" && raw.ID == raw.ChannelID)
 		collectEntries(raw.Entries, "", 0, &pl.Entries)
 		for i := range pl.Entries {
 			pl.Entries[i].Index = i + 1
@@ -501,6 +508,33 @@ func readInfo(ctx context.Context, env Env, rawURL string, extra []string) (*Pro
 		res.Video.FileName = name
 	}
 	return res, nil
+}
+
+// YoutubeChannel recognises a YouTube channel link (/@name, /channel/ID, /c/name, /user/name),
+// returning the channel's home page and the tab the link opens ("" for the home page).
+func YoutubeChannel(link string) (home, tab string, ok bool) {
+	u, err := url.Parse(link)
+	if err != nil {
+		return "", "", false
+	}
+	host := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(u.Hostname()), "www."), "m.")
+	if host != "youtube.com" {
+		return "", "", false
+	}
+	segs := strings.FieldsFunc(u.Path, func(r rune) bool { return r == '/' })
+	n := 0
+	switch {
+	case len(segs) >= 1 && strings.HasPrefix(segs[0], "@") && len(segs[0]) > 1:
+		n = 1
+	case len(segs) >= 2 && (segs[0] == "channel" || segs[0] == "c" || segs[0] == "user"):
+		n = 2
+	default:
+		return "", "", false
+	}
+	if len(segs) > n {
+		tab = strings.ToLower(segs[n])
+	}
+	return "https://www.youtube.com/" + strings.Join(segs[:n], "/"), tab, true
 }
 
 // splitProbeOutput separates the MarkName line printed before the JSON from the JSON itself.

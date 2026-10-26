@@ -1095,6 +1095,7 @@ export namespace ytdlp {
 	    url: string;
 	    uploader: string;
 	    entries: PlaylistEntry[];
+	    channel: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new PlaylistInfo(source);
@@ -1107,6 +1108,7 @@ export namespace ytdlp {
 	        this.url = source["url"];
 	        this.uploader = source["uploader"];
 	        this.entries = this.convertValues(source["entries"], PlaylistEntry);
+	        this.channel = source["channel"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

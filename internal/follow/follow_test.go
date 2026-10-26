@@ -133,31 +133,6 @@ const (
 	plLink   = "https://www.youtube.com/playlist?list=PL123"
 )
 
-func TestYoutubeChannel(t *testing.T) {
-	cases := []struct {
-		link, home, tab string
-		ok              bool
-	}{
-		{"https://www.youtube.com/@RickAstleyYT", "https://www.youtube.com/@RickAstleyYT", "", true},
-		{"https://youtube.com/@RickAstleyYT/videos", "https://www.youtube.com/@RickAstleyYT", "videos", true},
-		{"https://m.youtube.com/@x/Shorts?view=0", "https://www.youtube.com/@x", "shorts", true},
-		{"https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw/streams", "https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw", "streams", true},
-		{"https://www.youtube.com/c/name", "https://www.youtube.com/c/name", "", true},
-		{"https://www.youtube.com/user/name/playlists", "https://www.youtube.com/user/name", "playlists", true},
-		{"https://www.youtube.com/playlist?list=PL1", "", "", false},
-		{"https://www.youtube.com/watch?v=dQw4w9WgXcQ", "", "", false},
-		{"https://www.youtube.com/channel", "", "", false},
-		{"https://www.youtube.com/@", "", "", false},
-		{"https://example.com/@someone", "", "", false},
-	}
-	for _, c := range cases {
-		home, tab, ok := youtubeChannel(c.link)
-		if home != c.home || tab != c.tab || ok != c.ok {
-			t.Errorf("youtubeChannel(%q) = %q, %q, %v; want %q, %q, %v", c.link, home, tab, ok, c.home, c.tab, c.ok)
-		}
-	}
-}
-
 func TestInspect(t *testing.T) {
 	m := New(newFake().deps(""))
 	cases := []struct {

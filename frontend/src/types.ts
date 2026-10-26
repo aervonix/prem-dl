@@ -276,6 +276,8 @@ export interface PlaylistInfo {
   url: string
   uploader: string
   entries: PlaylistEntry[]
+  /** A channel's uploads rather than a playlist: it opens with nothing ticked. */
+  channel: boolean
 }
 
 export interface ProbeResult {

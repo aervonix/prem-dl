@@ -898,3 +898,51 @@ func TestUpdateAvailable(t *testing.T) {
 		}
 	}
 }
+
+func TestYoutubeChannel(t *testing.T) {
+	cases := []struct {
+		link, home, tab string
+		ok              bool
+	}{
+		{"https://www.youtube.com/@RickAstleyYT", "https://www.youtube.com/@RickAstleyYT", "", true},
+		{"https://youtube.com/@RickAstleyYT/videos", "https://www.youtube.com/@RickAstleyYT", "videos", true},
+		{"https://m.youtube.com/@x/Shorts?view=0", "https://www.youtube.com/@x", "shorts", true},
+		{"https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw/streams", "https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw", "streams", true},
+		{"https://www.youtube.com/c/name", "https://www.youtube.com/c/name", "", true},
+		{"https://www.youtube.com/user/name/playlists", "https://www.youtube.com/user/name", "playlists", true},
+		{"https://www.youtube.com/playlist?list=PL1", "", "", false},
+		{"https://www.youtube.com/watch?v=dQw4w9WgXcQ", "", "", false},
+		{"https://www.youtube.com/channel", "", "", false},
+		{"https://www.youtube.com/@", "", "", false},
+		{"https://example.com/@someone", "", "", false},
+	}
+	for _, c := range cases {
+		home, tab, ok := YoutubeChannel(c.link)
+		if home != c.home || tab != c.tab || ok != c.ok {
+			t.Errorf("YoutubeChannel(%q) = %q, %q, %v; want %q, %q, %v", c.link, home, tab, ok, c.home, c.tab, c.ok)
+		}
+	}
+}
+
+// Channels start with nothing ticked; playlists with everything. Fields as seen in real probes.
+func TestChannelOrPlaylist(t *testing.T) {
+	cases := []struct {
+		name, json string
+		channel    bool
+	}{
+		{"channel home", `{"_type":"playlist","id":"@RickAstleyYT","channel_id":"UCuAXFkgsw1L7xaCfnd5JJOw","webpage_url":"https://www.youtube.com/@RickAstleyYT","entries":[]}`, true},
+		{"channel tab", `{"_type":"playlist","id":"UCuAXFkgsw1L7xaCfnd5JJOw","channel_id":"UCuAXFkgsw1L7xaCfnd5JJOw","webpage_url":"https://www.youtube.com/@RickAstleyYT/videos","entries":[]}`, true},
+		{"other site's channel", `{"_type":"playlist","id":"u123","channel_id":"u123","webpage_url":"https://example.com/u/123","entries":[]}`, true},
+		{"playlist", `{"_type":"playlist","id":"PLlaN88a7y2_qHDbY9eQbuNTAuEJUSEeuu","channel_id":"UCuAXFkgsw1L7xaCfnd5JJOw","webpage_url":"https://www.youtube.com/playlist?list=PLlaN88a7y2_qHDbY9eQbuNTAuEJUSEeuu","entries":[]}`, false},
+		{"no channel given", `{"_type":"playlist","id":"x","webpage_url":"https://example.com/list/x","entries":[]}`, false},
+	}
+	for _, c := range cases {
+		res, err := ParseProbe([]byte(c.json))
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if res.Playlist.Channel != c.channel {
+			t.Errorf("%s: channel = %v, want %v", c.name, res.Playlist.Channel, c.channel)
+		}
+	}
+}
