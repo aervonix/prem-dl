@@ -120,6 +120,13 @@ func TestClassify(t *testing.T) {
 			code:  "ffmpeg_encoder",
 		},
 		{
+			// Observed: format 774 (Opus in WebM) picked by hand with cover art on. The message
+			// says "Postprocessing", which must not read as ffmpeg missing.
+			name:  "thumbnail in webm (observed)",
+			lines: []string{"ERROR: Postprocessing: Supported filetypes for thumbnail embedding are: mp3, mkv/mka, ogg/opus/flac, m4a/mp4/m4v/mov"},
+			code:  "thumbnail_filetype",
+		},
+		{
 			name:   "format",
 			lines:  []string{"ERROR: [youtube] abc: Requested format is not available. Use --list-formats for a list of available formats"},
 			code:   "format_unavailable",

@@ -31,11 +31,14 @@ type SubtitleOptions struct {
 // DownloadOptions are chosen per download in the UI; Settings.Defaults seeds them.
 type DownloadOptions struct {
 	// Preset is best | 2160 | 1440 | 1080 | 720 | 480 | 360 | audio | custom.
-	Preset       string `json:"preset"`
-	FormatID     string `json:"formatId"`     // yt-dlp -f expression, used when Preset == custom
-	Container    string `json:"container"`    // "" | mp4 | mkv | webm
-	AudioFormat  string `json:"audioFormat"`  // best | mp3 | m4a | opus | flac | wav | aac
-	AudioQuality string `json:"audioQuality"` // "0" (best) .. "10" (worst)
+	Preset   string `json:"preset"`
+	FormatID string `json:"formatId"` // yt-dlp -f expression, used when Preset == custom
+	// FormatAudioOnly: the custom format is audio only. It is saved as an audio file in its own
+	// codec (.opus, .m4a), which can hold cover art, where WebM can't.
+	FormatAudioOnly bool   `json:"formatAudioOnly"`
+	Container       string `json:"container"`    // "" | mp4 | mkv | webm
+	AudioFormat     string `json:"audioFormat"`  // best | mp3 | m4a | opus | flac | wav | aac
+	AudioQuality    string `json:"audioQuality"` // "0" (best) .. "10" (worst)
 
 	Subtitles SubtitleOptions `json:"subtitles"`
 
@@ -230,6 +233,9 @@ func ValidateOptions(o *DownloadOptions) error {
 	o.FormatID = strings.TrimSpace(o.FormatID)
 	if o.Preset == "custom" && o.FormatID == "" {
 		return errors.New("choose a format, or switch to a quality preset")
+	}
+	if o.Preset != "custom" {
+		o.FormatAudioOnly = false
 	}
 	if !oneOf(o.Container, "", "mp4", "mkv", "webm") {
 		o.Container = ""

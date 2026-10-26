@@ -31,7 +31,7 @@ function plannedName(v: VideoInfo, o: DownloadOptions): string {
   if (!v.fileName) return ''
   const dot = v.fileName.lastIndexOf('.')
   const stem = dot > 0 ? v.fileName.slice(0, dot) : v.fileName
-  const ext = o.preset === 'audio' ? (o.audioFormat === 'best' ? '' : o.audioFormat) : o.container
+  const ext = o.preset === 'audio' ? (o.audioFormat === 'best' ? '' : o.audioFormat) : o.preset === 'custom' && o.formatAudioOnly ? '' : o.container
   return ext ? `${stem}.${ext}` : stem
 }
 
@@ -55,7 +55,7 @@ function isVideoInPlaylist(link: string): boolean {
  * makes a default).
  */
 function forNewVideo(o: DownloadOptions, defaults: DownloadOptions): DownloadOptions {
-  const fallback = defaults.preset === 'custom' ? {preset: 'best' as const, formatId: ''} : {preset: defaults.preset, formatId: defaults.formatId}
+  const fallback = defaults.preset === 'custom' ? {preset: 'best' as const, formatId: '', formatAudioOnly: false} : {preset: defaults.preset, formatId: defaults.formatId, formatAudioOnly: false}
   return {...o, sectionStart: '', sectionEnd: '', ignoreArchive: false, liveFromStart: false, audioLang: '', ...(o.preset === 'custom' ? fallback : {})}
 }
 

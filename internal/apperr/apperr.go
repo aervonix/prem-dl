@@ -190,6 +190,16 @@ var rules = []rule{
 			Hint:    "Paste a full link starting with http:// or https://.",
 		}
 	}),
+	// Observed: a format picked by hand (YouTube's 774, Opus in WebM) with cover art on.
+	r(`supported filetypes for thumbnail embedding`, func() AppError {
+		return AppError{
+			Code:    "thumbnail_filetype",
+			Title:   "This file type can't hold cover art",
+			Message: "The download ended up as a file type (such as WebM) that cover art can't be embedded in.",
+			Hint:    "Turn off “Embed cover art”, or choose MP4 or MKV (or an audio format for audio), then download it again.",
+			Action:  ActionNone,
+		}
+	}),
 	// Before ffmpeg_missing: "encoder not found" is ffmpeg present but refusing one step.
 	r(`encoder not found|error selecting an encoder`, func() AppError {
 		return AppError{

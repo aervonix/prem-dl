@@ -254,6 +254,33 @@ func TestNoThumbnailEmbedInWebM(t *testing.T) {
 	}
 }
 
+func TestCustomAudioFormatIsExtracted(t *testing.T) {
+	// Observed: format 774 (Opus in WebM) picked by hand with cover art on stayed a .webm and
+	// failed with "Supported filetypes for thumbnail embedding are: ...".
+	e := testEnv()
+	o := e.Settings.Defaults
+	o.Preset, o.FormatID, o.FormatAudioOnly = "custom", "774", true
+	o.EmbedThumbnail, o.Container = true, "mp4"
+	o.Subtitles = settings.SubtitleOptions{Mode: "embed", Langs: []string{"en"}}
+	args := e.DownloadArgs(o, Target{URL: "https://example.com/v"})
+	for _, want := range []string{"--format=774", "--extract-audio", "--embed-thumbnail"} {
+		if !has(args, want) {
+			t.Errorf("missing %s in %v", want, args)
+		}
+	}
+	for _, unwanted := range []string{"--audio-format=mp3", "--remux-video=mp4", "--merge-output-format=mp4", "--embed-subs"} {
+		if has(args, unwanted) {
+			t.Errorf("%s must not be passed for an audio-only format: %v", unwanted, args)
+		}
+	}
+
+	// A format with video is left as it was.
+	o.FormatAudioOnly = false
+	if args := e.DownloadArgs(o, Target{URL: "https://example.com/v"}); has(args, "--extract-audio") || !has(args, "--remux-video=mp4") {
+		t.Errorf("format with video: %v", args)
+	}
+}
+
 func TestNoSubtitleEmbedInAudio(t *testing.T) {
 	// Observed: --embed-subs into an .m4a, then --embed-metadata, fails with "Error opening output
 	// files: Encoder not found" (the metadata step doesn't copy the mov_text stream).

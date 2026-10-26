@@ -8,7 +8,7 @@ const PER_VIDEO = {sectionStart: '', sectionEnd: '', ignoreArchive: false, liveF
 export function forPreset(o: DownloadOptions): DownloadOptions {
   const out = {...structuredClone(o), ...PER_VIDEO}
   // A format picked from one video's list means nothing for the next.
-  return out.preset === 'custom' ? {...out, preset: 'best', formatId: ''} : out
+  return out.preset === 'custom' ? {...out, preset: 'best', formatId: '', formatAudioOnly: false} : out
 }
 
 /** A preset's options as a fresh form. */

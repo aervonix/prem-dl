@@ -78,10 +78,18 @@ type Target struct {
 // can't, and the post-processor would fail the whole download. (With no container chosen,
 // yt-dlp itself switches video to MKV for this.)
 func thumbnailFits(o settings.DownloadOptions) bool {
-	if o.Preset == "audio" {
+	switch {
+	case o.Preset == "audio":
 		return o.AudioFormat != "wav" && o.AudioFormat != "aac"
+	case customAudio(o):
+		return true // extracted as .opus, .ogg or .m4a
 	}
 	return o.Container != "webm"
+}
+
+// customAudio reports a format picked by hand that has no video.
+func customAudio(o settings.DownloadOptions) bool {
+	return o.Preset == "custom" && o.FormatAudioOnly
 }
 
 // DownloadArgs builds the full yt-dlp command line (without the executable) for one download.
@@ -202,6 +210,11 @@ func FormatArgs(o settings.DownloadOptions) []string {
 		return a
 	case "custom":
 		a = append(a, "--format="+o.FormatID)
+		if o.FormatAudioOnly {
+			// Left alone, YouTube's Opus audio stays a .webm, which can't hold cover art. With no
+			// --audio-format the stream is copied into its own type (.opus, .m4a), not re-encoded.
+			return append(a, "--extract-audio")
+		}
 	case "best", "":
 		a = append(a, "--format="+withAudioLang("bv*+ba/b", o.AudioLang), "--format-sort="+QualitySort)
 	default:
@@ -228,7 +241,7 @@ func FormatArgs(o settings.DownloadOptions) []string {
 // files anyway; "both" still saves them as files.
 func subtitlesFor(o settings.DownloadOptions) settings.SubtitleOptions {
 	s := o.Subtitles
-	if o.Preset != "audio" {
+	if o.Preset != "audio" && !customAudio(o) {
 		return s
 	}
 	switch s.Mode {

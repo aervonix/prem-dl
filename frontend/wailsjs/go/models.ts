@@ -773,6 +773,7 @@ export namespace settings {
 	export class DownloadOptions {
 	    preset: string;
 	    formatId: string;
+	    formatAudioOnly: boolean;
 	    container: string;
 	    audioFormat: string;
 	    audioQuality: string;
@@ -803,6 +804,7 @@ export namespace settings {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.preset = source["preset"];
 	        this.formatId = source["formatId"];
+	        this.formatAudioOnly = source["formatAudioOnly"];
 	        this.container = source["container"];
 	        this.audioFormat = source["audioFormat"];
 	        this.audioQuality = source["audioQuality"];

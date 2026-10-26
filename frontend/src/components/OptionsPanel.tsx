@@ -136,6 +136,9 @@ export function OptionsPanel({
   })()
 
   const isAudio = value.preset === 'audio'
+  // The download is an audio file: "Audio only", or an audio format picked from the list.
+  const audioFile = isAudio || (value.preset === 'custom' && value.formatAudioOnly)
+  const pickFormat = (formatId: string) => onChange({...value, formatId, formatAudioOnly: customFormats.audioOnly.some((f) => expressionFor(f) === formatId)})
   const lossy = ['mp3', 'm4a', 'opus', 'aac'].includes(value.audioFormat)
 
   return (
@@ -194,7 +197,7 @@ export function OptionsPanel({
         {value.preset === 'custom' && video && (
           <div className="stack">
             <Field label="Format" hint="Video-only formats get the best audio stream added automatically.">
-              <select value={value.formatId} onChange={(e) => set('formatId', e.target.value)}>
+              <select value={value.formatId} onChange={(e) => pickFormat(e.target.value)}>
                 <option value="">Choose a format…</option>
                 {customFormats.both.length > 0 && (
                   <optgroup label="Video + audio">
@@ -226,12 +229,14 @@ export function OptionsPanel({
               </select>
             </Field>
             <Field label="Format expression" hint="Advanced: edit the yt-dlp -f expression directly.">
-              <input type="text" className="mono" value={value.formatId} onChange={(e) => set('formatId', e.target.value)} spellCheck={false} />
+              <input type="text" className="mono" value={value.formatId} onChange={(e) => pickFormat(e.target.value)} spellCheck={false} />
             </Field>
           </div>
         )}
 
-        {!isAudio && (
+        {value.preset === 'custom' && value.formatAudioOnly && <div className="hint">Saved as an audio file in its own format (.opus or .m4a), without converting it.</div>}
+
+        {!audioFile && (
           <Field label="Container" hint="Auto picks what suits the codecs. MP4 plays everywhere; MKV holds anything.">
             <Segmented
               label="Container"
@@ -264,7 +269,7 @@ export function OptionsPanel({
           ]}
           onChange={(v: SubMode) => setSub({mode: v})}
         />
-        {isAudio && (sub.mode === 'embed' || sub.mode === 'both') && (
+        {audioFile && (sub.mode === 'embed' || sub.mode === 'both') && (
           <div className="hint">
             {sub.mode === 'embed'
               ? "Audio files don't get embedded subtitles, so none are downloaded. Choose Save as file to keep them."
@@ -365,11 +370,11 @@ export function OptionsPanel({
               <Switch checked={value.embedMetadata} onChange={(v) => set('embedMetadata', v)} label="Embed metadata" description="Title, artist, date and description inside the file" />
               <Switch checked={value.embedChapters} onChange={(v) => set('embedChapters', v)} label="Embed chapters" description="Chapter markers where the video has them" />
               <Switch
-                checked={value.embedThumbnail && !(value.container === 'webm' && !isAudio)}
-                disabled={value.container === 'webm' && !isAudio}
+                checked={value.embedThumbnail && !(value.container === 'webm' && !audioFile)}
+                disabled={value.container === 'webm' && !audioFile}
                 onChange={(v) => set('embedThumbnail', v)}
                 label="Embed cover art"
-                description={value.container === 'webm' && !isAudio ? "WebM files can't hold cover art. Pick Auto, MP4 or MKV." : "Thumbnail as the file's cover image"}
+                description={value.container === 'webm' && !audioFile ? "WebM files can't hold cover art. Pick Auto, MP4 or MKV." : "Thumbnail as the file's cover image"}
               />
               <Switch checked={value.writeThumbnail} onChange={(v) => set('writeThumbnail', v)} label="Save thumbnail file" />
               <Switch checked={value.writeDescription} onChange={(v) => set('writeDescription', v)} label="Save description (.description)" />
