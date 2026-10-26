@@ -98,7 +98,7 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	a = append(a, "--trim-filenames=180")
 
 	a = append(a, FormatArgs(o)...)
-	a = append(a, SubtitleArgs(o.Subtitles)...)
+	a = append(a, SubtitleArgs(subtitlesFor(o))...)
 
 	if o.EmbedMetadata {
 		a = append(a, "--embed-metadata")
@@ -220,6 +220,24 @@ func FormatArgs(o settings.DownloadOptions) []string {
 		a = append(a, "--merge-output-format="+o.Container, "--remux-video="+o.Container)
 	}
 	return a
+}
+
+// subtitlesFor leaves embedding out of audio downloads. yt-dlp embeds subtitles in .m4a as a
+// mov_text stream, then its metadata step copies only the audio codec, and ffmpeg fails the
+// download with "Encoder not found" (observed with ffmpeg 9). Players ignore subtitles in audio
+// files anyway; "both" still saves them as files.
+func subtitlesFor(o settings.DownloadOptions) settings.SubtitleOptions {
+	s := o.Subtitles
+	if o.Preset != "audio" {
+		return s
+	}
+	switch s.Mode {
+	case "embed":
+		s.Mode = "none"
+	case "both":
+		s.Mode = "files"
+	}
+	return s
 }
 
 // SubtitleArgs maps subtitle options onto flags. Embed-only mode omits --write-subs: with it

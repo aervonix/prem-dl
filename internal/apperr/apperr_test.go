@@ -97,6 +97,18 @@ func TestClassify(t *testing.T) {
 			action: ActionInstallFFmp,
 		},
 		{
+			// Observed: subtitles embedded in an .m4a, then --embed-metadata (ffmpeg 9.0.2).
+			name:  "ffmpeg encoder (observed)",
+			lines: []string{"[Metadata] Adding metadata to \"x.m4a\"", "ERROR: Postprocessing: Error opening output files: Encoder not found"},
+			code:  "ffmpeg_encoder",
+		},
+		{
+			// With -v the traceback names the ffmpeg module, which must not read as ffmpeg missing.
+			name:  "ffmpeg encoder, verbose",
+			lines: []string{"ERROR: Postprocessing: Error opening output files: Encoder not found", "ERROR: yt_dlp.postprocessor.ffmpeg.FFmpegPostProcessorError: Error opening output files: Encoder not found"},
+			code:  "ffmpeg_encoder",
+		},
+		{
 			name:   "format",
 			lines:  []string{"ERROR: [youtube] abc: Requested format is not available. Use --list-formats for a list of available formats"},
 			code:   "format_unavailable",

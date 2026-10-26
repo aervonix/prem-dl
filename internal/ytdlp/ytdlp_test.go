@@ -254,6 +254,28 @@ func TestNoThumbnailEmbedInWebM(t *testing.T) {
 	}
 }
 
+func TestNoSubtitleEmbedInAudio(t *testing.T) {
+	// Observed: --embed-subs into an .m4a, then --embed-metadata, fails with "Error opening output
+	// files: Encoder not found" (the metadata step doesn't copy the mov_text stream).
+	e := testEnv()
+	o := e.Settings.Defaults
+	o.Preset, o.AudioFormat = "audio", "m4a"
+	o.Subtitles = settings.SubtitleOptions{Mode: "embed", Langs: []string{"en"}}
+	args := e.DownloadArgs(o, Target{URL: "https://example.com/v"})
+	if has(args, "--embed-subs") || has(args, "--write-subs") || has(args, "--sub-langs=en") {
+		t.Errorf("embed-only subtitles on an audio download should download nothing: %v", args)
+	}
+	o.Subtitles.Mode = "both"
+	args = e.DownloadArgs(o, Target{URL: "https://example.com/v"})
+	if has(args, "--embed-subs") || !has(args, "--write-subs") {
+		t.Errorf("'both' on an audio download should still save the files: %v", args)
+	}
+	o.Preset, o.Subtitles.Mode = "best", "embed"
+	if !has(e.DownloadArgs(o, Target{URL: "https://example.com/v"}), "--embed-subs") {
+		t.Error("video downloads still embed subtitles")
+	}
+}
+
 func TestAudioLanguage(t *testing.T) {
 	// Each was checked against yt-dlp on a dubbed video (0e3GPea1Tyg): "de" picks 251-2 (German)
 	// and an unknown language falls back to the default track.

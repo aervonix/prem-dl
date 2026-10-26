@@ -170,6 +170,16 @@ var rules = []rule{
 			Hint:    "Paste a full link starting with http:// or https://.",
 		}
 	}),
+	// Before ffmpeg_missing: "encoder not found" is ffmpeg present but refusing one step.
+	r(`encoder not found|error selecting an encoder`, func() AppError {
+		return AppError{
+			Code:    "ffmpeg_encoder",
+			Title:   "ffmpeg couldn't finish the file",
+			Message: "One of the steps after downloading (embedding subtitles, a thumbnail or metadata, or converting) asked ffmpeg for something it can't do with this kind of file.",
+			Hint:    "Try again with less embedded, or with a different container or audio format.",
+			Action:  ActionNone,
+		}
+	}),
 	r(`ffmpeg.*(not found|not installed|is not available)|ffprobe.*not found|requires ffmpeg|ffmpeg or avconv|postprocessing:.*ffmpeg`, func() AppError {
 		return AppError{
 			Code:    "ffmpeg_missing",

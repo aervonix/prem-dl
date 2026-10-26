@@ -260,6 +260,13 @@ export function OptionsPanel({
           ]}
           onChange={(v: SubMode) => setSub({mode: v})}
         />
+        {isAudio && (sub.mode === 'embed' || sub.mode === 'both') && (
+          <div className="hint">
+            {sub.mode === 'embed'
+              ? "Audio files don't get embedded subtitles, so none are downloaded. Choose Save as file to keep them."
+              : "Audio files don't get embedded subtitles, so they're only saved as files."}
+          </div>
+        )}
         {sub.mode !== 'none' && (
           <div className="stack">
             <div>
