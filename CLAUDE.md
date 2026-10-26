@@ -18,7 +18,7 @@ go test -tags bundled . -run BuiltIn             # the embedded tools unpack and
 .\scripts\release.ps1     # build\release: Prem-dl.exe (plain) + Prem-dl-Setup.exe (NSIS, bundled) + SHA256SUMS
 go test ./...             # offline unit tests (~10 s)
 go vet ./...; gofmt -l app.go main.go tools.go internal
-cd frontend; npx tsc --noEmit
+cd frontend; npx tsc --noEmit; npm test             # vitest: format.ts, store.tsx reducers + provider
 wails generate module     # REQUIRED after changing any Go struct that crosses to the UI
 # opt-in tests against real yt-dlp + internet:
 $env:YTGUI_INTEGRATION="1"; $env:YTGUI_YTDLP="C:\Code\yt-dlp-gui\yt-dlp.exe"
@@ -45,6 +45,9 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - `chromehelper/` – the unpacked extension (cookies, toolbar button, right-click menu); embedded in the exe.
 - `frontend/src` – `api.ts` is the ONLY file that calls Go; `types.ts` mirrors the Go JSON by hand;
   `store.tsx` is the reducer fed by backend events; `pages/`, `components/`, one `styles.css`.
+  `pages/settings/` holds one component per Settings tab (all stay mounted, hidden when not shown);
+  `SettingsPage.tsx` owns the draft and the save bar. Tests sit next to their file (`*.test.ts[x]`) and
+  mock `./api` (see `store.test.tsx`).
 
 ## Conventions
 

@@ -15,7 +15,7 @@ export interface Toast {
   action?: {label: string; run: () => void}
 }
 
-interface State {
+export interface State {
   ready: boolean
   loadError: string
   version: string
@@ -58,7 +58,7 @@ const emptyTools: ToolStatus = {
   upToDate: false,
 }
 
-const initial: State = {
+export const initial: State = {
   ready: false,
   loadError: '',
   version: '',
@@ -81,7 +81,7 @@ const initial: State = {
   droppedCookies: null,
 }
 
-type Action =
+export type Action =
   | {type: 'init'; state: AppState}
   | {type: 'initFailed'; error: string}
   | {type: 'jobs'; jobs: Job[]}
@@ -105,7 +105,7 @@ type Action =
 
 // Jobs live in their own reducer and context: they change several times a second while
 // downloading, and only the queue, sidebar and banners need them.
-function jobsReducer(s: Record<string, Job>, a: Action): Record<string, Job> {
+export function jobsReducer(s: Record<string, Job>, a: Action): Record<string, Job> {
   switch (a.type) {
     case 'init': {
       const jobs: Record<string, Job> = {}
@@ -127,7 +127,7 @@ function jobsReducer(s: Record<string, Job>, a: Action): Record<string, Job> {
   }
 }
 
-function reducer(s: State, a: Action): State {
+export function reducer(s: State, a: Action): State {
   switch (a.type) {
     case 'init':
       return {
