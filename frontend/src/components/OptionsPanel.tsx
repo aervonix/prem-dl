@@ -73,6 +73,7 @@ export function OptionsPanel({
   playlist,
   mode,
   archiveOn,
+  feed,
 }: {
   value: DownloadOptions
   onChange: (v: DownloadOptions) => void
@@ -81,6 +82,8 @@ export function OptionsPanel({
   mode: 'download' | 'defaults'
   /** "Remember downloaded videos" is on, so this download can choose to ignore it. */
   archiveOn?: boolean
+  /** Options for a followed channel or playlist: its new uploads, which have no position to number. */
+  feed?: boolean
 }) {
   const set = <K extends keyof DownloadOptions>(k: K, v: DownloadOptions[K]) => onChange({...value, [k]: v})
   const [extrasOpen, setExtrasOpen] = useState(mode === 'defaults')
@@ -455,7 +458,13 @@ export function OptionsPanel({
               </div>
             )}
 
-            {playlist || mode === 'defaults' ? (
+            {feed ? (
+              <Switch
+                checked={value.playlistFolder}
+                onChange={(v) => set('playlistFolder', v)}
+                label="Put them in a folder named after the channel or playlist"
+              />
+            ) : playlist || mode === 'defaults' ? (
               <div className="grid2">
                 <Switch checked={value.playlistFolder} onChange={(v) => set('playlistFolder', v)} label="Put playlists in their own folder" />
                 <Switch checked={value.playlistNumbering} onChange={(v) => set('playlistNumbering', v)} label="Number files by playlist position" description="01 - Title, 02 - Title…" />
@@ -486,7 +495,11 @@ export function OptionsPanel({
                 checked={value.ignoreArchive}
                 onChange={(v) => set('ignoreArchive', v)}
                 label="Download again even if already downloaded"
-                description="“Remember downloaded videos” is on, so videos downloaded before are skipped. This downloads them anyway."
+                description={
+                  feed
+                    ? '“Remember downloaded videos” is on, so new uploads you already downloaded are skipped. This downloads them anyway.'
+                    : '“Remember downloaded videos” is on, so videos downloaded before are skipped. This downloads them anyway.'
+                }
               />
             )}
           </div>

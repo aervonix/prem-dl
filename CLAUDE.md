@@ -29,6 +29,8 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - `internal/ytdlp` – binary resolve/install/update, probe, `args.go` (option -> flags), `progress.go`
   (line parser + multi-stream `Tracker`), cookie file inspect/import.
 - `internal/queue` – scheduler, process control, persistence (`queue.json`), batched UI events.
+- `internal/follow` – followed channels/playlists (`feeds.json`): baseline of what's there, periodic
+  checks that queue unseen video IDs. Deps are injected like `queue`; `following.go` wires them.
 - `internal/settings` – `Settings` + `DownloadOptions`, validation, atomic writes. Data lives in `%APPDATA%\yt-dlp-gui`.
 - `internal/sys` – hidden consoles, process-tree kill (`taskkill /T`), open/reveal in Explorer, the tray
   icon + taskbar progress (`shell_windows.go`, raw Win32/COM on its own thread), per-user registry entries.
@@ -76,6 +78,12 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - Chrome/Edge cookies fail on Windows (`Failed to decrypt with DPAPI`, yt-dlp#10927). Firefox or cookies.txt work.
 - YouTube needs a JS runtime; only deno is on by default, so detected node/bun/quickjs are passed via `--js-runtimes`.
 - A `null` playlist entry unmarshals into a zeroed struct without error; check for it explicitly.
+- Channel tabs (`/videos`, `/shorts`, `/streams`) list newest first and `--playlist-end` applies per
+  nested tab, so follow checks read the top 50; playlists append at the end and are read in full.
+  Flat entries carry `live_status`; upcoming/live ones aren't marked seen so they're queued once over.
+- A missing tab is `This channel does not have a shorts tab` (`no_tab`, skipped when other tabs are
+  checked). A wrong/deleted channel says `Playlists that require authentication may not extract
+  correctly...`, not 404 (`page_unreadable`, matched before the generic sign-in rule).
 
 **Wails / Go**
 - Wails runtime helpers (`ClipboardGetText`, dialogs, ...) call `log.Fatal` on a nil/bad context, killing

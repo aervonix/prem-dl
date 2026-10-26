@@ -102,6 +102,7 @@ type Settings struct {
 	NotifySystem        bool            `json:"notifySystem"`     // a Windows notification when one finishes while the app is in the background
 	CloseToTray         bool            `json:"closeToTray"`      // closing the window keeps the app running in the tray
 	StartWithWindows    bool            `json:"startWithWindows"` // start in the tray when the user signs in
+	FollowEvery         int             `json:"followEvery"`      // hours between checks of followed channels; 0 = only when asked
 	ExtraArgs           string          `json:"extraArgs"`
 	Defaults            DownloadOptions `json:"defaults"`
 }
@@ -127,6 +128,7 @@ func Default() Settings {
 		NotifySound:         true,
 		NotifyPopup:         true,
 		NotifySystem:        true,
+		FollowEvery:         6,
 		Defaults: DownloadOptions{
 			Preset:            "best",
 			AudioFormat:       "mp3",
@@ -140,6 +142,9 @@ func Default() Settings {
 		},
 	}
 }
+
+// FollowIntervals are the choices for Settings.FollowEvery, in hours.
+var FollowIntervals = map[int]bool{0: true, 1: true, 3: true, 6: true, 12: true, 24: true}
 
 var (
 	rateLimitRe = regexp.MustCompile(`^\d+(\.\d+)?[KkMmGg]?$`)
@@ -291,6 +296,9 @@ func (s *Settings) Validate() error {
 	}
 	if !oneOf(s.Theme, "system", "light", "dark") {
 		s.Theme = "system"
+	}
+	if !FollowIntervals[s.FollowEvery] {
+		return errors.New("choose how often to check followed channels from the list")
 	}
 	return ValidateOptions(&s.Defaults)
 }

@@ -27,6 +27,125 @@ export namespace apperr {
 
 }
 
+export namespace follow {
+	
+	export class Feed {
+	    id: string;
+	    url: string;
+	    title: string;
+	    uploader: string;
+	    tabs: string[];
+	    options: settings.DownloadOptions;
+	    paused: boolean;
+	    addedAt: string;
+	    lastCheck: string;
+	    lastFound: string;
+	    lastNew: number;
+	    queued: number;
+	    ready: boolean;
+	    checking: boolean;
+	    error?: apperr.AppError;
+	
+	    static createFrom(source: any = {}) {
+	        return new Feed(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.url = source["url"];
+	        this.title = source["title"];
+	        this.uploader = source["uploader"];
+	        this.tabs = source["tabs"];
+	        this.options = this.convertValues(source["options"], settings.DownloadOptions);
+	        this.paused = source["paused"];
+	        this.addedAt = source["addedAt"];
+	        this.lastCheck = source["lastCheck"];
+	        this.lastFound = source["lastFound"];
+	        this.lastNew = source["lastNew"];
+	        this.queued = source["queued"];
+	        this.ready = source["ready"];
+	        this.checking = source["checking"];
+	        this.error = this.convertValues(source["error"], apperr.AppError);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class NewFeed {
+	    url: string;
+	    title: string;
+	    uploader: string;
+	    tabs: string[];
+	    options: settings.DownloadOptions;
+	
+	    static createFrom(source: any = {}) {
+	        return new NewFeed(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.title = source["title"];
+	        this.uploader = source["uploader"];
+	        this.tabs = source["tabs"];
+	        this.options = this.convertValues(source["options"], settings.DownloadOptions);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Target {
+	    url: string;
+	    channel: boolean;
+	    tabs: string[];
+	    followed: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Target(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.url = source["url"];
+	        this.channel = source["channel"];
+	        this.tabs = source["tabs"];
+	        this.followed = source["followed"];
+	    }
+	}
+
+}
+
 export namespace main {
 	
 	export class ToolStatus {
@@ -79,6 +198,7 @@ export namespace main {
 	    version: string;
 	    settings: settings.Settings;
 	    jobs: queue.Job[];
+	    feeds: follow.Feed[];
 	    tools: ToolStatus;
 	    dataDir: string;
 	    openLink: string;
@@ -92,6 +212,7 @@ export namespace main {
 	        this.version = source["version"];
 	        this.settings = this.convertValues(source["settings"], settings.Settings);
 	        this.jobs = this.convertValues(source["jobs"], queue.Job);
+	        this.feeds = this.convertValues(source["feeds"], follow.Feed);
 	        this.tools = this.convertValues(source["tools"], ToolStatus);
 	        this.dataDir = source["dataDir"];
 	        this.openLink = source["openLink"];
@@ -269,6 +390,38 @@ export namespace main {
 	        this.error = source["error"];
 	    }
 	}
+	export class FeedResponse {
+	    feed?: follow.Feed;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FeedResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.feed = this.convertValues(source["feed"], follow.Feed);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class ProbeResponse {
 	    result?: ytdlp.ProbeResult;
@@ -315,6 +468,38 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.settings = this.convertValues(source["settings"], settings.Settings);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TargetResponse {
+	    target: follow.Target;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TargetResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.target = this.convertValues(source["target"], follow.Target);
 	        this.error = source["error"];
 	    }
 	
@@ -653,6 +838,7 @@ export namespace settings {
 	    notifySystem: boolean;
 	    closeToTray: boolean;
 	    startWithWindows: boolean;
+	    followEvery: number;
 	    extraArgs: string;
 	    defaults: DownloadOptions;
 	
@@ -687,6 +873,7 @@ export namespace settings {
 	        this.notifySystem = source["notifySystem"];
 	        this.closeToTray = source["closeToTray"];
 	        this.startWithWindows = source["startWithWindows"];
+	        this.followEvery = source["followEvery"];
 	        this.extraArgs = source["extraArgs"];
 	        this.defaults = this.convertValues(source["defaults"], DownloadOptions);
 	    }
@@ -875,6 +1062,10 @@ export namespace ytdlp {
 	    group: string;
 	    unavailable: boolean;
 	    isPlaylist: boolean;
+	    liveStatus: string;
+	    extractor: string;
+	    viewCount: number;
+	    timestamp: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new PlaylistEntry(source);
@@ -892,6 +1083,10 @@ export namespace ytdlp {
 	        this.group = source["group"];
 	        this.unavailable = source["unavailable"];
 	        this.isPlaylist = source["isPlaylist"];
+	        this.liveStatus = source["liveStatus"];
+	        this.extractor = source["extractor"];
+	        this.viewCount = source["viewCount"];
+	        this.timestamp = source["timestamp"];
 	    }
 	}
 	export class PlaylistInfo {

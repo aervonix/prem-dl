@@ -7,6 +7,7 @@ import {Spinner} from './components/ui'
 import {Icon} from './icons'
 import type {IconName} from './icons'
 import {DownloadPage} from './pages/DownloadPage'
+import {FollowingPage} from './pages/FollowingPage'
 import {QueuePage} from './pages/QueuePage'
 import {SettingsPage} from './pages/SettingsPage'
 import {AppProvider, useApp, useJobs} from './store'
@@ -15,6 +16,7 @@ import type {Page} from './store'
 const NAV: {page: Page; label: string; icon: IconName}[] = [
   {page: 'download', label: 'Download', icon: 'download'},
   {page: 'queue', label: 'Queue', icon: 'list'},
+  {page: 'following', label: 'Following', icon: 'bell'},
   {page: 'settings', label: 'Settings', icon: 'settings'},
 ]
 
@@ -66,11 +68,11 @@ function Sidebar() {
 function Shell() {
   const {state, go} = useApp()
 
-  // Ctrl+1/2/3 jump between pages.
+  // Ctrl+1/2/3/4 jump between pages.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.shiftKey) return
-      const i = ['1', '2', '3'].indexOf(e.key)
+      const i = NAV.findIndex((_, n) => e.key === String(n + 1))
       if (i >= 0) {
         e.preventDefault()
         go(NAV[i].page)
@@ -107,6 +109,10 @@ function Shell() {
         </div>
         <div className="page" hidden={state.page !== 'queue'}>
           {state.page === 'queue' && <QueuePage />}
+        </div>
+        {/* Following stays mounted too: a channel open with videos ticked survives a look at the queue. */}
+        <div className="page" hidden={state.page !== 'following'}>
+          <FollowingPage />
         </div>
         <div className="page" hidden={state.page !== 'settings'}>
           <SettingsPage />

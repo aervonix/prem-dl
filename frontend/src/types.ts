@@ -94,6 +94,8 @@ export interface Settings {
   closeToTray: boolean
   /** Start in the tray when the user signs in to Windows. */
   startWithWindows: boolean
+  /** Hours between checks of followed channels and playlists: 0 (only when asked), 1, 3, 6, 12 or 24. */
+  followEvery: number
   extraArgs: string
   defaults: DownloadOptions
 }
@@ -185,6 +187,7 @@ export interface AppState {
   version: string
   settings: Settings
   jobs: Job[]
+  feeds: Feed[]
   tools: ToolStatus
   dataDir: string
   /** A link the app was started with (a prem-dl: link from the Chrome helper), for the Download page. */
@@ -257,6 +260,14 @@ export interface PlaylistEntry {
   unavailable: boolean
   /** The entry is itself a playlist (e.g. on a channel's Playlists tab); open it to pick videos. */
   isPlaylist: boolean
+  /** yt-dlp's live_status where the listing gives it: is_upcoming, is_live, was_live, not_live or ''. */
+  liveStatus: string
+  /** The extractor that handles the link (Youtube); '' when unknown. */
+  extractor: string
+  /** 0 when the listing doesn't say. */
+  viewCount: number
+  /** Upload time in Unix seconds; 0 when unknown. */
+  timestamp: number
 }
 
 export interface PlaylistInfo {
@@ -357,4 +368,69 @@ export interface ArchiveInfo {
   /** Videos the download archive lists. */
   count: number
   error: string
+}
+
+export type ChannelTab = 'videos' | 'shorts' | 'streams'
+
+/** A followed channel or playlist (follow.Feed). */
+export interface Feed {
+  id: string
+  /** A YouTube channel's home page when tabs is set. */
+  url: string
+  title: string
+  uploader: string
+  /** The YouTube channel tabs checked; empty for anything else, whose url is checked as it is. */
+  tabs: ChannelTab[]
+  options: DownloadOptions
+  paused: boolean
+  addedAt: string
+  /** When the last check ended; Go's zero time (year 1) before the first. */
+  lastCheck: string
+  lastFound: string
+  /** Videos the last check queued. */
+  lastNew: number
+  /** Videos queued since following. */
+  queued: number
+  /** The videos already there when it was followed have been noted (they aren't downloaded). */
+  ready: boolean
+  checking: boolean
+  /** Why the last check failed; null when it worked. */
+  error: AppError | null
+}
+
+export interface NewFeed {
+  url: string
+  title: string
+  uploader: string
+  tabs: ChannelTab[]
+  options: DownloadOptions
+}
+
+/** How a link would be followed (follow.Target). */
+export interface FeedTarget {
+  url: string
+  /** A YouTube channel: it chooses which tabs to check; tabs is the suggestion. */
+  channel: boolean
+  tabs: ChannelTab[]
+  /** ID of the feed already following it, or ''. */
+  followed: string
+}
+
+export interface FeedResponse {
+  feed: Feed | null
+  error: string
+}
+
+export interface TargetResponse {
+  target: FeedTarget
+  error: string
+}
+
+/** Sent as "feeds:found" when a check queues new videos. */
+export interface FeedFound {
+  feedId: string
+  title: string
+  count: number
+  /** Titles of the first few. */
+  videos: string[]
 }

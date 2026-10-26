@@ -1,9 +1,11 @@
 import {createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef} from 'react'
 import type {ReactNode} from 'react'
 import {api, errMessage, on} from './api'
-import type {AppState, Job, Settings, ToolStatus, UpdateInfo, UpdateResult} from './types'
+import {plural} from './format'
+import type {AppState, Feed, Job, Settings, ToolStatus, UpdateInfo, UpdateResult} from './types'
 
-export type Page = 'download' | 'queue' | 'settings'
+export type Page = 'download' | 'queue' | 'following' | 'settings'
+const PAGES: Page[] = ['download', 'queue', 'following', 'settings']
 export type ToastKind = 'info' | 'success' | 'error'
 
 export interface Toast {
@@ -19,6 +21,8 @@ interface State {
   version: string
   dataDir: string
   settings: Settings | null
+  /** Followed channels and playlists. */
+  feeds: Feed[]
   tools: ToolStatus
   toolProgress: {done: number; total: number} | null
   /** Set while ffmpeg is being installed. */
@@ -54,6 +58,7 @@ const initial: State = {
   version: '',
   dataDir: '',
   settings: null,
+  feeds: [],
   tools: emptyTools,
   toolProgress: null,
   ffmpegProgress: null,
@@ -76,6 +81,7 @@ type Action =
   | {type: 'toolProgress'; p: State['toolProgress']}
   | {type: 'ffmpegProgress'; p: State['ffmpegProgress']}
   | {type: 'settings'; settings: Settings}
+  | {type: 'feeds'; feeds: Feed[]}
   | {type: 'updateAvailable'; info: UpdateInfo | null}
   | {type: 'autoUpdated'; res: UpdateResult | null}
   | {type: 'dismiss'; key: string}
@@ -118,6 +124,7 @@ function reducer(s: State, a: Action): State {
         version: a.state.version,
         dataDir: a.state.dataDir,
         settings: a.state.settings,
+        feeds: a.state.feeds,
         tools: a.state.tools,
         ...(a.state.openLink ? {page: 'download' as const, incoming: {links: [a.state.openLink], n: (s.incoming?.n ?? 0) + 1}} : {}),
       }
@@ -134,6 +141,8 @@ function reducer(s: State, a: Action): State {
       return {...s, ffmpegProgress: a.p}
     case 'settings':
       return {...s, settings: a.settings}
+    case 'feeds':
+      return {...s, feeds: a.feeds}
     case 'updateAvailable':
       return {...s, updateAvailable: a.info}
     case 'autoUpdated':
@@ -230,9 +239,13 @@ export function AppProvider({children}: {children: ReactNode}) {
       on('tools:update-available', (info) => dispatch({type: 'updateAvailable', info})),
       on('tools:auto-updated', (res) => dispatch({type: 'autoUpdated', res})),
       on('settings:changed', (settings) => dispatch({type: 'settings', settings})),
+      on('feeds:update', (feeds) => dispatch({type: 'feeds', feeds})),
+      on('feeds:found', (f) =>
+        toast('info', `${plural(f.count, 'new video')} from ${f.title} added to the queue`, {label: 'View queue', run: () => dispatch({type: 'page', page: 'queue'})}),
+      ),
       on('app:open-url', (url) => dispatch({type: 'incoming', links: [url]})),
       on('app:navigate', (page) => {
-        if (page === 'download' || page === 'queue' || page === 'settings') dispatch({type: 'page', page})
+        if ((PAGES as string[]).includes(page)) dispatch({type: 'page', page: page as Page})
       }),
       on('app:error', (msg) => toast('error', msg)),
     ]

@@ -12,9 +12,16 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
 
 - **Look before you download.** Every link is analysed first, so you see the title, channel, length,
   available resolutions and subtitle languages before anything is saved.
-- **Playlists and channels.** You get a checklist of every video with select all, invert, a number
-  range and a title filter. A channel's Playlists tab lists its playlists so you can open the one you
+- **Playlists and channels.** Every video shows as a thumbnail grid, the way YouTube lays out a
+  channel, with a checkbox on each (Shift+click ticks a run); a compact list is one click away.
+  There's select all, invert, a number range and a title filter. A channel's Playlists tab lists its playlists so you can open the one you
   want. Downloads can go into a folder per playlist, numbered in order.
+- **Follow channels and playlists.** Follow a YouTube channel (its Videos, Shorts or Live tabs) or
+  any playlist, and Prem-dl checks it every few hours and queues new uploads with the options you
+  chose, even from the tray. What's already there isn't downloaded; streams wait until they've
+  ended, and videos you downloaded before are skipped when "Remember downloaded videos" is on.
+  Open a followed channel to browse its Videos, Shorts and Live tabs and tick older videos to
+  download; ones already downloaded or in the queue are marked.
 - **Lots of links at once.** Paste several links, one per line, and they're all queued. Playlists are
   expanded for you. You can also drop links, or a `.txt` file of them, anywhere on the window.
 - **Send links from Chrome.** With the helper extension, right-click a page or a link and choose

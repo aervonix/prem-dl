@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -90,6 +91,14 @@ type PlaylistEntry struct {
 	// as plain links). It has to be analysed on its own; queued as a video it would download the
 	// whole playlist as one job.
 	IsPlaylist bool `json:"isPlaylist"`
+	// LiveStatus is yt-dlp's live_status where the listing gives it: is_upcoming, is_live,
+	// was_live, not_live, or "".
+	LiveStatus string `json:"liveStatus"`
+	// Extractor is the extractor that handles URL (Youtube), as the download archive names it
+	// in lower case; "" when the listing doesn't say.
+	Extractor string `json:"extractor"`
+	ViewCount int64  `json:"viewCount"` // 0 when the listing doesn't say
+	Timestamp int64  `json:"timestamp"` // upload time, Unix seconds; 0 when unknown
 }
 
 // PlaylistInfo describes a playlist, channel or similar collection.
@@ -174,9 +183,11 @@ type rawInfo struct {
 	Duration   float64    `json:"duration"`
 	UploadDate string     `json:"upload_date"`
 	ViewCount  float64    `json:"view_count"`
+	Timestamp  float64    `json:"timestamp"`
 	IsLive     bool       `json:"is_live"`
 	Extractor  string     `json:"extractor_key"`
 	IEKey      string     `json:"ie_key"` // flat entries: the extractor that will handle URL
+	LiveStatus string     `json:"live_status"`
 
 	Availability string `json:"availability"`
 
@@ -288,7 +299,8 @@ func collectEntries(entries []json.RawMessage, group string, depth int, out *[]P
 		entry := PlaylistEntry{
 			ID: r.ID, Title: r.Title, URL: u, Uploader: r.uploader(),
 			Thumbnail: pickThumb(&r, thumbSmall), Duration: r.Duration, Group: group,
-			IsPlaylist: isCollection(&r, u),
+			IsPlaylist: isCollection(&r, u), LiveStatus: r.LiveStatus, Extractor: r.IEKey,
+			ViewCount: int64(r.ViewCount), Timestamp: int64(r.Timestamp),
 		}
 		if entry.Title == "" {
 			entry.Title = entry.ID
@@ -422,6 +434,30 @@ func tracks(m map[string][]rawSub, auto bool) []SubtitleTrack {
 
 // Probe analyses a link without downloading it. Failures are *apperr.AppError.
 func Probe(ctx context.Context, env Env, rawURL string, noPlaylist bool) (*ProbeResult, error) {
+	// The default format choice in the JSON is what "Best" downloads, so rank it the same way.
+	args := []string{"--format-sort=" + QualitySort}
+	if noPlaylist {
+		args = append(args, "--no-playlist")
+	}
+	// The filename a download would get, with the same template and trimming. It's printed
+	// as its own line before the JSON (yt-dlp leaves it out of the JSON).
+	args = append(args, "--output="+OutputTemplate(env.Settings.FilenameTemplate, settings.DownloadOptions{}, Target{}),
+		"--trim-filenames=180", "--print=video:"+MarkName+"%(filename)s")
+	return readInfo(ctx, env, rawURL, args)
+}
+
+// List reads the entries of a playlist or channel, at most limit of them per playlist (0 means
+// all), without analysing each video. A link to a single video comes back as Kind "video".
+func List(ctx context.Context, env Env, rawURL string, limit int) (*ProbeResult, error) {
+	var args []string
+	if limit > 0 {
+		args = append(args, "--playlist-end="+strconv.Itoa(limit))
+	}
+	return readInfo(ctx, env, rawURL, args)
+}
+
+// readInfo runs yt-dlp -J --flat-playlist with extra arguments and parses its answer.
+func readInfo(ctx context.Context, env Env, rawURL string, extra []string) (*ProbeResult, error) {
 	link, err := NormalizeURL(rawURL)
 	if err != nil {
 		return nil, apperr.New("invalid_url", "That doesn't look like a link", err.Error(),
@@ -430,15 +466,8 @@ func Probe(ctx context.Context, env Env, rawURL string, noPlaylist bool) (*Probe
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	// The default format choice in the JSON is what "Best" downloads, so rank it the same way.
-	args := append([]string{"--dump-single-json", "--flat-playlist", "--no-warnings", "--format-sort=" + QualitySort}, env.CommonArgs()...)
-	if noPlaylist {
-		args = append(args, "--no-playlist")
-	}
-	// The filename a download would get, with the same template and trimming. It's printed
-	// as its own line before the JSON (yt-dlp leaves it out of the JSON).
-	args = append(args, "--output="+OutputTemplate(env.Settings.FilenameTemplate, settings.DownloadOptions{}, Target{}),
-		"--trim-filenames=180", "--print=video:"+MarkName+"%(filename)s")
+	args := append([]string{"--dump-single-json", "--flat-playlist", "--no-warnings"}, env.CommonArgs()...)
+	args = append(args, extra...)
 	args = append(args, env.UserArgs()...)
 	args = append(args, "--", link)
 

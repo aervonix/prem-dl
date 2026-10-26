@@ -75,3 +75,30 @@ export function dirname(p: string): string {
   const i = Math.max(p.lastIndexOf('\\'), p.lastIndexOf('/'))
   return i > 0 ? p.slice(0, i) : p
 }
+
+/** Milliseconds since the epoch of a time from Go, or null for Go's zero time (year 1). */
+export function goTime(iso: string): number | null {
+  const t = Date.parse(iso)
+  return t > Date.UTC(2000, 0) ? t : null
+}
+
+/** A rough length of time: "a minute", "5 minutes", "3 hours", "2 days". */
+export function span(ms: number): string {
+  const m = Math.round(Math.abs(ms) / 60000)
+  if (m <= 1) return 'a minute'
+  if (m < 60) return `${m} minutes`
+  const h = Math.round(m / 60)
+  if (h < 36) return plural(h, 'hour')
+  return plural(Math.round(h / 24), 'day')
+}
+
+/** "3 days ago" for a Unix time in seconds, or '' when unknown (0). */
+export function ago(unix: number, now = Date.now()): string {
+  if (!unix) return ''
+  const ms = now - unix * 1000
+  const days = ms / 86400_000
+  if (days >= 365) return `${plural(Math.floor(days / 365), 'year')} ago`
+  if (days >= 30) return `${plural(Math.floor(days / 30), 'month')} ago`
+  if (days >= 7) return `${plural(Math.floor(days / 7), 'week')} ago`
+  return `${span(ms)} ago`
+}

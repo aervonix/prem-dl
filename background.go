@@ -28,6 +28,7 @@ const (
 	menuOpen = iota + 1
 	menuPauseAll
 	menuResumeAll
+	menuCheckFeeds
 	menuQuit
 )
 
@@ -73,6 +74,7 @@ func (a *App) trayMenu() []sys.MenuItem {
 		{},
 		{ID: menuPauseAll, Label: "Pause all", Disabled: ov.Downloading+ov.Queued == 0},
 		{ID: menuResumeAll, Label: "Resume all", Disabled: ov.Paused == 0},
+		{ID: menuCheckFeeds, Label: "Check followed channels", Disabled: len(a.feeds.List()) == 0},
 		{},
 		{ID: menuQuit, Label: "Quit Prem-dl"},
 	}
@@ -86,6 +88,8 @@ func (a *App) onTrayMenu(id int) {
 		a.q.PauseAll()
 	case menuResumeAll:
 		a.q.ResumeAll()
+	case menuCheckFeeds:
+		_ = a.feeds.CheckNow("")
 	case menuQuit:
 		a.quitFromTray()
 	}

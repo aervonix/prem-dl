@@ -1,9 +1,11 @@
 import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {api, errMessage, on} from '../api'
 import {ErrorPanel} from '../components/ErrorPanel'
+import {FeedDialog} from '../components/FeedDialog'
+import {VideoGrid, selectable} from '../components/VideoGrid'
 import {OptionsPanel, optionsProblem} from '../components/OptionsPanel'
 import {Thumb} from '../components/Thumb'
-import {Button, Card, Empty, Spinner} from '../components/ui'
+import {Button, Card, Empty, Segmented, Spinner} from '../components/ui'
 import {compactCount, duration, hostOf, plural, uploadDate} from '../format'
 import {Icon} from '../icons'
 import {useApp} from '../store'
@@ -56,9 +58,20 @@ function forNewVideo(o: DownloadOptions, defaults: DownloadOptions): DownloadOpt
   return {...o, sectionStart: '', sectionEnd: '', ignoreArchive: false, liveFromStart: false, audioLang: '', ...(o.preset === 'custom' ? fallback : {})}
 }
 
+type View = 'grid' | 'list'
+const VIEW_KEY = 'prem-dl.playlistView'
+
+// Remembered per computer; storage can be unavailable, and then the grid is the default.
+function savedView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'
+  } catch {
+    return 'grid'
+  }
+}
+
 const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}: {entry: PlaylistEntry; checked: boolean; onToggle: (index: number) => void; onOpen: (url: string) => void}) {
-  const off = entry.unavailable
-  if (entry.isPlaylist && !off) {
+  if (entry.isPlaylist && !entry.unavailable) {
     // A playlist inside the list (a channel's Playlists tab): it can't be queued as a video.
     return (
       <div className="pl-row" onClick={() => onOpen(entry.url)}>
@@ -82,6 +95,7 @@ const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}
       </div>
     )
   }
+  const off = !selectable(entry)
   return (
     // A label, so the whole row toggles the checkbox and assistive tech meets one control, not two.
     <label className={`pl-row${off ? ' off' : ''}`}>
@@ -92,7 +106,7 @@ const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}
         <div className="ptitle" title={entry.title || entry.id}>
             {entry.title || entry.id}
           </div>
-        <div className="psub truncate">{off ? 'Unavailable (private or deleted)' : entry.uploader}</div>
+        <div className="psub truncate">{entry.unavailable ? 'Unavailable (private or deleted)' : entry.liveStatus === 'is_upcoming' ? 'Upcoming stream' : entry.uploader}</div>
       </div>
       <span className="psub">{duration(entry.duration)}</span>
     </label>
@@ -125,6 +139,10 @@ export function DownloadPage() {
   const [adding, setAdding] = useState(false)
   const [bulkProgress, setBulkProgress] = useState<{done: number; total: number} | null>(null)
   const [clip, setClip] = useState('')
+  const [following, setFollowing] = useState(false)
+  const [view, setView] = useState<View>(savedView)
+  /** The analysed playlist is already followed. */
+  const [followed, setFollowed] = useState(false)
   const requestId = useRef(0)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const lastLink = useRef('')
@@ -197,7 +215,7 @@ export function DownloadPage() {
           // otherwise be applied to every entry (and fail where they don't have it).
           const d = defaultsRef.current
           if (d) setOpts((o) => (o ? forNewVideo(o, d) : o))
-          setSelected(new Set(res.result.playlist.entries.filter((e) => !e.unavailable && !e.isPlaylist).map((e) => e.index)))
+          setSelected(new Set(res.result.playlist.entries.filter(selectable).map((e) => e.index)))
           setFilter('')
           setRangeFrom('')
           setRangeTo('')
@@ -298,7 +316,17 @@ export function DownloadPage() {
   // ---- playlist selection ----
   const playlist = result?.kind === 'playlist' ? result.playlist : null
   const video = result?.kind === 'video' ? result.video : null
-  const available = useMemo(() => playlist?.entries.filter((e) => !e.unavailable && !e.isPlaylist) ?? [], [playlist])
+  const available = useMemo(() => playlist?.entries.filter(selectable) ?? [], [playlist])
+  // A playlist mixes channels, so its grid names each video's; a channel's doesn't need to.
+  const mixed = useMemo(() => new Set(playlist?.entries.map((e) => e.uploader).filter(Boolean)).size > 1, [playlist])
+  const changeView = (v: View) => {
+    setView(v)
+    try {
+      localStorage.setItem(VIEW_KEY, v)
+    } catch {
+      /* not remembered */
+    }
+  }
   const nestedCount = useMemo(() => playlist?.entries.filter((e) => e.isPlaylist && !e.unavailable).length ?? 0, [playlist])
   const openNested = useCallback(
     (url: string) => {
@@ -378,6 +406,22 @@ export function DownloadPage() {
     setSettings(res.settings)
     toast('success', 'Saved as your default options')
   }
+
+  // Whether the analysed playlist or channel is followed, so the button can say so. Feeds changing
+  // (followed from the dialog, or unfollowed) asks again.
+  const playlistUrl = playlist ? probedUrl : ''
+  useEffect(() => {
+    setFollowed(false)
+    if (!playlistUrl) return
+    let alive = true
+    api
+      .inspectFeed(playlistUrl)
+      .then((res) => alive && setFollowed(!!res.target.followed))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [playlistUrl, state.feeds])
 
   const rows = playlist ? visible : []
   let lastGroup = ''
@@ -522,7 +566,17 @@ export function DownloadPage() {
             <Card
               title={playlist.title || 'Playlist'}
               sub={`${plural(available.length, 'video')}${nestedCount ? ` · ${plural(nestedCount, 'playlist')} (open one to pick its videos)` : ''}${playlist.uploader ? ` · ${playlist.uploader}` : ''}${available.length + nestedCount < playlist.entries.length ? ` · ${playlist.entries.length - available.length - nestedCount} unavailable` : ''}`}
-             >
+              actions={
+                available.length === 0 && nestedCount > 0 ? null : followed ? (
+                  <Button size="sm" variant="ghost" icon="check" onClick={() => go('following')} title="Open the Following page">
+                    Following
+                  </Button>
+                ) : (
+                  <Button size="sm" icon="bell" onClick={() => setFollowing(true)} title="Download new uploads automatically">
+                    Follow…
+                  </Button>
+                )
+              }>
               {isVideoInPlaylist(probedUrl) && (
                 <div className="banner info" style={{marginBottom: 12}}>
                   <span className="ic">
@@ -560,20 +614,39 @@ export function DownloadPage() {
                 </Button>
                 <div style={{flex: 1}} />
                 <input type="text" placeholder="Filter by title…" value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter playlist" />
+                <Segmented
+                  label="Show as"
+                  value={view}
+                  onChange={changeView}
+                  options={[
+                    {value: 'grid', label: <Icon name="grid" size={14} />, title: 'Grid of thumbnails'},
+                    {value: 'list', label: <Icon name="list" size={14} />, title: 'Compact list'},
+                  ]}
+                />
               </div>
-              <div className="pl-list" role="group" aria-label="Playlist videos">
-                {rows.length === 0 && <div className="empty" style={{padding: 24}}>{filter.trim() ? `No videos match “${filter.trim()}”.` : 'This playlist is empty.'}</div>}
-                {rows.map((e) => {
-                  const header = e.group && e.group !== lastGroup ? <div key={`g-${e.index}`} className="pl-group">{e.group}</div> : null
-                  lastGroup = e.group
-                  return (
-                    <div key={e.index} style={{display: 'contents'}}>
-                      {header}
-                      <PlaylistRow entry={e} checked={selected.has(e.index)} onToggle={toggle} onOpen={openNested} />
-                    </div>
-                  )
-                })}
-              </div>
+              {view === 'grid' ? (
+                <div className="vgrid-scroll">
+                  {rows.length === 0 ? (
+                    <div className="empty" style={{padding: 24}}>{filter.trim() ? `No videos match “${filter.trim()}”.` : 'This playlist is empty.'}</div>
+                  ) : (
+                    <VideoGrid entries={rows} selected={selected} setSelected={setSelected} onOpen={openNested} uploader={mixed} />
+                  )}
+                </div>
+              ) : (
+                <div className="pl-list" role="group" aria-label="Playlist videos">
+                  {rows.length === 0 && <div className="empty" style={{padding: 24}}>{filter.trim() ? `No videos match “${filter.trim()}”.` : 'This playlist is empty.'}</div>}
+                  {rows.map((e) => {
+                    const header = e.group && e.group !== lastGroup ? <div key={`g-${e.index}`} className="pl-group">{e.group}</div> : null
+                    lastGroup = e.group
+                    return (
+                      <div key={e.index} style={{display: 'contents'}}>
+                        {header}
+                        <PlaylistRow entry={e} checked={selected.has(e.index)} onToggle={toggle} onOpen={openNested} />
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
               <div className="hint" style={{marginTop: 8}}>
                 {selectedEntries.length} of {available.length} selected{selectedSeconds > 0 ? ` · ${duration(selectedSeconds)} total` : ''}
               </div>
@@ -587,6 +660,14 @@ export function DownloadPage() {
               Save these options as my defaults
             </Button>
           </Card>
+
+          {following && playlist && (
+            <FeedDialog
+              link={{url: probedUrl, title: playlist.title, uploader: playlist.uploader}}
+              options={{...opts, sectionStart: '', sectionEnd: ''}}
+              onClose={() => setFollowing(false)}
+            />
+          )}
 
           <div className="actionbar">
             <div className="info truncate">

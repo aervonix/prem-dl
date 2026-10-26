@@ -1,6 +1,6 @@
 // The only module that talks to the Go backend. Everything else imports `api` from here.
 import * as App from '../wailsjs/go/main/App'
-import type {main, queue, settings, ytdlp, apperr} from '../wailsjs/go/models'
+import type {main, queue, settings, ytdlp, apperr, follow} from '../wailsjs/go/models'
 import {EventsOn} from '../wailsjs/runtime/runtime'
 import type * as T from './types'
 
@@ -55,6 +55,11 @@ export type _Guards = [
   Expect<Guard<ytdlp.PlaylistEntry, T.PlaylistEntry>>,
   Expect<Guard<ytdlp.PlaylistInfo, T.PlaylistInfo>>,
   Expect<Guard<ytdlp.ProbeResult, T.ProbeResult>>,
+  Expect<Guard<follow.Feed, T.Feed>>,
+  Expect<Guard<follow.NewFeed, T.NewFeed>>,
+  Expect<Guard<follow.Target, T.FeedTarget>>,
+  Expect<Guard<main.FeedResponse, T.FeedResponse>>,
+  Expect<Guard<main.TargetResponse, T.TargetResponse>>,
 ]
 
 // Bindings return Wails' generated classes; at runtime they are plain JSON, so the hand-written
@@ -116,6 +121,19 @@ export const api = {
   checkUpdate: () => cast<T.UpdateInfo>(App.CheckUpdate()),
   updateYtdlp: () => cast<T.UpdateResult>(App.UpdateYtdlp()),
   installFfmpeg: () => cast<T.UpdateResult>(App.InstallFFmpeg()),
+
+  listFeeds: () => cast<T.Feed[]>(App.ListFeeds()),
+  inspectFeed: (url: string) => cast<T.TargetResponse>(App.InspectFeed(url)),
+  followFeed: (f: T.NewFeed) => cast<T.FeedResponse>(App.FollowFeed(f as unknown as follow.NewFeed)),
+  editFeed: (id: string, tabs: T.ChannelTab[], opts: T.DownloadOptions) =>
+    cast<T.FeedResponse>(App.EditFeed(id, tabs, opts as unknown as settings.DownloadOptions)),
+  unfollowFeed: App.UnfollowFeed,
+  pauseFeed: App.PauseFeed,
+  /** List a followed feed's videos: a channel tab ('' = the first followed one), up to limit (0 = all). */
+  browseFeed: (id: string, tab: T.ChannelTab | '', limit: number) => cast<T.ProbeResponse>(App.BrowseFeed(id, tab, limit)),
+  cancelBrowse: App.CancelBrowse,
+  /** Check one feed now, or with '' every feed that isn't paused. */
+  checkFeed: App.CheckFeed,
 }
 
 // ---- events from Go ------------------------------------------------------------------------
@@ -129,6 +147,8 @@ export interface BackendEvents {
   'tools:update-available': T.UpdateInfo
   'tools:auto-updated': T.UpdateResult
   'settings:changed': T.Settings
+  'feeds:update': T.Feed[]
+  'feeds:found': T.FeedFound
   'app:open-url': string
   'app:confirm-close': CloseRequest
   /** Show a page: a click on a Windows notification. */

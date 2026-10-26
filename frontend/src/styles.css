@@ -1115,6 +1115,172 @@ input[type='checkbox'] {
   font-size: 12px;
 }
 
+/* ---------- video grid (channels and playlists, the way YouTube lays them out) ---------- */
+.vgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+}
+.vgrid.tall {
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+}
+.vgroup {
+  grid-column: 1 / -1;
+  padding: 10px 2px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.vcard {
+  padding: 6px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  cursor: pointer;
+  min-width: 0;
+  /* Shift+click ticks a run; it mustn't also select the titles as text. */
+  user-select: none;
+  /* Off-screen cards skip layout and paint; a channel of thousands scrolls like a short one. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 210px;
+}
+.vcard:hover {
+  background: var(--panel-2);
+}
+.vcard.on {
+  background: var(--panel-2);
+  border-color: var(--border-strong);
+}
+.vcard.off {
+  cursor: default;
+}
+.vcard.off .vthumb img {
+  opacity: 0.4;
+}
+.vthumb {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--panel-3);
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+}
+.vgrid.tall .vthumb {
+  aspect-ratio: 9 / 16;
+}
+.vthumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.vcard.on .vthumb {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.vthumb .dur {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 2px;
+}
+.vthumb .vtag {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0 5px;
+  border-radius: 2px;
+}
+.vthumb .vtag.live {
+  background: #c62828;
+}
+.vthumb .vcheck {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+/* The box shows on hover or focus, and on every card once one is ticked, like YouTube's
+   selection mode. */
+.vgrid:not(.selecting) .vcard:not(:hover) .vcheck:not(:focus-visible) {
+  opacity: 0;
+}
+.vtitle {
+  margin-top: 6px;
+  font-weight: 560;
+  font-size: 13px;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.vmeta {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.vmeta .vstatus {
+  color: var(--ok);
+  font-weight: 560;
+}
+.ch-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.ch-tabs button {
+  padding: 8px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 560;
+  cursor: pointer;
+}
+.ch-tabs button:hover {
+  color: var(--text);
+}
+.ch-tabs button[aria-selected='true'] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.feed .feed-open {
+  all: unset;
+  cursor: pointer;
+}
+.feed .feed-open:hover .jtitle,
+.feed .feed-open:focus-visible .jtitle {
+  text-decoration: underline;
+}
+.vgrid-scroll {
+  max-height: min(560px, 62vh);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  padding: 6px;
+}
+
 .actionbar {
   position: sticky;
   /* Sticky offsets count from inside .page's 32px bottom padding; cancel it so the bar meets
@@ -1267,6 +1433,60 @@ input[type='checkbox'] {
   font-variant-numeric: tabular-nums;
 }
 .job .jerr {
+  grid-column: 1 / -1;
+}
+
+/* ---------- following ---------- */
+.feed {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  align-items: center;
+}
+.feed + .feed {
+  margin-top: 8px;
+}
+.feed .feed-ic {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-3);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  align-self: start;
+}
+.feed .jtitle {
+  font-weight: 600;
+  margin-bottom: 1px;
+}
+.feed .jsub {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+.feed .feed-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.feed .feed-status .spinner {
+  width: 12px;
+  height: 12px;
+}
+.feed .jactions {
+  display: flex;
+  gap: 2px;
+  align-self: start;
+}
+.feed .jerr {
   grid-column: 1 / -1;
 }
 .errpanel {

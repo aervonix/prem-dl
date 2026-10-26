@@ -50,6 +50,26 @@ func r(pattern string, build func() AppError) rule {
 
 // Order matters: more specific rules must come before broader ones.
 var rules = []rule{
+	// Before auth_required: YouTube says this whenever the channel or playlist page can't be
+	// fetched, which is as often a wrong link or a deleted channel as private content.
+	r(`require authentication may not extract correctly without a successful webpage download`, func() AppError {
+		return AppError{
+			Code:      "page_unreadable",
+			Title:     "Couldn't open this channel or playlist",
+			Message:   "YouTube didn't return its page. The link may be wrong, the channel deleted, or the playlist private.",
+			Hint:      "Open the link in your browser to check it. For a private playlist, provide cookies under Settings → Cookies.",
+			Action:    ActionCookies,
+			Retryable: true,
+		}
+	}),
+	r(`this channel does not have an? \w+ tab`, func() AppError {
+		return AppError{
+			Code:    "no_tab",
+			Title:   "Channel tab missing",
+			Message: "This channel doesn't have that tab (Videos, Shorts or Live), so there's nothing there to download.",
+			Hint:    "Open the channel's main page to see which tabs it has.",
+		}
+	}),
 	r(`failed to decrypt with dpapi`, func() AppError {
 		return AppError{
 			Code:    "cookie_decrypt",

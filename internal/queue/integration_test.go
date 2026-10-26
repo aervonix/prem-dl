@@ -190,3 +190,39 @@ func TestIntegrationClipWithEmbeddedSubtitles(t *testing.T) {
 	}
 	t.Logf("done: %s", filepath.Base(j.OutputFile))
 }
+
+// Followed channels read the newest entries of a channel tab; see internal/follow.
+func TestIntegrationListChannel(t *testing.T) {
+	_, envFn := integrationEnv(t)
+	env, _, _ := envFn(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), integTimout)
+	defer cancel()
+
+	res, err := ytdlp.List(ctx, env, "https://www.youtube.com/@RickAstleyYT/videos", 5)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if res.Kind != "playlist" || len(res.Playlist.Entries) != 5 {
+		t.Fatalf("want 5 entries, got %+v", res)
+	}
+	for _, e := range res.Playlist.Entries {
+		if e.ID == "" || !strings.HasPrefix(e.URL, "https://") || e.Extractor != "Youtube" || e.IsPlaylist {
+			t.Errorf("entry %+v", e)
+		}
+	}
+
+	live, err := ytdlp.List(ctx, env, "https://www.youtube.com/@RickAstleyYT/streams", 5)
+	if err != nil {
+		t.Fatalf("list streams: %v", err)
+	}
+	for _, e := range live.Playlist.Entries {
+		if e.LiveStatus == "" {
+			t.Errorf("stream %q has no live status", e.Title)
+		}
+	}
+
+	_, err = ytdlp.List(ctx, env, "https://www.youtube.com/@jawed/shorts", 5)
+	if ae := asAppError(err); ae == nil || ae.Code != "no_tab" {
+		t.Errorf("a channel without Shorts: %v", err)
+	}
+}

@@ -16,6 +16,7 @@ import (
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"yt-dlp-gui/internal/apperr"
+	"yt-dlp-gui/internal/follow"
 	"yt-dlp-gui/internal/queue"
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
@@ -30,6 +31,7 @@ type App struct {
 	dataDir string
 	store   *settings.Store
 	q       *queue.Manager
+	feeds   *follow.Manager // followed channels and playlists; see following.go
 	quit    chan struct{}
 	// root is cancelled at shutdown so probes, bulk adds, cookie tests and updates stop with the
 	// app instead of leaving yt-dlp processes behind.
@@ -51,6 +53,9 @@ type App struct {
 
 	probeMu     sync.Mutex
 	probeCancel context.CancelFunc
+
+	browseMu     sync.Mutex
+	browseCancel context.CancelFunc // set while BrowseFeed lists a channel
 
 	bulkMu     sync.Mutex
 	bulkCancel context.CancelFunc // set while EnqueueLinks runs
@@ -103,6 +108,7 @@ func NewApp(launch launchArgs) *App {
 		Observe:   func(changed []queue.Job, removed []string) { a.act.observe(changed, removed) },
 		StatePath: filepath.Join(dir, "queue.json"),
 	})
+	a.feeds = a.newFeeds()
 	a.act = newActivity(a.q.List(), 1200*time.Millisecond, a.updateShell, a.notifyFinished)
 	a.hidden.Store(launch.Background)
 	return a
@@ -139,6 +145,7 @@ func (a *App) startup(ctx context.Context) {
 		sys.RestoreMainWindow(p)
 	}
 	a.q.Start()
+	a.feeds.Start()
 	a.applyTheme(a.store.Get().Theme)
 	a.detectOnce.Do(func() { go a.detectTools() })
 	go a.autoUpdateLoop()
@@ -247,6 +254,7 @@ func (a *App) shutdown(ctx context.Context) {
 	a.stopAll()
 	close(a.quit)
 	a.cancelProbe()
+	a.feeds.Shutdown() // before the queue, so a check can't add to it while it shuts down
 	a.q.Shutdown()
 }
 
@@ -288,6 +296,7 @@ type AppState struct {
 	Version  string            `json:"version"`
 	Settings settings.Settings `json:"settings"`
 	Jobs     []queue.Job       `json:"jobs"`
+	Feeds    []follow.Feed     `json:"feeds"`
 	Tools    ToolStatus        `json:"tools"`
 	DataDir  string            `json:"dataDir"`
 	OpenLink string            `json:"openLink"` // a link the app was started with, for the Download page
@@ -299,6 +308,7 @@ func (a *App) GetState() AppState {
 		Version:  appVersion,
 		Settings: a.store.Get(),
 		Jobs:     a.q.List(),
+		Feeds:    a.feeds.List(),
 		Tools:    a.currentTools(),
 		DataDir:  a.dataDir,
 		OpenLink: a.launch.Link,
@@ -336,6 +346,9 @@ func (a *App) SaveSettings(s settings.Settings) SettingsResponse {
 	}
 	if saved.CloseToTray != prev.CloseToTray {
 		a.updateShell(a.act.current())
+	}
+	if saved.FollowEvery != prev.FollowEvery {
+		a.feeds.Kick()
 	}
 	if saved.UpdateChannel != prev.UpdateChannel {
 		a.republishUpToDate() // the last check was for the old channel

@@ -32,6 +32,17 @@ func TestClassify(t *testing.T) {
 			action: ActionCookies,
 		},
 		{
+			name:   "channel that doesn't exist (observed)",
+			lines:  []string{`ERROR: [youtube:tab] @nochannelhere-zq81x7: Playlists that require authentication may not extract correctly without a successful webpage download. If you are not downloading private content, or your cookies are only for the first account and channel, pass "--extractor-args youtubetab:skip=authcheck" to skip this check`},
+			code:   "page_unreadable",
+			action: ActionCookies,
+		},
+		{
+			name:  "channel without a shorts tab (observed)",
+			lines: []string{"ERROR: [youtube:tab] @jawed: This channel does not have a shorts tab"},
+			code:  "no_tab",
+		},
+		{
 			name:  "scheduled stream (YouTube's wording)",
 			lines: []string{"ERROR: [youtube] abcdefghijk: This live event will begin in a few moments."},
 			code:  "upcoming",
