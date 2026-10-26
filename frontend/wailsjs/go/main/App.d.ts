@@ -90,6 +90,8 @@ export function PickFile(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function Probe(arg1:string,arg2:boolean):Promise<main.ProbeResponse>;
 
+export function ProbeJob(arg1:string):Promise<main.ProbeResponse>;
+
 export function ReadClipboard():Promise<string>;
 
 export function RefreshTools():Promise<main.ToolStatus>;
@@ -105,6 +107,8 @@ export function ResumeJob(arg1:string):Promise<void>;
 export function RetryFailed():Promise<number>;
 
 export function RetryJob(arg1:string):Promise<void>;
+
+export function RetryJobWith(arg1:string,arg2:settings.DownloadOptions):Promise<void>;
 
 export function RevealArchive():Promise<void>;
 

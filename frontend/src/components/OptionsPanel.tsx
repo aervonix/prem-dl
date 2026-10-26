@@ -27,6 +27,11 @@ function expressionFor(f: FormatInfo): string {
   return f.id
 }
 
+/** Whether a format expression picks one of the video's audio-only formats. */
+export function isAudioFormat(video: VideoInfo, formatId: string): boolean {
+  return video.formats.some((f) => !f.hasVideo && f.hasAudio && expressionFor(f) === formatId)
+}
+
 const languageNames = (() => {
   try {
     return new Intl.DisplayNames(undefined, {type: 'language'})
@@ -102,7 +107,8 @@ export function OptionsPanel({
       title: maxHeight > 0 && PRESET_HEIGHTS[h] > maxHeight ? `This video tops out at ${maxHeight}p` : undefined,
     })),
     {value: 'audio', label: 'Audio only'},
-    ...(video && video.formats.length > 0 ? [{value: 'custom' as Preset, label: 'Pick format…'}] : []),
+    // Also kept when a format is already picked but there is no list (a queued job's options).
+    ...((video && video.formats.length > 0) || value.preset === 'custom' ? [{value: 'custom' as Preset, label: 'Pick format…'}] : []),
   ]
 
   const customFormats = useMemo(() => {
@@ -138,7 +144,8 @@ export function OptionsPanel({
   const isAudio = value.preset === 'audio'
   // The download is an audio file: "Audio only", or an audio format picked from the list.
   const audioFile = isAudio || (value.preset === 'custom' && value.formatAudioOnly)
-  const pickFormat = (formatId: string) => onChange({...value, formatId, formatAudioOnly: customFormats.audioOnly.some((f) => expressionFor(f) === formatId)})
+  // Without the video's list (a queued job's options) whether it is audio can't be told; it stays.
+  const pickFormat = (formatId: string) => onChange({...value, formatId, formatAudioOnly: video ? isAudioFormat(video, formatId) : value.formatAudioOnly})
   const lossy = ['mp3', 'm4a', 'opus', 'aac'].includes(value.audioFormat)
 
   return (
@@ -194,40 +201,42 @@ export function OptionsPanel({
           </Field>
         )}
 
-        {value.preset === 'custom' && video && (
+        {value.preset === 'custom' && (
           <div className="stack">
-            <Field label="Format" hint="Video-only formats get the best audio stream added automatically.">
-              <select value={value.formatId} onChange={(e) => pickFormat(e.target.value)}>
-                <option value="">Choose a format…</option>
-                {customFormats.both.length > 0 && (
-                  <optgroup label="Video + audio">
-                    {customFormats.both.map((f) => (
-                      <option key={f.id} value={expressionFor(f)}>
-                        {describeFormat(f)}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {customFormats.videoOnly.length > 0 && (
-                  <optgroup label="Video only (+ best audio)">
-                    {customFormats.videoOnly.map((f) => (
-                      <option key={f.id} value={expressionFor(f)}>
-                        {describeFormat(f)}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {customFormats.audioOnly.length > 0 && (
-                  <optgroup label="Audio only">
-                    {customFormats.audioOnly.map((f) => (
-                      <option key={f.id} value={expressionFor(f)}>
-                        {describeFormat(f)}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </Field>
+            {video && (
+              <Field label="Format" hint="Video-only formats get the best audio stream added automatically.">
+                <select value={value.formatId} onChange={(e) => pickFormat(e.target.value)}>
+                  <option value="">Choose a format…</option>
+                  {customFormats.both.length > 0 && (
+                    <optgroup label="Video + audio">
+                      {customFormats.both.map((f) => (
+                        <option key={f.id} value={expressionFor(f)}>
+                          {describeFormat(f)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {customFormats.videoOnly.length > 0 && (
+                    <optgroup label="Video only (+ best audio)">
+                      {customFormats.videoOnly.map((f) => (
+                        <option key={f.id} value={expressionFor(f)}>
+                          {describeFormat(f)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {customFormats.audioOnly.length > 0 && (
+                    <optgroup label="Audio only">
+                      {customFormats.audioOnly.map((f) => (
+                        <option key={f.id} value={expressionFor(f)}>
+                          {describeFormat(f)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+              </Field>
+            )}
             <Field label="Format expression" hint="Advanced: edit the yt-dlp -f expression directly.">
               <input type="text" className="mono" value={value.formatId} onChange={(e) => pickFormat(e.target.value)} spellCheck={false} />
             </Field>

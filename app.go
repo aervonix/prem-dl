@@ -54,6 +54,8 @@ type App struct {
 
 	probeMu     sync.Mutex
 	probeCancel context.CancelFunc
+	// jobProbe is ProbeJob's, apart from probeCancel so the Download page's analysis carries on.
+	jobProbe context.CancelFunc
 
 	browseMu     sync.Mutex
 	browseCancel context.CancelFunc // set while BrowseFeed lists a channel
@@ -380,12 +382,27 @@ type ProbeResponse struct {
 // Probe reads a link's metadata (single video, or a playlist's entries) without downloading.
 // Starting a new probe cancels the previous one.
 func (a *App) Probe(link string, noPlaylist bool) ProbeResponse {
+	return a.probe(&a.probeCancel, link, noPlaylist)
+}
+
+// ProbeJob reads a queued download's video (its formats, subtitles...) for changing its options.
+// Starting another cancels the previous one; the Download page's analysis is left alone.
+func (a *App) ProbeJob(id string) ProbeResponse {
+	j, ok := a.q.Get(id)
+	if !ok {
+		return ProbeResponse{Error: apperr.New("no_job", "Download not found", "That download is no longer in the queue.", "", apperr.ActionNone)}
+	}
+	return a.probe(&a.jobProbe, j.URL, true)
+}
+
+// probe runs one analysis, cancelling the one before it in the same slot.
+func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist bool) ProbeResponse {
 	ctx, cancel := context.WithCancel(a.root)
 	a.probeMu.Lock()
-	if a.probeCancel != nil {
-		a.probeCancel()
+	if *slot != nil {
+		(*slot)()
 	}
-	a.probeCancel = cancel
+	*slot = cancel
 	a.probeMu.Unlock()
 	defer cancel()
 
@@ -639,6 +656,11 @@ func (a *App) RemoveJob(id string) error    { return a.q.Remove(id) }
 func (a *App) PauseAll()                    { a.q.PauseAll() }
 func (a *App) ResumeAll()                   { a.q.ResumeAll() }
 func (a *App) GetJobLog(id string) []string { return a.q.Log(id) }
+
+// RetryJobWith gives a failed or cancelled download new options and runs it again.
+func (a *App) RetryJobWith(id string, opts settings.DownloadOptions) error {
+	return a.q.RetryWith(id, opts)
+}
 
 // ClearFinished removes finished jobs from the list (files on disk are never touched).
 func (a *App) ClearFinished(onlyCompleted bool) []string { return a.q.ClearFinished(onlyCompleted) }

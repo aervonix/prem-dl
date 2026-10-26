@@ -170,6 +170,10 @@ export function Probe(arg1, arg2) {
   return window['go']['main']['App']['Probe'](arg1, arg2);
 }
 
+export function ProbeJob(arg1) {
+  return window['go']['main']['App']['ProbeJob'](arg1);
+}
+
 export function ReadClipboard() {
   return window['go']['main']['App']['ReadClipboard']();
 }
@@ -200,6 +204,10 @@ export function RetryFailed() {
 
 export function RetryJob(arg1) {
   return window['go']['main']['App']['RetryJob'](arg1);
+}
+
+export function RetryJobWith(arg1, arg2) {
+  return window['go']['main']['App']['RetryJobWith'](arg1, arg2);
 }
 
 export function RevealArchive() {

@@ -1,6 +1,7 @@
 import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {api, errMessage} from '../api'
 import {ErrorPanel} from '../components/ErrorPanel'
+import {RetryDialog} from '../components/RetryDialog'
 import {Thumb} from '../components/Thumb'
 import {Button, Empty, IconButton, Modal, Progress, Segmented} from '../components/ui'
 import {basename, bytes, eta, plural, speed} from '../format'
@@ -71,7 +72,7 @@ function progressState(j: Job): 'busy' | 'done' | 'paused' | 'failed' | 'active'
   return 'active'
 }
 
-const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: Job) => void; notify: (msg: string) => void}) {
+const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onLog: (j: Job) => void; onEdit: (j: Job) => void; notify: (msg: string) => void}) {
   const run = async (fn: () => Promise<unknown>) => {
     try {
       await fn()
@@ -138,6 +139,7 @@ const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: 
         {(s === 'queued' || s === 'paused') && <IconButton icon="toTop" label="Move to top" onClick={() => void run(() => api.moveJobToTop(job.id))} />}
         {s === 'paused' && <IconButton icon="play" label="Resume" onClick={() => void run(() => api.resumeJob(job.id))} />}
         {(s === 'failed' || s === 'cancelled') && <IconButton icon="retry" label="Retry" onClick={() => void run(() => api.retryJob(job.id))} />}
+        {(s === 'failed' || s === 'cancelled') && <IconButton icon="sliders" label="Change options and retry" onClick={() => onEdit(job)} />}
         {s === 'completed' && job.outputFile && (
           <>
             <IconButton icon="play" label="Open file" onClick={() => void run(() => api.openFile(job.id))} />
@@ -151,7 +153,7 @@ const JobRow = memo(function JobRow({job, onLog, notify}: {job: Job; onLog: (j: 
       </div>
       {s === 'failed' && job.error && (
         <div className="jerr">
-          <ErrorPanel error={job.error} onRetry={() => void run(() => api.retryJob(job.id))} onDetails={() => onLog(job)} compact />
+          <ErrorPanel error={job.error} onRetry={() => void run(() => api.retryJob(job.id))} onEdit={() => onEdit(job)} onDetails={() => onLog(job)} compact />
         </div>
       )}
     </div>
@@ -244,6 +246,7 @@ export function QueuePage() {
     setSearchState(q)
   }
   const [logJob, setLogJob] = useState<Job | null>(null)
+  const [editJob, setEditJob] = useState<Job | null>(null)
 
   const counts = useMemo(() => {
     // failed counts failed and cancelled (the Failed tab); failedOnly is what "Retry failed" retries.
@@ -358,12 +361,13 @@ export function QueuePage() {
           {shown.length === 0 ? (
             <div className="empty">{search.trim() ? `Nothing matches “${search.trim()}”.` : `Nothing here. ${plural(counts.all, 'download')} in other tabs.`}</div>
           ) : (
-            shown.map((j) => <JobRow key={j.id} job={j} onLog={setLogJob} notify={notify} />)
+            shown.map((j) => <JobRow key={j.id} job={j} onLog={setLogJob} onEdit={setEditJob} notify={notify} />)
           )}
         </>
       )}
 
       {liveLogJob && <LogModal job={liveLogJob} onClose={() => setLogJob(null)} />}
+      {editJob && <RetryDialog job={editJob} onClose={() => setEditJob(null)} />}
     </div>
   )
 }

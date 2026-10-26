@@ -784,3 +784,36 @@ func TestRetryFailedRetriesOnlyFailed(t *testing.T) {
 		return g1.Attempts == 1 && g2.Attempts == 1 && g1.Status == StatusFailed && g2.Status == StatusFailed
 	})
 }
+
+func TestRetryWithNewOptions(t *testing.T) {
+	h := newHarness(t, 2)
+	f := h.add(t, "/1/fail403")
+	slow := h.add(t, "/slow")
+	waitFor(t, "failure", func() bool { return h.status(f.ID) == StatusFailed })
+	waitFor(t, "slow to run", func() bool { return h.status(slow.ID) == StatusDownloading })
+
+	if err := h.m.RetryWith(slow.ID, settings.Default().Defaults); err == nil {
+		t.Error("a running job's options must not change")
+	}
+	bad := settings.Default().Defaults
+	bad.Preset, bad.FormatID = "custom", ""
+	if err := h.m.RetryWith(f.ID, bad); err == nil {
+		t.Error("invalid options must be refused")
+	}
+	if h.status(f.ID) != StatusFailed {
+		t.Fatal("a refused change must leave the job as it was")
+	}
+
+	opts := settings.Default().Defaults
+	opts.Preset, opts.EmbedThumbnail = "audio", true
+	if err := h.m.RetryWith(f.ID, opts); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "second attempt", func() bool {
+		g, _ := h.m.Get(f.ID)
+		return g.Attempts == 1 && g.Status == StatusFailed
+	})
+	if g, _ := h.m.Get(f.ID); g.Options.Preset != "audio" || !g.Options.EmbedThumbnail {
+		t.Errorf("new options not kept: %+v", g.Options)
+	}
+}

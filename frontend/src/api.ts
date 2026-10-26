@@ -84,6 +84,10 @@ export const api = {
   resumeJob: App.ResumeJob,
   cancelJob: App.CancelJob,
   retryJob: App.RetryJob,
+  /** Run a failed or cancelled download again with new options. */
+  retryJobWith: (id: string, opts: T.DownloadOptions) => App.RetryJobWith(id, opts as unknown as settings.DownloadOptions),
+  /** Read a queued download's video (formats, subtitles) without touching the Download page's analysis. */
+  probeJob: (id: string) => cast<T.ProbeResponse>(App.ProbeJob(id)),
   removeJob: App.RemoveJob,
   pauseAll: App.PauseAll,
   resumeAll: App.ResumeAll,

@@ -352,31 +352,57 @@ func (m *Manager) Retry(id string) error {
 		return nil
 	}
 	if e.job.Status == StatusFailed || e.job.Status == StatusCancelled {
-		// Two runs of one link would write the same .part file.
-		for _, o := range m.entries {
-			if o != e && o.job.URL == e.job.URL && !o.job.Status.finished() {
-				return errAlreadyQueued
-			}
-		}
-		m.setLocked(e, func(j *Job) {
-			j.Status = StatusQueued
-			j.Stage = "Waiting"
-			j.Error = nil
-			j.Percent = 0
-			j.Downloaded = 0 // the new run reports its own sizes
-			j.Total = 0
-			j.OutputFile = ""
-			j.Speed = 0
-			j.ETA = -1
-			j.Note = ""
-			j.Warnings = []string{}
-			j.Attempts++
-			j.AutoRetries = 0
-			j.RetryAt = time.Time{}
-		})
-		e.log = nil
-		m.scheduleLocked()
+		return m.requeueLocked(e, nil)
 	}
+	return nil
+}
+
+// RetryWith gives a failed or cancelled job new options and requeues it.
+func (m *Manager) RetryWith(id string, opts settings.DownloadOptions) error {
+	if err := settings.ValidateOptions(&opts); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.entries[id]
+	if !ok {
+		return errNoJob
+	}
+	if e.job.Status != StatusFailed && e.job.Status != StatusCancelled {
+		return errNotFinished
+	}
+	return m.requeueLocked(e, func(j *Job) { j.Options = opts })
+}
+
+// requeueLocked puts a failed or cancelled job back in line, after edit (if any) changes it.
+func (m *Manager) requeueLocked(e *entry, edit func(*Job)) error {
+	// Two runs of one link would write the same .part file.
+	for _, o := range m.entries {
+		if o != e && o.job.URL == e.job.URL && !o.job.Status.finished() {
+			return errAlreadyQueued
+		}
+	}
+	m.setLocked(e, func(j *Job) {
+		if edit != nil {
+			edit(j)
+		}
+		j.Status = StatusQueued
+		j.Stage = "Waiting"
+		j.Error = nil
+		j.Percent = 0
+		j.Downloaded = 0 // the new run reports its own sizes
+		j.Total = 0
+		j.OutputFile = ""
+		j.Speed = 0
+		j.ETA = -1
+		j.Note = ""
+		j.Warnings = []string{}
+		j.Attempts++
+		j.AutoRetries = 0
+		j.RetryAt = time.Time{}
+	})
+	e.log = nil
+	m.scheduleLocked()
 	return nil
 }
 
@@ -601,6 +627,7 @@ func (m *Manager) Shutdown() {
 var (
 	errNoJob         = errors.New("that download no longer exists")
 	errAlreadyQueued = errors.New("that link is already in the queue")
+	errNotFinished   = errors.New("only a failed or cancelled download can be changed and run again")
 )
 
 // ---- scheduling and running ----

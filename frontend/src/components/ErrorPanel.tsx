@@ -14,11 +14,14 @@ export function ErrorPanel({
   error,
   onRetry,
   onDetails,
+  onEdit,
   compact,
 }: {
   error: AppError
   onRetry?: () => void
   onDetails?: () => void
+  /** Change the download's options and run it again. */
+  onEdit?: () => void
   compact?: boolean
 }) {
   const {go, updateYtdlp, copy, state} = useApp()
@@ -64,6 +67,11 @@ export function ErrorPanel({
         {onRetry && error.retryable && (
           <Button size="sm" icon="retry" onClick={onRetry}>
             Try again
+          </Button>
+        )}
+        {onEdit && (
+          <Button size="sm" icon="sliders" onClick={onEdit}>
+            Change options…
           </Button>
         )}
         {onDetails && (
