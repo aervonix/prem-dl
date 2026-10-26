@@ -5,3 +5,6 @@ frontend/dist
 *.exe~
 # tools for a bundled build, fetched by go run ./cmd/bundle
 /bundle/
+# release files from scripts/release.ps1, and the WebView2 bootstrapper wails -nsis downloads
+/build/release/
+/build/windows/installer/tmp/

@@ -15,6 +15,7 @@ wails dev                 # live reload; bridge also at http://localhost:34115 f
 wails build               # -> build\bin\Prem-dl.exe (copy yt-dlp.exe next to it)
 go run ./cmd/bundle; wails build -tags bundled   # one exe with yt-dlp + ffmpeg inside (bundle.go)
 go test -tags bundled . -run BuiltIn             # the embedded tools unpack and run
+.\scripts\release.ps1     # build\release: Prem-dl.exe (plain) + Prem-dl-Setup.exe (NSIS, bundled) + SHA256SUMS
 go test ./...             # offline unit tests (~10 s)
 go vet ./...; gofmt -l app.go main.go tools.go internal
 cd frontend; npx tsc --noEmit
@@ -107,6 +108,10 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - `go:embed bundle` fails to compile without the files, so it lives behind the `bundled` tag; plain
   builds and tests never need `bundle/`. Don't launch a release build to test it: it re-registers
   the `prem-dl:` link type and toast name for its own path. Use the `-tags bundled` test instead.
+- The installer is per-user (`project.nsi`; `wails_tools.nsh` is regenerated, don't edit it). Its
+  uninstaller deletes `%APPDATA%\Prem-dl.exe` (WebView2 data, shared with any other copy named
+  Prem-dl.exe): back it up before test-uninstalling on a dev machine, and use `uninstall.exe /S
+  _?=<dir>` so it runs synchronously.
 - Editing Go files while `wails dev` runs triggers rebuilds that drop the bridge; wait for port 34115.
 - No C compiler on this machine, so `go test -race` is unavailable. Keep lock ordering simple
   (`lineHandler.mu` -> `Manager.mu` and `Manager.saveMu` -> `Manager.mu`, never the reverse).

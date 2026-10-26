@@ -47,15 +47,24 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
 
 ## Getting started
 
-1. Download `Prem-dl.exe` from the [latest release](https://github.com/aervonix/prem-dl/releases/latest)
-   and put it in a folder of its own. (Or build it yourself, see below.)
+Each [release](https://github.com/aervonix/prem-dl/releases/latest) has two downloads:
 
-   The exe isn't code-signed, so Windows SmartScreen may say it's from an unknown publisher the
-   first time. Click **More info**, then **Run anyway**. The release notes list its SHA-256 if you
-   want to check the file first.
-2. Start it. If yt-dlp isn't found, the app offers to download it for you. You can also drop
-   `yt-dlp.exe` next to `Prem-dl.exe` yourself.
-3. Install ffmpeg if you don't have it. Without it, video and audio can't be merged, so you'd
+- **`Prem-dl-Setup.exe`** (about 110 MB) installs Prem-dl for you, with yt-dlp and ffmpeg built
+  in, so there's nothing else to get. It installs just for you, without asking for admin rights,
+  into `%LOCALAPPDATA%\Programs\Prem-dl`, with a Start menu and desktop shortcut. Uninstall it
+  from Settings → Apps; it asks whether to keep your settings and queue.
+- **`Prem-dl.exe`** (about 13 MB) is the app on its own, with nothing to install. Put it in a
+  folder of its own and start it.
+
+Neither is code-signed, so Windows SmartScreen may say it's from an unknown publisher the first
+time. Click **More info**, then **Run anyway**. The release notes list each file's SHA-256 if you
+want to check it first. (Or build it yourself, see below.)
+
+With `Prem-dl.exe` on its own:
+
+1. If yt-dlp isn't found, the app offers to download it for you. You can also drop `yt-dlp.exe`
+   next to `Prem-dl.exe` yourself.
+2. Install ffmpeg if you don't have it. Without it, video and audio can't be merged, so you'd
    only get lower quality single-file downloads. If the app doesn't find ffmpeg it offers an
    **Install ffmpeg** button, which downloads yt-dlp's own ffmpeg build (about 90 MB, checked
    against its published SHA-256) into the app's data folder. You can also install it yourself:
@@ -64,7 +73,7 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
    winget install Gyan.FFmpeg
    ```
 
-4. YouTube also needs a JavaScript runtime for some videos. If you have Node 20 or newer, Deno,
+Either way, YouTube also needs a JavaScript runtime for some videos. If you have Node 20 or newer, Deno,
    Bun or QuickJS installed, the app finds it and passes it to yt-dlp.
 
 Your downloads go to your Downloads folder unless you change it in Settings. Each download can
@@ -166,8 +175,17 @@ wails build -tags bundled         # add -o Prem-dl-bundled.exe to keep the plain
 ```
 
 `go run ./cmd/bundle -ffmpeg=false` leaves ffmpeg out (about 31 MB); the app then offers its
-**Install ffmpeg** button as before. Run the fetch again before a release so the bundled yt-dlp is
-current.
+**Install ffmpeg** button as before.
+
+To make both release files, you also need NSIS (`winget install NSIS.NSIS`). Then:
+
+```powershell
+.\scripts\release.ps1   # build\release: Prem-dl.exe, Prem-dl-Setup.exe and SHA256SUMS.txt
+```
+
+It fetches the newest yt-dlp and ffmpeg first (`-SkipFetch` reuses `bundle\`), checks the
+built-in tools unpack, and leaves the plain `Prem-dl.exe` in `build\bin`. The installer is
+`build\windows\installer\project.nsi`.
 
 Run the tests with:
 
