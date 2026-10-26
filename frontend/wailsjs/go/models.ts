@@ -645,6 +645,7 @@ export namespace queue {
 	    attempts: number;
 	    retryAt: string;
 	    autoRetries: number;
+	    waitUntil: string;
 	    createdAt: string;
 	    startedAt: string;
 	    finishedAt: string;
@@ -680,6 +681,7 @@ export namespace queue {
 	        this.attempts = source["attempts"];
 	        this.retryAt = source["retryAt"];
 	        this.autoRetries = source["autoRetries"];
+	        this.waitUntil = source["waitUntil"];
 	        this.createdAt = source["createdAt"];
 	        this.startedAt = source["startedAt"];
 	        this.finishedAt = source["finishedAt"];
@@ -794,6 +796,7 @@ export namespace settings {
 	    sponsorBlockMark: boolean;
 	    splitChapters: boolean;
 	    liveFromStart: boolean;
+	    waitForVideo: boolean;
 	    audioLang: string;
 	
 	    static createFrom(source: any = {}) {
@@ -825,6 +828,7 @@ export namespace settings {
 	        this.sponsorBlockMark = source["sponsorBlockMark"];
 	        this.splitChapters = source["splitChapters"];
 	        this.liveFromStart = source["liveFromStart"];
+	        this.waitForVideo = source["waitForVideo"];
 	        this.audioLang = source["audioLang"];
 	    }
 	
@@ -1234,6 +1238,8 @@ export namespace ytdlp {
 	    autoCaptions: SubtitleTrack[];
 	    bestPremium: boolean;
 	    audioLanguages: string[];
+	    upcoming: boolean;
+	    releaseTimestamp: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new VideoInfo(source);
@@ -1259,6 +1265,8 @@ export namespace ytdlp {
 	        this.autoCaptions = this.convertValues(source["autoCaptions"], SubtitleTrack);
 	        this.bestPremium = source["bestPremium"];
 	        this.audioLanguages = source["audioLanguages"];
+	        this.upcoming = source["upcoming"];
+	        this.releaseTimestamp = source["releaseTimestamp"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

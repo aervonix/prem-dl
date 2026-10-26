@@ -48,6 +48,42 @@ func TestParseLineKinds(t *testing.T) {
 	}
 }
 
+func TestParseWaitLines(t *testing.T) {
+	// Captured from --wait-for-video on a stream due in three days.
+	l := ParseLine("[wait] Waiting for 77:19:39 - Press Ctrl+C to try now")
+	if want := 77*time.Hour + 19*time.Minute + 39*time.Second; l.Kind != KindWait || l.Wait != want {
+		t.Fatalf("wait: %+v", l)
+	}
+	if l := ParseLine("[wait] Remaining time until next attempt: 77:19:38"); l.Kind != KindWaitTick {
+		t.Fatalf("countdown: %+v", l)
+	}
+	if l := ParseLine("[wait] Wait period ended"); l.Kind != KindOther {
+		t.Fatalf("other [wait] lines are ordinary: %+v", l)
+	}
+}
+
+func TestUpcomingVideo(t *testing.T) {
+	// Shape of `yt-dlp -J --ignore-no-formats-error` on a scheduled stream (NASA, captured).
+	res, err := ParseProbe([]byte(`{"_type":"video","id":"hv867HnY4j4","title":"U.S. Spacewalk 100","uploader":"NASA",
+		"live_status":"is_upcoming","release_timestamp":1793270700,"is_live":false,"duration":null,"formats":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := res.Video; !v.Upcoming || v.ReleaseTimestamp != 1793270700 {
+		t.Fatalf("%+v", v)
+	}
+
+	e := testEnv()
+	o := e.Settings.Defaults
+	if has(e.DownloadArgs(o, Target{URL: "https://example.com/v"}), "--wait-for-video="+WaitInterval) {
+		t.Error("only a download that asks to wait passes --wait-for-video")
+	}
+	o.WaitForVideo = true
+	if !has(e.DownloadArgs(o, Target{URL: "https://example.com/v"}), "--wait-for-video="+WaitInterval) {
+		t.Error("--wait-for-video missing")
+	}
+}
+
 func TestParseStreams(t *testing.T) {
 	got := ParseLine(streamsRaw).Streams
 	want := []Stream{{Size: 5685561, Kind: "video"}, {Size: 3433755, Kind: "audio"}}

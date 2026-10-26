@@ -6,7 +6,7 @@ import {VideoGrid, selectable} from '../components/VideoGrid'
 import {OptionsPanel, optionsProblem} from '../components/OptionsPanel'
 import {Thumb} from '../components/Thumb'
 import {Button, Card, Empty, Field, Modal, Segmented, Spinner} from '../components/ui'
-import {compactCount, duration, hostOf, plural, uploadDate} from '../format'
+import {compactCount, duration, hostOf, plural, startsAt, uploadDate} from '../format'
 import {Icon} from '../icons'
 import {forPreset, parseSites, presetFor, presetOptions, sameOptions, switchTo} from '../presets'
 import {useApp} from '../store'
@@ -56,7 +56,7 @@ function isVideoInPlaylist(link: string): boolean {
  */
 function forNewVideo(o: DownloadOptions, defaults: DownloadOptions): DownloadOptions {
   const fallback = defaults.preset === 'custom' ? {preset: 'best' as const, formatId: '', formatAudioOnly: false} : {preset: defaults.preset, formatId: defaults.formatId, formatAudioOnly: false}
-  return {...o, sectionStart: '', sectionEnd: '', ignoreArchive: false, liveFromStart: false, audioLang: '', ...(o.preset === 'custom' ? fallback : {})}
+  return {...o, sectionStart: '', sectionEnd: '', ignoreArchive: false, liveFromStart: false, waitForVideo: false, audioLang: '', ...(o.preset === 'custom' ? fallback : {})}
 }
 
 type View = 'grid' | 'list'
@@ -518,6 +518,7 @@ export function DownloadPage() {
     let items: NewJob[] = []
     let options = opts
     if (video) {
+      if (video.upcoming) options = {...opts, waitForVideo: true}
       items = [{url: video.url || probedUrl, title: video.title, uploader: video.uploader, thumbnail: video.thumbnailSmall || video.thumbnail, duration: video.duration, playlistTitle: '', playlistIndex: 0, playlistCount: 0}]
     } else if (playlist) {
       options = {...opts, sectionStart: '', sectionEnd: ''}
@@ -547,6 +548,20 @@ export function DownloadPage() {
     } finally {
       setAdding(false)
     }
+  }
+
+  // A scheduled stream whose details couldn't be read: queued under its link, which the title
+  // replaces once it starts.
+  const waitFor = async (url: string) => {
+    if (!opts) return
+    if (problem) return toast('error', problem)
+    const res = await attempt(api.enqueue([{url, title: '', uploader: '', thumbnail: '', duration: 0, playlistTitle: '', playlistIndex: 0, playlistCount: 0}], {...opts, waitForVideo: true}))
+    if (!res) return
+    if (res.error) return toast('error', res.error)
+    if (res.added === 0) return toast('info', 'Already in the queue')
+    setText('')
+    reset()
+    go('queue')
   }
 
   const saveAsDefaults = async () => {
@@ -686,7 +701,7 @@ export function DownloadPage() {
 
       {phase === 'error' && error && (
         <div style={{marginTop: 16}}>
-          <ErrorPanel error={error} onRetry={() => void analyze(probedUrl, noPlaylist)} />
+          <ErrorPanel error={error} onRetry={() => void analyze(probedUrl, noPlaylist)} onWait={() => void waitFor(probedUrl)} />
         </div>
       )}
 
@@ -735,6 +750,16 @@ export function DownloadPage() {
                     <div className="badge warn" style={{marginTop: 8}}>
                       <Icon name="warning" size={13} /> Live stream. It records until the stream ends.
                     </div>
+                  )}
+                  {video.upcoming && (
+                    <>
+                      <div className="badge warn" style={{marginTop: 8}}>
+                        <Icon name="clock" size={13} /> Not live yet{video.releaseTimestamp ? `. Starts ${startsAt(video.releaseTimestamp)}` : ''}
+                      </div>
+                      <div className="hint" style={{marginTop: 6}}>
+                        Wait for it queues it now and downloads it when it starts, as long as Prem-dl is running (it can wait in the tray).
+                      </div>
+                    </>
                   )}
                   {isVideoInPlaylist(probedUrl) && noPlaylist && (
                     <div style={{marginTop: 10}}>
@@ -879,8 +904,8 @@ export function DownloadPage() {
               }}>
               Clear
             </Button>
-            <Button variant="primary" size="lg" icon="download" loading={adding} disabled={!!problem || (!!playlist && selectedEntries.length === 0)} onClick={() => void download()}>
-              {playlist ? `Download ${selectedEntries.length}` : 'Download'}
+            <Button variant="primary" size="lg" icon={video?.upcoming ? 'clock' : 'download'} loading={adding} disabled={!!problem || (!!playlist && selectedEntries.length === 0)} onClick={() => void download()}>
+              {playlist ? `Download ${selectedEntries.length}` : video?.upcoming ? 'Wait for it' : 'Download'}
             </Button>
           </div>
         </div>

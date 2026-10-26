@@ -74,6 +74,10 @@ type Target struct {
 	PlaylistCount int
 }
 
+// WaitInterval is --wait-for-video's minimum, in seconds: how often a stream that is past its
+// scheduled time (or has none) is looked at again.
+const WaitInterval = "60"
+
 // thumbnailFits reports whether the output can hold an embedded thumbnail. WebM, WAV and raw AAC
 // can't, and the post-processor would fail the whole download. (With no container chosen,
 // yt-dlp itself switches video to MKV for this.)
@@ -148,6 +152,10 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	}
 	if o.LiveFromStart {
 		a = append(a, "--live-from-start")
+	}
+	if o.WaitForVideo {
+		// yt-dlp sleeps until the scheduled start, then looks again every minute until it's live.
+		a = append(a, "--wait-for-video="+WaitInterval)
 	}
 	if o.SectionStart != "" || o.SectionEnd != "" {
 		start, end := o.SectionStart, o.SectionEnd

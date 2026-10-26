@@ -4,7 +4,8 @@ import {ErrorPanel} from '../components/ErrorPanel'
 import {RetryDialog} from '../components/RetryDialog'
 import {Thumb} from '../components/Thumb'
 import {Button, Empty, IconButton, Modal, Progress, Segmented} from '../components/ui'
-import {basename, bytes, eta, plural, speed} from '../format'
+import {basename, bytes, eta, goTime, plural, speed} from '../format'
+import {Icon} from '../icons'
 import {useApp, useJobs} from '../store'
 import type {Job, JobStatus} from '../types'
 
@@ -33,7 +34,7 @@ function retryDue(j: Job): number | null {
   return j.status === 'queued' && t > Date.UTC(2000, 0) ? t : null
 }
 
-/** "1:45" until the given time, ticking every second. */
+/** "1:45" (or "77:19:39") until the given time, ticking every second. */
 function Countdown({at}: {at: number}) {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
@@ -41,7 +42,14 @@ function Countdown({at}: {at: number}) {
     return () => window.clearInterval(t)
   }, [])
   const s = Math.max(0, Math.ceil((at - now) / 1000))
-  return <>{s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`}</>
+  const pad = (n: number) => String(n).padStart(2, '0')
+  if (s >= 3600) return <>{`${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}`}</>
+  return <>{s >= 60 ? `${Math.floor(s / 60)}:${pad(s % 60)}` : `${s}s`}</>
+}
+
+/** While it waits for a scheduled stream to start: when it looks again, or null. */
+function waitingUntil(j: Job): number | null {
+  return j.status === 'starting' ? goTime(j.waitUntil) : null
 }
 
 function statusText(j: Job): string {
@@ -49,7 +57,7 @@ function statusText(j: Job): string {
     case 'queued':
       return retryDue(j) ? 'Will retry automatically' : 'Waiting in queue'
     case 'starting':
-      return 'Starting…'
+      return waitingUntil(j) ? 'Waiting for the stream to start' : 'Starting…'
     case 'downloading':
     case 'processing':
       return j.stage
@@ -84,6 +92,7 @@ const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onL
   const live = ACTIVE.includes(s)
   const percent = s === 'completed' ? 100 : s === 'starting' ? -1 : job.percent
   const due = retryDue(job)
+  const waiting = waitingUntil(job)
   const sub = [job.uploader, job.playlistTitle ? `${job.playlistTitle} · ${job.playlistIndex}/${job.playlistCount}` : ''].filter(Boolean).join(' · ')
 
   return (
@@ -103,7 +112,14 @@ const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onL
             </span>
           )}
         </div>
-        {s !== 'failed' && s !== 'cancelled' && <Progress percent={percent} state={progressState(job)} label={job.title} />}
+        {s !== 'failed' && s !== 'cancelled' && !waiting && <Progress percent={percent} state={progressState(job)} label={job.title} />}
+        {waiting && (
+          <div className="jretry">
+            <span>
+              <Icon name="clock" size={13} /> It downloads once the stream starts. Next look in <Countdown at={waiting} />. Keep Prem-dl running; it can wait in the tray.
+            </span>
+          </div>
+        )}
         {due && (
           <div className="jretry">
             <span>
@@ -114,7 +130,7 @@ const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onL
             </Button>
           </div>
         )}
-        {(live || s === 'paused') && (
+        {(live || s === 'paused') && !waiting && (
           <div className="jstats">
             <span>
               {[job.percent >= 0 ? `${job.percent.toFixed(1)}%` : '', job.total > 0 ? `${bytes(job.downloaded)} of ${bytes(job.total)}` : '']
@@ -153,7 +169,14 @@ const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onL
       </div>
       {s === 'failed' && job.error && (
         <div className="jerr">
-          <ErrorPanel error={job.error} onRetry={() => void run(() => api.retryJob(job.id))} onEdit={() => onEdit(job)} onDetails={() => onLog(job)} compact />
+          <ErrorPanel
+            error={job.error}
+            onRetry={() => void run(() => api.retryJob(job.id))}
+            onWait={() => void run(() => api.retryJobWith(job.id, {...job.options, waitForVideo: true}))}
+            onEdit={() => onEdit(job)}
+            onDetails={() => onLog(job)}
+            compact
+          />
         </div>
       )}
     </div>

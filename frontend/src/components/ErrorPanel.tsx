@@ -15,11 +15,14 @@ export function ErrorPanel({
   onRetry,
   onDetails,
   onEdit,
+  onWait,
   compact,
 }: {
   error: AppError
   onRetry?: () => void
   onDetails?: () => void
+  /** For a stream that hasn't started: download it once it does. */
+  onWait?: () => void
   /** Change the download's options and run it again. */
   onEdit?: () => void
   compact?: boolean
@@ -63,6 +66,11 @@ export function ErrorPanel({
               Set ffmpeg location
             </Button>
           </>
+        )}
+        {onWait && error.code === 'upcoming' && (
+          <Button size="sm" variant="primary" icon="clock" onClick={onWait}>
+            Wait for it
+          </Button>
         )}
         {onRetry && error.retryable && (
           <Button size="sm" icon="retry" onClick={onRetry}>

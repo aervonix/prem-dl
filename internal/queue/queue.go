@@ -81,6 +81,9 @@ type Job struct {
 	// AutoRetries counts those retries since the user last started the job.
 	RetryAt     time.Time `json:"retryAt" ts_type:"string"`
 	AutoRetries int       `json:"autoRetries"`
+	// WaitUntil is set while yt-dlp waits for a scheduled stream to start (--wait-for-video):
+	// when it looks again. A waiting job doesn't take a download slot.
+	WaitUntil time.Time `json:"waitUntil" ts_type:"string"`
 
 	CreatedAt  time.Time `json:"createdAt" ts_type:"string"`
 	StartedAt  time.Time `json:"startedAt" ts_type:"string"`
@@ -613,7 +616,10 @@ func (m *Manager) Shutdown() {
 			removing = append(removing, id)
 			continue
 		}
-		if e.job.Status.active() {
+		switch {
+		case e.job.Status.active() && !e.job.WaitUntil.IsZero():
+			e.job.Status, e.job.Stage, e.job.WaitUntil = StatusQueued, "Waiting", time.Time{}
+		case e.job.Status.active():
 			e.job.Status = StatusPaused
 			e.job.Stage = "Interrupted"
 		}
@@ -641,7 +647,7 @@ func (m *Manager) scheduleLocked() {
 	running := 0
 	var nextRetry time.Time
 	for _, e := range m.entries {
-		if e.job.Status.active() {
+		if e.job.Status.active() && e.job.WaitUntil.IsZero() {
 			running++
 		}
 		if r := e.job.RetryAt; e.job.Status == StatusQueued && r.After(now) && (nextRetry.IsZero() || r.Before(nextRetry)) {
@@ -803,6 +809,9 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 
 	stop := e.stop
 	e.cancel = nil
+	// Every branch below saves the job (setLocked), which carries this along.
+	waited := !e.job.WaitUntil.IsZero()
+	e.job.WaitUntil = time.Time{}
 	if e.remove {
 		m.removeLocked([]string{e.job.ID})
 		m.scheduleLocked()
@@ -825,6 +834,9 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 			j.ETA = -1
 			j.FinishedAt = now
 		})
+	case ctx != nil && ctx.Err() != nil && waited:
+		// The app is shutting down while it waits for a stream: wait again next time it starts.
+		m.setLocked(e, func(j *Job) { j.Status = StatusQueued; j.Stage = "Waiting"; j.Speed = 0; j.ETA = -1 })
 	case ctx != nil && ctx.Err() != nil:
 		// The app is shutting down: leave it resumable.
 		m.setLocked(e, func(j *Job) { j.Status = StatusPaused; j.Stage = "Interrupted"; j.Speed = 0; j.ETA = -1 })
@@ -949,7 +961,7 @@ func (h *lineHandler) handle(line string, isErr bool) {
 	defer h.mu.Unlock()
 
 	parsed := ytdlp.ParseLine(line)
-	if parsed.Kind != ytdlp.KindProgress { // progress lines would flood the log
+	if parsed.Kind != ytdlp.KindProgress && parsed.Kind != ytdlp.KindWaitTick { // these would flood the log
 		h.m.mu.Lock()
 		h.e.log = append(h.e.log, line)
 		if len(h.e.log) > maxLog {
@@ -965,9 +977,18 @@ func (h *lineHandler) handle(line string, isErr bool) {
 	}
 
 	switch parsed.Kind {
+	case ytdlp.KindWait:
+		// Waiting for a scheduled stream: its slot goes to the next download meanwhile. Once the
+		// stream starts it runs alongside the others, even if that is one over the limit.
+		until := time.Now().Add(parsed.Wait)
+		h.m.mu.Lock()
+		h.m.setLocked(h.e, func(j *Job) { j.WaitUntil = until; j.Stage = "Waiting for the stream to start" })
+		h.m.scheduleLocked()
+		h.m.mu.Unlock()
 	case ytdlp.KindPlan:
 		h.tracker.SetPlan(parsed.Plan)
 		h.m.set(h.e, func(j *Job) {
+			j.WaitUntil = time.Time{} // it has started (the plan is printed just before downloading)
 			p := parsed.Plan
 			if p.Title != "" && (j.Title == "" || j.Title == j.URL) {
 				j.Title = p.Title

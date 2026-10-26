@@ -71,6 +71,13 @@ func fakeYtdlp(url string) {
 		time.Sleep(1500 * time.Millisecond)
 	case strings.HasSuffix(url, "/already"):
 		p("[download] " + filepath.Join(os.TempDir(), "old.mp4") + " has already been downloaded")
+	case strings.HasSuffix(url, "/upcoming"):
+		// Captured from yt-dlp --wait-for-video on a stream due in three days; the countdown
+		// is \r-terminated. Here it "starts" after a moment and downloads like /ok.
+		p("[wait] Waiting for 77:19:39 - Press Ctrl+C to try now")
+		fmt.Print("[wait] Remaining time until next attempt: 77:19:39\r[wait] Remaining time until next attempt: 77:19:38\r")
+		time.Sleep(1500 * time.Millisecond)
+		fakeYtdlp("https://fake.test/ok")
 	case strings.HasSuffix(url, "/slow"):
 		p(`YTGUI_P {"status":"downloading","downloaded_bytes":100,"total_bytes":1000,"filename":"s.mp4","speed":10,"eta":90}`)
 		time.Sleep(60 * time.Second)
@@ -815,5 +822,31 @@ func TestRetryWithNewOptions(t *testing.T) {
 	})
 	if g, _ := h.m.Get(f.ID); g.Options.Preset != "audio" || !g.Options.EmbedThumbnail {
 		t.Errorf("new options not kept: %+v", g.Options)
+	}
+}
+
+func TestWaitingForAStreamFreesItsSlot(t *testing.T) {
+	h := newHarness(t, 1)
+	up := h.add(t, "/upcoming")
+	waitFor(t, "the wait to start", func() bool {
+		g, _ := h.m.Get(up.ID)
+		return !g.WaitUntil.IsZero()
+	})
+	if g, _ := h.m.Get(up.ID); time.Until(g.WaitUntil) < 77*time.Hour {
+		t.Errorf("WaitUntil = %v, want about 77 hours from now", g.WaitUntil)
+	}
+	ok := h.add(t, "/ok")
+	waitFor(t, "the next download to run beside the waiting one", func() bool { return h.status(ok.ID) == StatusCompleted })
+	if g, _ := h.m.Get(up.ID); g.WaitUntil.IsZero() {
+		t.Fatal("the next download only ran once the wait was over: the waiting job kept its slot")
+	}
+	waitFor(t, "the stream to download once it starts", func() bool { return h.status(up.ID) == StatusCompleted })
+	if g, _ := h.m.Get(up.ID); !g.WaitUntil.IsZero() {
+		t.Error("WaitUntil must be cleared once it has started")
+	}
+	for _, l := range h.m.Log(up.ID) {
+		if strings.Contains(l, "Remaining time") {
+			t.Fatalf("the countdown must not fill the log: %q", l)
+		}
 	}
 }

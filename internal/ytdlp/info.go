@@ -74,6 +74,10 @@ type VideoInfo struct {
 	// AudioLanguages lists the audio tracks' languages when there is more than one (dubbed
 	// videos); the default track's language comes first.
 	AudioLanguages []string `json:"audioLanguages"`
+	// Upcoming is a scheduled live stream or premiere that hasn't started, so it has no formats
+	// yet. ReleaseTimestamp is when it is due, in Unix seconds (0 when unknown).
+	Upcoming         bool  `json:"upcoming"`
+	ReleaseTimestamp int64 `json:"releaseTimestamp"`
 }
 
 // PlaylistEntry is one item of a playlist.
@@ -192,6 +196,7 @@ type rawInfo struct {
 	Extractor  string     `json:"extractor_key"`
 	IEKey      string     `json:"ie_key"` // flat entries: the extractor that will handle URL
 	LiveStatus string     `json:"live_status"`
+	Release    float64    `json:"release_timestamp"`
 
 	Availability string `json:"availability"`
 
@@ -352,6 +357,7 @@ func buildVideo(r *rawInfo) *VideoInfo {
 		Extractor: r.Extractor,
 		Formats:   []FormatInfo{}, Heights: []int{}, Subtitles: []SubtitleTrack{}, AutoCaptions: []SubtitleTrack{},
 		AudioLanguages: []string{},
+		Upcoming:       r.LiveStatus == "is_upcoming", ReleaseTimestamp: int64(r.Release),
 	}
 	if v.URL == "" {
 		v.URL = r.URL
@@ -450,7 +456,16 @@ func Probe(ctx context.Context, env Env, rawURL string, noPlaylist bool) (*Probe
 	// as its own line before the JSON (yt-dlp leaves it out of the JSON).
 	args = append(args, "--output="+OutputTemplate(env.Settings.FilenameTemplate, settings.DownloadOptions{}, Target{}),
 		"--trim-filenames=180", "--print=video:"+MarkName+"%(filename)s")
-	return readInfo(ctx, env, rawURL, args)
+	res, err := readInfo(ctx, env, rawURL, args)
+	var ae *apperr.AppError
+	if errors.As(err, &ae) && ae.Code == "upcoming" {
+		// A scheduled stream has no formats, so yt-dlp refuses it ("This live event will begin
+		// in 3 days"). Read what there is (title, start time), so it can be waited for.
+		if up, upErr := readInfo(ctx, env, rawURL, append(args, "--ignore-no-formats-error")); upErr == nil && up.Kind == "video" && up.Video.Upcoming {
+			return up, nil
+		}
+	}
+	return res, err
 }
 
 // List reads the entries of a playlist or channel, at most limit of them per playlist (0 means

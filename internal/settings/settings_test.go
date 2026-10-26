@@ -107,7 +107,7 @@ func TestPresetsAreNormalised(t *testing.T) {
 	s := Default()
 	music := s.Presets[0].Options
 	music.Preset, music.FormatID = "custom", "251"
-	music.SectionStart, music.IgnoreArchive, music.AudioLang = "1:00", true, "de"
+	music.SectionStart, music.IgnoreArchive, music.WaitForVideo, music.AudioLang = "1:00", true, true, "de"
 	s.Presets = []NamedPreset{{Name: "  Music ", Sites: []string{"https://www.Music.YouTube.com/watch?v=x", "", "music.youtube.com"}, Options: music}}
 	if err := s.Validate(); err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestPresetsAreNormalised(t *testing.T) {
 	if p.Name != "Music" || len(p.Sites) != 1 || p.Sites[0] != "music.youtube.com" {
 		t.Errorf("name and sites not cleaned: %+v", p)
 	}
-	if o := p.Options; o.Preset != "best" || o.FormatID != "" || o.SectionStart != "" || o.IgnoreArchive || o.AudioLang != "" {
+	if o := p.Options; o.Preset != "best" || o.FormatID != "" || o.SectionStart != "" || o.IgnoreArchive || o.WaitForVideo || o.AudioLang != "" {
 		t.Errorf("choices tied to one video must not be kept in a preset: %+v", o)
 	}
 

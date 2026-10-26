@@ -92,6 +92,14 @@ export function span(ms: number): string {
   return plural(Math.round(h / 24), 'day')
 }
 
+/** "Tue 29 Oct, 20:45 (in 3 days)" for a scheduled start in Unix seconds, or '' when unknown (0). */
+export function startsAt(unix: number, now = Date.now()): string {
+  if (!unix) return ''
+  const ms = unix * 1000
+  const when = new Date(ms).toLocaleString(undefined, {weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit'})
+  return ms > now ? `${when} (in ${span(ms - now)})` : `${when} (${span(now - ms)} ago)`
+}
+
 /** "3 days ago" for a Unix time in seconds, or '' when unknown (0). */
 export function ago(unix: number, now = Date.now()): string {
   if (!unix) return ''

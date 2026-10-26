@@ -51,6 +51,8 @@ export interface DownloadOptions {
   splitChapters: boolean
   /** Record a live stream from its beginning. */
   liveFromStart: boolean
+  /** Wait for a scheduled stream or premiere to start, then download it. */
+  waitForVideo: boolean
   /** Audio track language on dubbed videos; '' = the default track. */
   audioLang: string
 }
@@ -148,6 +150,8 @@ export interface Job {
   /** Set (a real date) while the job waits to be retried automatically after a passing problem. */
   retryAt: string
   autoRetries: number
+  /** Set (a real date) while it waits for a scheduled stream to start: when it looks again. */
+  waitUntil: string
   createdAt: string
   startedAt: string
   finishedAt: string
@@ -257,6 +261,10 @@ export interface VideoInfo {
   bestPremium: boolean
   /** Audio track languages when there is more than one (dubbed videos), the default first. */
   audioLanguages: string[]
+  /** A scheduled live stream or premiere that hasn't started; it has no formats yet. */
+  upcoming: boolean
+  /** When it is due, in Unix seconds; 0 when unknown. */
+  releaseTimestamp: number
 }
 
 export interface PlaylistEntry {

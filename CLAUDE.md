@@ -86,6 +86,9 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - Channel tabs (`/videos`, `/shorts`, `/streams`) list newest first and `--playlist-end` applies per
   nested tab, so follow checks read the top 50; playlists append at the end and are read in full.
   Flat entries carry `live_status`; upcoming/live ones aren't marked seen so they're queued once over.
+- A scheduled stream fails `-J` with `This live event will begin in 3 days.`; `Probe` reads it again with
+  `--ignore-no-formats-error` (title, `release_timestamp`) so it can be waited for. `--wait-for-video`
+  prints `[wait] Waiting for 77:19:39 - ...` once per wait, then a `\r` countdown every second (dropped).
 - A missing tab is `This channel does not have a shorts tab` (`no_tab`, skipped when other tabs are
   checked). A wrong/deleted channel says `Playlists that require authentication may not extract
   correctly...`, not 404 (`page_unreadable`, matched before the generic sign-in rule).

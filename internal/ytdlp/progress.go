@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // LineKind says what a line of yt-dlp output turned out to be.
@@ -17,7 +19,13 @@ const (
 	KindStreams
 	KindPost
 	KindFile
+	// KindWait starts a --wait-for-video pause for a scheduled stream ("[wait] Waiting for
+	// 77:19:39 - Press Ctrl+C to try now"); KindWaitTick is its countdown, printed every second.
+	KindWait
+	KindWaitTick
 )
+
+var waitRe = regexp.MustCompile(`^\[wait\] Waiting for (\d+):(\d\d):(\d\d)`)
 
 // Progress is one `%(progress)j` report.
 type Progress struct {
@@ -66,6 +74,7 @@ type Line struct {
 	PostName string
 	PostStat string
 	File     string
+	Wait     time.Duration // until yt-dlp looks at a scheduled stream again
 }
 
 // ParseLine classifies one line of yt-dlp output. Unrecognised lines come back as KindOther.
@@ -89,6 +98,15 @@ func ParseLine(line string) Line {
 	case strings.HasPrefix(line, MarkFile):
 		if f := strings.TrimSpace(line[len(MarkFile):]); f != "" && f != "NA" {
 			return Line{Kind: KindFile, File: f}
+		}
+	case strings.HasPrefix(line, "[wait] Remaining time"):
+		return Line{Kind: KindWaitTick}
+	case strings.HasPrefix(line, "[wait] Waiting for"):
+		if m := waitRe.FindStringSubmatch(line); m != nil {
+			h, _ := strconv.Atoi(m[1])
+			mi, _ := strconv.Atoi(m[2])
+			s, _ := strconv.Atoi(m[3])
+			return Line{Kind: KindWait, Wait: time.Duration(h)*time.Hour + time.Duration(mi)*time.Minute + time.Duration(s)*time.Second}
 		}
 	}
 	return Line{Kind: KindOther}

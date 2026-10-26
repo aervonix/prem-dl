@@ -65,6 +65,8 @@ type DownloadOptions struct {
 	SplitChapters bool `json:"splitChapters"`
 	// LiveFromStart records a live stream from its beginning rather than from now.
 	LiveFromStart bool `json:"liveFromStart"`
+	// WaitForVideo waits for a scheduled stream or premiere to start, then downloads it.
+	WaitForVideo bool `json:"waitForVideo"`
 	// AudioLang picks the audio track by language ("en", "es-419") on dubbed videos; "" takes
 	// the default. Formats without it fall back to the default track.
 	AudioLang string `json:"audioLang"`
@@ -414,7 +416,7 @@ func validatePresets(ps *[]NamedPreset) error {
 
 		o := &p.Options
 		o.SectionStart, o.SectionEnd = "", ""
-		o.IgnoreArchive, o.LiveFromStart, o.AudioLang = false, false, ""
+		o.IgnoreArchive, o.LiveFromStart, o.WaitForVideo, o.AudioLang = false, false, false, ""
 		if o.Preset == "custom" {
 			// A format picked from one video's list means nothing for the next.
 			o.Preset, o.FormatID = "best", ""

@@ -41,7 +41,7 @@ func newActivity(jobs []queue.Job, gather time.Duration, onChange func(overview)
 	a := &activity{jobs: map[string]queue.Job{}, batch: map[string]bool{}, gather: gather, onChange: onChange, onFinish: onFinish}
 	for _, j := range jobs {
 		a.jobs[j.ID] = j
-		if pending(j.Status) {
+		if pending(j.Status) && j.WaitUntil.IsZero() {
 			a.batch[j.ID] = true
 		}
 	}
@@ -65,6 +65,9 @@ func (a *activity) observe(changed []queue.Job, removed []string) {
 		prev, known := a.jobs[j.ID]
 		a.jobs[j.ID] = j
 		switch {
+		case !j.WaitUntil.IsZero():
+			// Waiting hours for a scheduled stream would hold the taskbar's progress bar up.
+			delete(a.batch, j.ID)
 		case pending(j.Status):
 			a.batch[j.ID] = true
 		case j.Status == queue.StatusCancelled:
@@ -115,7 +118,7 @@ func (a *activity) overviewLocked() overview {
 	var ov overview
 	for _, j := range a.jobs {
 		switch {
-		case running(j.Status):
+		case running(j.Status) && j.WaitUntil.IsZero():
 			ov.Downloading++
 		case j.Status == queue.StatusQueued:
 			ov.Queued++

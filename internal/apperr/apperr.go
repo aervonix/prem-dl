@@ -262,7 +262,7 @@ var rules = []rule{
 			Code:      "upcoming",
 			Title:     "Not live yet",
 			Message:   "This is a scheduled live stream or premiere that hasn't started.",
-			Hint:      "Retry once it has started.",
+			Hint:      "Use Wait for it to download it as soon as it starts, or retry once it has started.",
 			Retryable: true,
 		}
 	}),
