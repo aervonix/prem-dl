@@ -450,21 +450,19 @@ input[type='checkbox'] {
   margin-top: 1px;
 }
 
+/* Each button draws its own border, overlapping its neighbour's by 1px, so a row that wraps in a
+   narrow window still reads as one control instead of a box with an empty gap beside it. */
 .seg {
   align-self: flex-start;
   display: inline-flex;
   flex-wrap: wrap;
-  gap: 0;
-  padding: 0;
-  border-radius: var(--radius-sm);
-  background: var(--panel);
-  border: 1px solid var(--border-strong);
+  padding: 1px 0 0 1px;
 }
 .seg button {
   position: relative;
-  border: 0;
-  border-right: 1px solid var(--border);
-  background: none;
+  margin: -1px 0 0 -1px;
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
   padding: 5px 12px;
   border-radius: 0;
   cursor: pointer;
@@ -475,7 +473,6 @@ input[type='checkbox'] {
   border-radius: 3px 0 0 3px;
 }
 .seg button:last-child {
-  border-right: 0;
   border-radius: 0 3px 3px 0;
 }
 /* A small label above one option, e.g. "Premium" over Best. */
@@ -500,6 +497,8 @@ input[type='checkbox'] {
   background: var(--panel-2);
 }
 .seg button[aria-pressed='true'] {
+  z-index: 1;
+  border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-fg);
 }
@@ -920,7 +919,12 @@ input[type='checkbox'] {
   gap: 10px;
   align-items: stretch;
 }
+/* Sized to its text, so a link that wraps in a narrow window grows the box instead of hiding
+   behind a scroll bar. Five lines, then it scrolls. */
 .urlbox textarea {
+  field-sizing: content;
+  max-height: 128px;
+  min-width: 0;
   min-height: 46px;
   font-size: 15px;
   padding: 11px 14px;
@@ -1149,6 +1153,13 @@ input[type='checkbox'] {
   align-items: center;
   margin-bottom: 14px;
 }
+/* The bulk actions wrap as one group, so a narrow window doesn't strand one of them. */
+.q-toolbar .q-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
 .q-toolbar .q-search {
   width: min(360px, 100%);
 }
@@ -1263,7 +1274,20 @@ input[type='checkbox'] {
   grid-template-columns: minmax(150px, 1fr) minmax(0, 900px) minmax(150px, 1fr);
   column-gap: 26px;
 }
+/* The heading sits above the panel, and the tab list beside both. In the narrow layout all three
+   stack in source order: heading, tabs, panel. */
+.settings-head {
+  grid-column: 2;
+  grid-row: 1;
+}
+.settings-body {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+}
 .settings-nav {
+  grid-column: 1;
+  grid-row: 1 / span 2;
   position: sticky;
   top: 0;
   align-self: start;
@@ -1371,6 +1395,16 @@ input[type='checkbox'] {
   .settings-layout {
     grid-template-columns: minmax(0, 900px);
     justify-content: center;
+  }
+  .settings-head,
+  .settings-body,
+  .settings-nav {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  /* Narrower tabs keep all six on one row at the smallest window size. */
+  .settings-nav button {
+    padding: 7px 8px;
   }
   .settings-nav {
     position: static;

@@ -304,23 +304,25 @@ export function QueuePage() {
               ]}
             />
             <div className="summary">{totalSpeed > 0 ? `${speed(totalSpeed)} total` : counts.active > 0 ? 'Working…' : ''}</div>
-            <Button size="sm" icon="pause" disabled={!canPause} onClick={() => void api.pauseAll()}>
-              Pause all
-            </Button>
-            <Button size="sm" icon="play" disabled={!canResume} onClick={() => void api.resumeAll()}>
-              Resume all
-            </Button>
-            <Button size="sm" icon="trash" disabled={counts.done === 0} title="Remove completed downloads from the list. Files on disk are kept." onClick={() => void api.clearFinished(true)}>
-              Clear completed
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={counts.done === 0 && counts.failed === 0}
-              title="Also remove failed and cancelled downloads, which can then no longer be retried. Files on disk are kept."
-              onClick={() => void api.clearFinished(false)}>
-              Clear all finished
-            </Button>
+            <div className="q-actions">
+              <Button size="sm" icon="pause" disabled={!canPause} onClick={() => void api.pauseAll()}>
+                Pause all
+              </Button>
+              <Button size="sm" icon="play" disabled={!canResume} onClick={() => void api.resumeAll()}>
+                Resume all
+              </Button>
+              <Button size="sm" icon="trash" disabled={counts.done === 0} title="Remove completed downloads from the list. Files on disk are kept." onClick={() => void api.clearFinished(true)}>
+                Clear completed
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={counts.done === 0 && counts.failed === 0}
+                title="Also remove failed and cancelled downloads, which can then no longer be retried. Files on disk are kept."
+                onClick={() => void api.clearFinished(false)}>
+                Clear all finished
+              </Button>
+            </div>
           </div>
           <div className="q-toolbar">
             <input

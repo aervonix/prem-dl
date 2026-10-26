@@ -292,6 +292,9 @@ export function SettingsPage() {
 
   return (
     <div className="settings-layout" ref={rootRef}>
+      <div className="page-head settings-head">
+        <h1>Settings</h1>
+      </div>
       <nav className="settings-nav" aria-label="Settings sections">
         {SECTIONS.map((s) => (
           <button key={s.id} type="button" aria-current={tab === s.id ? 'page' : undefined} onClick={() => openTab(s.id)}>
@@ -300,11 +303,7 @@ export function SettingsPage() {
         ))}
       </nav>
 
-      <div>
-        <div className="page-head">
-          <h1>Settings</h1>
-        </div>
-
+      <div className="settings-body">
         <div className="stack">
           {/* ---------------- general ---------------- */}
           {tab === 'general' && (

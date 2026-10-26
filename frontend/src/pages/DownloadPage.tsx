@@ -388,7 +388,6 @@ export function DownloadPage() {
           <textarea
             ref={inputRef}
             value={text}
-            rows={Math.min(5, Math.max(1, text.split('\n').length))}
             placeholder="Paste a video, playlist or channel link, or several, one per line"
             aria-label="Video, playlist or channel links"
             spellCheck={false}
