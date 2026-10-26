@@ -13,6 +13,8 @@ the UI is not a thin wrapper over a shell command. See `README.md` for the featu
 ```powershell
 wails dev                 # live reload; bridge also at http://localhost:34115 for browser debugging
 wails build               # -> build\bin\Prem-dl.exe (copy yt-dlp.exe next to it)
+go run ./cmd/bundle; wails build -tags bundled   # one exe with yt-dlp + ffmpeg inside (bundle.go)
+go test -tags bundled . -run BuiltIn             # the embedded tools unpack and run
 go test ./...             # offline unit tests (~10 s)
 go vet ./...; gofmt -l app.go main.go tools.go internal
 cd frontend; npx tsc --noEmit
@@ -31,6 +33,8 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - `internal/queue` – scheduler, process control, persistence (`queue.json`), batched UI events.
 - `internal/follow` – followed channels/playlists (`feeds.json`): baseline of what's there, periodic
   checks that queue unseen video IDs. Deps are injected like `queue`; `following.go` wires them.
+- `bundle.go` (+ `bundle_embed.go` under `-tags bundled`) – unpacks the yt-dlp/ffmpeg built into
+  the exe into the managed `bin` folder during the first tool detection; `cmd/bundle` fetches them.
 - `internal/settings` – `Settings` + `DownloadOptions`, validation, atomic writes. Data lives in `%APPDATA%\yt-dlp-gui`.
 - `internal/sys` – hidden consoles, process-tree kill (`taskkill /T`), open/reveal in Explorer, the tray
   icon + taskbar progress (`shell_windows.go`, raw Win32/COM on its own thread), per-user registry entries.
@@ -100,6 +104,9 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - Wails v2 has no tray. `sys.Shell` owns it: a hidden top-level window (not message-only, or Explorer's
   `TaskbarCreated` broadcast is missed) on a locked thread. Its callbacks run on new goroutines because
   Wails runtime calls from the shell thread could block it.
+- `go:embed bundle` fails to compile without the files, so it lives behind the `bundled` tag; plain
+  builds and tests never need `bundle/`. Don't launch a release build to test it: it re-registers
+  the `prem-dl:` link type and toast name for its own path. Use the `-tags bundled` test instead.
 - Editing Go files while `wails dev` runs triggers rebuilds that drop the bridge; wait for port 34115.
 - No C compiler on this machine, so `go test -race` is unavailable. Keep lock ordering simple
   (`lineHandler.mu` -> `Manager.mu` and `Manager.saveMu` -> `Manager.mu`, never the reverse).

@@ -31,6 +31,16 @@ func writeZip(t *testing.T, names ...string) string {
 	return path
 }
 
+func openZip(t *testing.T, path string) *zip.Reader {
+	t.Helper()
+	z, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { z.Close() })
+	return &z.Reader
+}
+
 func TestExtractFFmpegTakesOnlyWhatItNeeds(t *testing.T) {
 	// Layout of the real ffmpeg-master-latest-win64-gpl-shared.zip, plus hostile names.
 	top := "ffmpeg-master-latest-win64-gpl-shared/"
@@ -40,7 +50,7 @@ func TestExtractFFmpegTakesOnlyWhatItNeeds(t *testing.T) {
 		top+"bin/../../escape.dll", "../outside.dll", top+"bin/sub/deep.dll",
 	)
 	dest := filepath.Join(t.TempDir(), "ffmpeg")
-	if err := extractFFmpeg(archive, dest); err != nil {
+	if err := extractFFmpeg(openZip(t, archive), dest); err != nil {
 		t.Fatal(err)
 	}
 	entries, _ := os.ReadDir(dest)
@@ -60,7 +70,7 @@ func TestExtractFFmpegTakesOnlyWhatItNeeds(t *testing.T) {
 
 func TestExtractFFmpegNeedsBothPrograms(t *testing.T) {
 	archive := writeZip(t, "x/bin/ffmpeg.exe", "x/bin/avutil-61.dll")
-	if err := extractFFmpeg(archive, filepath.Join(t.TempDir(), "ff")); err == nil || !strings.Contains(err.Error(), "ffprobe.exe") {
+	if err := extractFFmpeg(openZip(t, archive), filepath.Join(t.TempDir(), "ff")); err == nil || !strings.Contains(err.Error(), "ffprobe.exe") {
 		t.Fatalf("err = %v", err)
 	}
 }

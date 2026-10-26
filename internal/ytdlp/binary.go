@@ -393,13 +393,41 @@ func Install(ctx context.Context, client *http.Client, channel, dest string, pro
 		os.Remove(newPath)
 		return "", errors.New("the downloaded file failed its SHA-256 check and was discarded")
 	}
+	return swapIn(ctx, newPath, dest)
+}
+
+// InstallFrom installs the yt-dlp read from src (the copy built into the app) at dest, the same
+// way Install does once the download is verified.
+func InstallFrom(ctx context.Context, src io.Reader, dest string) (string, error) {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return "", err
+	}
+	newPath := dest + ".new"
+	w, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return "", err
+	}
+	_, err = io.Copy(w, src)
+	if cerr := w.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		os.Remove(newPath)
+		return "", fmt.Errorf("writing yt-dlp: %w", err)
+	}
+	return swapIn(ctx, newPath, dest)
+}
+
+// swapIn runs the yt-dlp at newPath once and moves it to dest, replacing any file there
+// atomically where the OS allows and restoring it if anything fails.
+func swapIn(ctx context.Context, newPath, dest string) (string, error) {
 	if runtime.GOOS != "windows" {
 		_ = os.Chmod(newPath, 0o755)
 	}
 	version, err := Version(ctx, newPath)
 	if err != nil {
 		os.Remove(newPath)
-		return "", fmt.Errorf("the downloaded yt-dlp does not run: %w", err)
+		return "", fmt.Errorf("the new yt-dlp does not run: %w", err)
 	}
 
 	oldPath := dest + ".old"

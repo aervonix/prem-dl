@@ -3,3 +3,5 @@ node_modules
 frontend/dist
 /yt-dlp.exe
 *.exe~
+# tools for a bundled build, fetched by go run ./cmd/bundle
+/bundle/

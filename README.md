@@ -135,6 +135,11 @@ yt-dlp is looked for in this order: the path set in Settings → Advanced, next 
 folder the app was started from, the app's own copy in `%APPDATA%\yt-dlp-gui\bin`, and finally
 `PATH`.
 
+A bundled build (see below) carries yt-dlp, and usually ffmpeg, inside `Prem-dl.exe`. On start
+it unpacks them into `%APPDATA%\yt-dlp-gui\bin` when they're needed: yt-dlp when none is found
+(or only one on `PATH`) or the app's own copy is older, ffmpeg only when there's no ffmpeg at
+all. From then on they're updated like any copy the app installed.
+
 ## Building from source
 
 You'll need:
@@ -152,6 +157,17 @@ cd prem-dl
 wails build        # builds build\bin\Prem-dl.exe
 wails dev          # runs it with live reload while you work on it
 ```
+
+To build one exe with yt-dlp and ffmpeg inside (about 118 MB instead of 13 MB):
+
+```powershell
+go run ./cmd/bundle               # fetches both into bundle\, checked against their SHA-256 sums
+wails build -tags bundled         # add -o Prem-dl-bundled.exe to keep the plain build too
+```
+
+`go run ./cmd/bundle -ffmpeg=false` leaves ffmpeg out (about 31 MB); the app then offers its
+**Install ffmpeg** button as before. Run the fetch again before a release so the bundled yt-dlp is
+current.
 
 Run the tests with:
 

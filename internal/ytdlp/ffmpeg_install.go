@@ -45,17 +45,44 @@ func InstallFFmpeg(ctx context.Context, client *http.Client, managedDir string, 
 	}
 	archive := dir + ".zip.part"
 	defer os.Remove(archive)
+	if err := DownloadFFmpeg(ctx, client, archive, progress); err != nil {
+		return "", err
+	}
+	z, err := zip.OpenReader(archive)
+	if err != nil {
+		return "", fmt.Errorf("unpacking ffmpeg: %w", err)
+	}
+	defer z.Close()
+	return installFFmpegZip(ctx, &z.Reader, managedDir)
+}
 
+// DownloadFFmpeg fetches yt-dlp's ffmpeg build to path, verified against its published SHA-256.
+func DownloadFFmpeg(ctx context.Context, client *http.Client, path string, progress ProgressFunc) error {
 	var err error
 	for attempt := 0; attempt < 2; attempt++ {
-		if err = fetchFFmpeg(ctx, client, archive, progress); !errors.Is(err, errHashMismatch) {
+		if err = fetchFFmpeg(ctx, client, path, progress); !errors.Is(err, errHashMismatch) {
 			break
 		}
 	}
+	return err
+}
+
+// InstallFFmpegFrom installs ffmpeg from an archive DownloadFFmpeg fetched earlier (the copy built
+// into the app), the same way InstallFFmpeg does.
+func InstallFFmpegFrom(ctx context.Context, archive io.ReaderAt, size int64, managedDir string) (string, error) {
+	z, err := zip.NewReader(archive, size)
 	if err != nil {
+		return "", fmt.Errorf("unpacking ffmpeg: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(FFmpegDir(managedDir)), 0o755); err != nil {
 		return "", err
 	}
+	return installFFmpegZip(ctx, z, managedDir)
+}
 
+// installFFmpegZip unpacks the archive next to FFmpegDir, runs it once and swaps it in.
+func installFFmpegZip(ctx context.Context, archive *zip.Reader, managedDir string) (string, error) {
+	dir := FFmpegDir(managedDir)
 	staged := dir + ".new"
 	_ = os.RemoveAll(staged)
 	if err := extractFFmpeg(archive, staged); err != nil {
@@ -118,12 +145,7 @@ func fetchFFmpeg(ctx context.Context, client *http.Client, archive string, progr
 // extractFFmpeg copies what ffmpeg needs out of the archive's bin folder (the two programs and
 // their DLLs, not the ffplay player) plus the licence, flat into dest. Names are reduced to their
 // last element, so no entry can write outside dest.
-func extractFFmpeg(archive, dest string) error {
-	z, err := zip.OpenReader(archive)
-	if err != nil {
-		return err
-	}
-	defer z.Close()
+func extractFFmpeg(z *zip.Reader, dest string) error {
 	if err := os.MkdirAll(dest, 0o755); err != nil {
 		return err
 	}

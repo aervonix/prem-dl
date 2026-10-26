@@ -66,9 +66,11 @@ func (a *App) detectTools() {
 	a.toolsGen++
 	gen := a.toolsGen
 	a.toolsMu.Unlock()
-	s := a.store.Get()
 	ctx, cancel := context.WithTimeout(a.root, 90*time.Second)
 	defer cancel()
+	// Unpacking ffmpeg takes a few seconds; it must not eat into detection's own time.
+	a.unpackOnce.Do(func() { a.unpackBundle(a.root) })
+	s := a.store.Get()
 
 	st := ToolStatus{ManagedPath: ytdlp.ManagedPath(a.managedDir()), JSRuntimes: []ytdlp.JSRuntime{}}
 
@@ -166,14 +168,15 @@ var errBinaryMissing = apperr.New("binary_missing", "yt-dlp isn't installed",
 
 // buildEnv prepares one yt-dlp invocation. The returned cleanup removes per-run temp files.
 func (a *App) buildEnv(ctx context.Context) (ytdlp.Env, func(), error) {
+	// Detection first: the yt-dlp built into the app is unpacked by then.
+	tools := a.ensureTools(ctx)
+	if err := ctx.Err(); err != nil {
+		return ytdlp.Env{}, func() {}, err
+	}
 	s := a.store.Get()
 	bin, err := ytdlp.Resolve(s.YtdlpPath, a.managedDir())
 	if err != nil {
 		return ytdlp.Env{}, func() {}, errBinaryMissing
-	}
-	tools := a.ensureTools(ctx)
-	if err := ctx.Err(); err != nil {
-		return ytdlp.Env{}, func() {}, err
 	}
 	env := ytdlp.Env{Bin: bin.Path, Settings: s, JSRuntimes: tools.JSRuntimes}
 	if tools.FFmpeg != nil {

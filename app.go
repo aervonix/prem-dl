@@ -45,6 +45,7 @@ type App struct {
 	toolsPub   int64 // the pass whose result is published
 	versions   map[versionKey]string
 	detectOnce sync.Once
+	unpackOnce sync.Once // the tools built into the exe; see bundle.go
 	firstTools sync.Once
 	toolsFirst chan struct{} // closed once the first detection pass has published
 
