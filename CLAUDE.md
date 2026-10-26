@@ -41,6 +41,7 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 
 ## Conventions
 
+- Git: commit straight to `main`. Only make a branch for big changes.
 - Errors users can act on are `*apperr.AppError` with an `Action` (update / cookies / settings / ...),
   not strings. Add a rule + test in `apperr` when you meet a new yt-dlp failure; use real captured messages.
 - `api.ts` has compile-time guards that fail `tsc` if `types.ts` drifts from the generated models. Keep them
