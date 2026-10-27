@@ -7,8 +7,8 @@ import type {ArchiveInfo, Settings} from '../../types'
 import type {TabProps} from './tab'
 
 const TEMPLATES = [
-  {value: '%(title)s [%(id)s].%(ext)s', label: 'Title [id]  (default, avoids name clashes)'},
-  {value: '%(title)s.%(ext)s', label: 'Title'},
+  {value: '%(title)s.%(ext)s', label: 'Title  (default)'},
+  {value: '%(title)s [%(id)s].%(ext)s', label: 'Title [id]  (two videos with one title both save)'},
   {value: '%(uploader)s - %(title)s.%(ext)s', label: 'Uploader - Title'},
   {value: '%(upload_date>%Y-%m-%d)s %(title)s.%(ext)s', label: 'Date Title'},
   {value: '%(channel)s/%(title)s.%(ext)s', label: 'Channel folder / Title'},

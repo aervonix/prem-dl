@@ -221,7 +221,7 @@ func TestChapterArgs(t *testing.T) {
 	for _, want := range []string{
 		`--download-sections=^Introduction example$`,
 		`--download-sections=^What are neurons\?$`,
-		"--output=%(title)s [%(id)s]/%(section_number+1)02d - %(section_title)s.%(ext)s",
+		"--output=%(title)s/%(section_number+1)02d - %(section_title)s.%(ext)s",
 	} {
 		if !has(args, want) {
 			t.Errorf("missing %s in %v", want, args)
@@ -444,7 +444,7 @@ func TestMoreDownloadOptions(t *testing.T) {
 
 	o.SplitChapters, o.LiveFromStart = true, true
 	args := e.DownloadArgs(o, Target{URL: "https://example.com/v", PlaylistTitle: "My: List", PlaylistIndex: 2, PlaylistCount: 9})
-	if !has(args, "--split-chapters") || !has(args, "--output=chapter:My_ List/%(title)s [%(id)s]/%(section_number)02d - %(section_title)s.%(ext)s") {
+	if !has(args, "--split-chapters") || !has(args, "--output=chapter:My_ List/02 - %(title)s/%(section_number)02d - %(section_title)s.%(ext)s") {
 		t.Errorf("chapters go into a folder per video inside the playlist folder: %v", args)
 	}
 	if !has(args, "--live-from-start") {
@@ -566,6 +566,13 @@ func TestOutputTemplate(t *testing.T) {
 	o.PlaylistNumbering = false
 	if got := OutputTemplate(base, o, tg); got != base {
 		t.Errorf("neither: %q", got)
+	}
+	// Chapter folders are named like the video would be, by the user's template.
+	if got := ChapterTemplate("%(channel)s/%(title)s [%(id)s].%(ext)s", settings.DownloadOptions{}, Target{}); got != "%(channel)s/%(title)s [%(id)s]/%(section_number)02d - %(section_title)s.%(ext)s" {
+		t.Errorf("chapter folder: %q", got)
+	}
+	if got := SectionTemplate("%(ext)s %(title)s", settings.DownloadOptions{}, Target{}); got != "%(title)s/%(section_number+1)02d - %(section_title)s.%(ext)s" {
+		t.Errorf("ext not at the end: %q", got)
 	}
 	if got := sanitizeSegment("CON"); got != "CON_" {
 		t.Errorf("reserved name: %q", got)

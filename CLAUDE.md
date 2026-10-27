@@ -113,6 +113,9 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
   its 2025 filter redesign, so there is no sort. Results say only "3 years ago";
   `--extractor-args=youtubetab:approximate_date` turns that into `timestamp`. Channel avatars come
   as `//yt3.ggpht.com/...` (`pickThumb` adds `https:`).
+- The default file name is just the title (user's choice; was `Title [id]`). Two videos with one
+  title get one name, and yt-dlp skips the second as "already downloaded". Chapter folders follow
+  the filename template (`videoFolder`). Saved settings keep whatever template they had.
 - Quality sizes in the UI are estimates from the probe's `filesize`/`filesize_approx`: `quality.ts`
   picks streams like `bv*[height<=h]+ba` under `QualitySort`. Change one, change the other.
 

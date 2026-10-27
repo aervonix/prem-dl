@@ -18,7 +18,7 @@ import (
 // ConfigDirName is the folder created under the user's config directory.
 const ConfigDirName = "yt-dlp-gui"
 
-const DefaultTemplate = "%(title)s [%(id)s].%(ext)s"
+const DefaultTemplate = "%(title)s.%(ext)s"
 
 // SubtitleOptions controls subtitle handling. Mode is none | files | embed | both.
 type SubtitleOptions struct {

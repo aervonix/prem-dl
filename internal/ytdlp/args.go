@@ -109,7 +109,7 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	}
 	out := OutputTemplate(s.FilenameTemplate, o, t)
 	if len(o.Chapters) > 0 {
-		out = SectionTemplate(o, t)
+		out = SectionTemplate(s.FilenameTemplate, o, t)
 	}
 	a = append(a, "--paths="+dir, "--output="+out)
 	a = append(a, "--trim-filenames=180")
@@ -153,7 +153,7 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 		}
 	}
 	if o.SplitChapters {
-		a = append(a, "--split-chapters", "--output=chapter:"+ChapterTemplate(o, t))
+		a = append(a, "--split-chapters", "--output=chapter:"+ChapterTemplate(s.FilenameTemplate, o, t))
 	}
 	if o.LiveFromStart {
 		a = append(a, "--live-from-start")
@@ -344,22 +344,23 @@ func withAudioLang(expr, lang string) string {
 
 // SectionTemplate names the files of a download of chosen chapters like ChapterTemplate does.
 // For --download-sections, section_number counts from 0 (it is 1-based for --split-chapters).
-func SectionTemplate(o settings.DownloadOptions, t Target) string {
-	prefix := ""
-	if t.PlaylistTitle != "" && o.PlaylistFolder {
-		prefix = sanitizeSegment(t.PlaylistTitle) + "/"
-	}
-	return prefix + "%(title)s [%(id)s]/%(section_number+1)02d - %(section_title)s.%(ext)s"
+func SectionTemplate(base string, o settings.DownloadOptions, t Target) string {
+	return videoFolder(base, o, t) + "/%(section_number+1)02d - %(section_title)s.%(ext)s"
 }
 
-// ChapterTemplate names the files --split-chapters writes: a folder named like the video (inside
-// the playlist folder, if any) holding "01 - Chapter title.ext" files.
-func ChapterTemplate(o settings.DownloadOptions, t Target) string {
-	prefix := ""
-	if t.PlaylistTitle != "" && o.PlaylistFolder {
-		prefix = sanitizeSegment(t.PlaylistTitle) + "/"
+// ChapterTemplate names the files --split-chapters writes: a folder named like the video would
+// be (the filename template, playlist folder and numbering) holding "01 - Chapter title.ext" files.
+func ChapterTemplate(base string, o settings.DownloadOptions, t Target) string {
+	return videoFolder(base, o, t) + "/%(section_number)02d - %(section_title)s.%(ext)s"
+}
+
+// videoFolder is the video's output template without its extension, used as a folder.
+func videoFolder(base string, o settings.DownloadOptions, t Target) string {
+	out := OutputTemplate(base, o, t)
+	if strings.HasSuffix(out, ".%(ext)s") {
+		return strings.TrimSuffix(out, ".%(ext)s")
 	}
-	return prefix + "%(title)s [%(id)s]/%(section_number)02d - %(section_title)s.%(ext)s"
+	return strings.TrimSpace(strings.Replace(out, "%(ext)s", "", 1))
 }
 
 var reservedNames = map[string]bool{
