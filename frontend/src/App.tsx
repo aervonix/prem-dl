@@ -15,8 +15,8 @@ import {AppProvider, useApp, useJobs} from './store'
 import type {Page} from './store'
 
 const NAV: {page: Page; label: string; icon: IconName}[] = [
-  {page: 'download', label: 'Download', icon: 'download'},
   {page: 'search', label: 'Search', icon: 'search'},
+  {page: 'download', label: 'Download', icon: 'download'},
   {page: 'queue', label: 'Queue', icon: 'list'},
   {page: 'following', label: 'Following', icon: 'bell'},
   {page: 'settings', label: 'Settings', icon: 'settings'},
