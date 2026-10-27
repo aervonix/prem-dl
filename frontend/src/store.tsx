@@ -2,9 +2,9 @@ import {createContext, useCallback, useContext, useEffect, useMemo, useReducer, 
 import type {ReactNode} from 'react'
 import {api, errMessage, on} from './api'
 import {plural} from './format'
-import type {AppState, AppUpdate, Feed, Job, Settings, ToolStatus, UpdateInfo, UpdateResult} from './types'
+import type {AppState, AppUpdate, Feed, Job, Settings, ToolStatus} from './types'
 
-export type Page = 'download' | 'queue' | 'following' | 'settings'
+export type Page = 'download' | 'search' | 'queue' | 'following' | 'settings'
 const PAGES: Page[] = ['download', 'queue', 'following', 'settings']
 export type ToastKind = 'info' | 'success' | 'error'
 
@@ -24,11 +24,8 @@ export interface State {
   /** Followed channels and playlists. */
   feeds: Feed[]
   tools: ToolStatus
-  toolProgress: {done: number; total: number} | null
-  /** Set while ffmpeg is being installed. */
-  ffmpegProgress: {done: number; total: number} | null
-  updateAvailable: UpdateInfo | null
-  autoUpdated: UpdateResult | null
+  /** Set while the built-in tools are unpacked again (repairTools). */
+  repairing: boolean
   /** The last check for a new Prem-dl. */
   appUpdate: AppUpdate | null
   /** Set while the new Prem-dl's installer downloads. */
@@ -52,10 +49,7 @@ const emptyTools: ToolStatus = {
   ytdlpError: '',
   ffmpeg: null,
   jsRuntimes: [],
-  managedPath: '',
-  ffmpegManaged: false,
-  canInstallFfmpeg: false,
-  upToDate: false,
+  builtIn: false,
 }
 
 export const initial: State = {
@@ -66,10 +60,7 @@ export const initial: State = {
   settings: null,
   feeds: [],
   tools: emptyTools,
-  toolProgress: null,
-  ffmpegProgress: null,
-  updateAvailable: null,
-  autoUpdated: null,
+  repairing: false,
   appUpdate: null,
   appUpdateProgress: null,
   appRestarting: false,
@@ -87,12 +78,9 @@ export type Action =
   | {type: 'jobs'; jobs: Job[]}
   | {type: 'jobsRemoved'; ids: string[]}
   | {type: 'tools'; tools: ToolStatus}
-  | {type: 'toolProgress'; p: State['toolProgress']}
-  | {type: 'ffmpegProgress'; p: State['ffmpegProgress']}
+  | {type: 'repairing'; on: boolean}
   | {type: 'settings'; settings: Settings}
   | {type: 'feeds'; feeds: Feed[]}
-  | {type: 'updateAvailable'; info: UpdateInfo | null}
-  | {type: 'autoUpdated'; res: UpdateResult | null}
   | {type: 'appUpdate'; info: AppUpdate}
   | {type: 'appUpdateProgress'; p: State['appUpdateProgress']}
   | {type: 'appRestarting'}
@@ -148,19 +136,12 @@ export function reducer(s: State, a: Action): State {
       return s
     case 'tools':
       return {...s, tools: a.tools}
-    case 'toolProgress':
-      return {...s, toolProgress: a.p}
-    case 'ffmpegProgress':
-      return {...s, ffmpegProgress: a.p}
+    case 'repairing':
+      return {...s, repairing: a.on}
     case 'settings':
       return {...s, settings: a.settings}
     case 'feeds':
       return {...s, feeds: a.feeds}
-    case 'updateAvailable':
-      return {...s, updateAvailable: a.info}
-    case 'autoUpdated':
-      // The background update sent progress events too; nothing else clears them.
-      return {...s, autoUpdated: a.res, toolProgress: null, updateAvailable: a.res?.ok ? null : s.updateAvailable}
     case 'appUpdate':
       return {...s, appUpdate: a.info}
     case 'appUpdateProgress':
@@ -202,11 +183,8 @@ interface Ctx {
   attempt: <T>(p: Promise<T>) => Promise<T | undefined>
   /** Copy text to the clipboard; the toast says whether it worked. */
   copy: (text: string, done: string) => Promise<void>
-  /** Install or update yt-dlp, reporting the outcome with a toast. */
-  updateYtdlp: () => Promise<UpdateResult>
-  /** Install (or update) the app's own ffmpeg, reporting the outcome with a toast. */
-  installFfmpeg: () => Promise<void>
-  setUpdateAvailable: (i: UpdateInfo | null) => void
+  /** Unpack the tools built into Prem-dl again, reporting the outcome with a toast. */
+  repairTools: () => Promise<void>
   /** Check for a new Prem-dl now; failures come back in the result's error. */
   checkAppUpdate: () => Promise<AppUpdate | undefined>
   /** Download and run the new Prem-dl's installer; the app restarts when it works. */
@@ -256,11 +234,6 @@ export function AppProvider({children}: {children: ReactNode}) {
       on('jobs:update', (jobs) => dispatch({type: 'jobs', jobs})),
       on('jobs:remove', (ids) => dispatch({type: 'jobsRemoved', ids})),
       on('tools:status', (tools) => dispatch({type: 'tools', tools})),
-      on('tools:progress', (p) => dispatch({type: 'toolProgress', p})),
-      // Progress only while an install is running: a late event must not bring the bar back.
-      on('ffmpeg:progress', (p) => installing.current && dispatch({type: 'ffmpegProgress', p})),
-      on('tools:update-available', (info) => dispatch({type: 'updateAvailable', info})),
-      on('tools:auto-updated', (res) => dispatch({type: 'autoUpdated', res})),
       on('app:update', (info) => dispatch({type: 'appUpdate', info})),
       on('app:update-progress', (p) => updatingApp.current && dispatch({type: 'appUpdateProgress', p})),
       on('settings:changed', (settings) => dispatch({type: 'settings', settings})),
@@ -312,40 +285,20 @@ export function AppProvider({children}: {children: ReactNode}) {
     [toast],
   )
 
-  const updateYtdlp = useCallback(async (): Promise<UpdateResult> => {
-    dispatch({type: 'toolProgress', p: {done: 0, total: 0}})
+  const repairingRef = useRef(false)
+  const repairTools = useCallback(async () => {
+    if (repairingRef.current) return
+    repairingRef.current = true
+    dispatch({type: 'repairing', on: true})
     try {
-      const res = await api.updateYtdlp()
-      if (res.ok) {
-        toast('success', res.message)
-        dispatch({type: 'updateAvailable', info: null})
-      } else if (res.error) {
-        toast('error', `${res.error.title}: ${res.error.message}`)
-      }
-      return res
-    } catch (e) {
-      const msg = errMessage(e)
-      toast('error', msg)
-      return {ok: false, previous: '', version: '', path: '', message: '', error: null}
-    } finally {
-      dispatch({type: 'toolProgress', p: null})
-    }
-  }, [dispatch, toast])
-
-  const installing = useRef(false)
-  const installFfmpeg = useCallback(async () => {
-    if (installing.current) return
-    installing.current = true
-    dispatch({type: 'ffmpegProgress', p: {done: 0, total: 0}})
-    try {
-      const res = await api.installFfmpeg()
+      const res = await api.repairTools()
       if (res.ok) toast('success', res.message)
-      else if (res.error) toast('error', `${res.error.title}: ${res.error.message}`)
+      else if (res.error) toast('error', `${res.error.title}: ${res.error.message} ${res.error.hint}`.trim())
     } catch (e) {
       toast('error', errMessage(e))
     } finally {
-      installing.current = false
-      dispatch({type: 'ffmpegProgress', p: null})
+      repairingRef.current = false
+      dispatch({type: 'repairing', on: false})
     }
   }, [dispatch, toast])
 
@@ -395,13 +348,11 @@ export function AppProvider({children}: {children: ReactNode}) {
       setTools: (tools) => dispatch({type: 'tools', tools}),
       attempt,
       copy,
-      updateYtdlp,
-      installFfmpeg,
-      setUpdateAvailable: (info) => dispatch({type: 'updateAvailable', info}),
+      repairTools,
       checkAppUpdate,
       installAppUpdate,
     }),
-    [dispatch, toast, attempt, copy, updateYtdlp, installFfmpeg, checkAppUpdate, installAppUpdate],
+    [dispatch, toast, attempt, copy, repairTools, checkAppUpdate, installAppUpdate],
   )
   const ctx = useMemo<Ctx>(() => ({state, ...actions}), [state, actions])
 

@@ -15,7 +15,7 @@ export function NetworkTab({draft, upd}: TabProps) {
         <Field label="Parallel fragments" hint="Threads used per download for segmented (DASH/HLS) streams.">
           <input type="number" min={1} max={16} value={draft.concurrentFragments} onChange={(e) => upd({concurrentFragments: Number(e.target.value)})} />
         </Field>
-        <Field label="Retries" hint="How often yt-dlp retries a failed connection or fragment within one download.">
+        <Field label="Retries" hint="How often a failed connection or fragment is retried within one download.">
           <input type="number" min={0} max={50} value={draft.retries} onChange={(e) => upd({retries: Number(e.target.value)})} />
         </Field>
       </div>

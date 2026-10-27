@@ -1,11 +1,11 @@
-import {useMemo, useState} from 'react'
+import {useState} from 'react'
 import {api} from '../api'
-import {bytes, parseTime} from '../format'
+import {parseTime} from '../format'
 import {Icon} from '../icons'
-import type {AudioFormat, DownloadOptions, FormatInfo, Preset, SubMode, VideoInfo} from '../types'
+import type {DownloadOptions, SubMode, VideoInfo} from '../types'
 import {PartPicker} from './PartPicker'
+import {QualityPicker} from './QualityPicker'
 import {Button, Chip, Field, Segmented, Switch} from './ui'
-import type {SegOption} from './ui'
 
 const COMMON_LANGS = ['en', 'es', 'fr', 'de', 'pt', 'it', 'ja', 'ko', 'zh-Hans', 'ru', 'ar', 'hi']
 
@@ -19,58 +19,6 @@ const SPONSOR_CATEGORIES: {id: string; label: string}[] = [
   {id: 'interaction', label: 'Like & subscribe reminders'},
   {id: 'music_offtopic', label: 'Non-music sections'},
 ]
-
-const PRESET_HEIGHTS: Record<string, number> = {'2160': 2160, '1440': 1440, '1080': 1080, '720': 720, '480': 480, '360': 360}
-
-/** The yt-dlp expression for downloading a specific format (adding best audio if it has none). */
-function expressionFor(f: FormatInfo): string {
-  if (f.hasVideo && !f.hasAudio) return `${f.id}+ba/${f.id}`
-  return f.id
-}
-
-/** Whether a format expression picks one of the video's audio-only formats. */
-export function isAudioFormat(video: VideoInfo, formatId: string): boolean {
-  return video.formats.some((f) => !f.hasVideo && f.hasAudio && expressionFor(f) === formatId)
-}
-
-const languageNames = (() => {
-  try {
-    return new Intl.DisplayNames(undefined, {type: 'language'})
-  } catch {
-    return null
-  }
-})()
-
-/** "German", "Chinese (Simplified)"... for a language code; the code itself if unknown. */
-export function languageName(code: string): string {
-  try {
-    return languageNames?.of(code) ?? code
-  } catch {
-    return code
-  }
-}
-
-function describeFormat(f: FormatInfo): string {
-  const parts: string[] = []
-  if (f.hasVideo) {
-    parts.push(f.height ? `${f.height}p${f.fps && f.fps > 30 ? Math.round(f.fps) : ''}` : f.resolution || 'video')
-  } else if (f.hasAudio) {
-    parts.push(f.language ? languageName(f.language) : 'audio')
-  } else {
-    parts.push(f.resolution || f.note || f.id)
-  }
-  parts.push(f.ext)
-  const codec = f.hasVideo ? f.vcodec : f.acodec
-  if (codec && codec !== 'none') parts.push(codec.split('.')[0])
-  if (f.dynamicRange && f.dynamicRange !== 'SDR') parts.push(f.dynamicRange)
-  const kbps = f.hasVideo ? f.vbr || f.tbr : f.abr || f.tbr
-  if (kbps) parts.push(`${Math.round(kbps)} kbps`)
-  // What YouTube's notes add: "Premium" streams, and which audio track is the original.
-  if (f.hasVideo && /premium/i.test(f.note)) parts.push('Premium')
-  if (!f.hasVideo && /original/i.test(f.note)) parts.push('original')
-  if (f.filesize) parts.push(bytes(f.filesize))
-  return `${parts.join(' · ')}  (${f.id})`
-}
 
 export function OptionsPanel({
   value,
@@ -96,32 +44,6 @@ export function OptionsPanel({
   const [extrasOpen, setExtrasOpen] = useState(mode !== 'download')
   const [langDraft, setLangDraft] = useState('')
 
-  const maxHeight = video && video.heights.length > 0 ? video.heights[0] : 0
-  const presetOptions: SegOption<Preset>[] = [
-    video?.bestPremium
-      ? {value: 'best', label: <>Best<span className="seg-tag">Premium</span></>, title: 'Best downloads the YouTube Premium stream for this video'}
-      : {value: 'best', label: 'Best'},
-    ...(['2160', '1440', '1080', '720', '480', '360'] as const).map((h) => ({
-      value: h as Preset,
-      label: h === '2160' ? '4K' : `${h}p`,
-      disabled: maxHeight > 0 && PRESET_HEIGHTS[h] > maxHeight,
-      title: maxHeight > 0 && PRESET_HEIGHTS[h] > maxHeight ? `This video tops out at ${maxHeight}p` : undefined,
-    })),
-    {value: 'audio', label: 'Audio only'},
-    // Also kept when a format is already picked but there is no list (a queued job's options).
-    ...((video && video.formats.length > 0) || value.preset === 'custom' ? [{value: 'custom' as Preset, label: 'Pick format…'}] : []),
-  ]
-
-  const customFormats = useMemo(() => {
-    if (!video) return {both: [], videoOnly: [], audioOnly: []}
-    const sorted = [...video.formats].sort((a, b) => b.height - a.height || b.tbr - a.tbr)
-    return {
-      both: sorted.filter((f) => f.hasVideo && f.hasAudio),
-      videoOnly: sorted.filter((f) => f.hasVideo && !f.hasAudio),
-      audioOnly: sorted.filter((f) => !f.hasVideo).sort((a, b) => b.tbr - a.tbr),
-    }
-  }, [video])
-
   const sub = value.subtitles
   const setSub = (patch: Partial<DownloadOptions['subtitles']>) => set('subtitles', {...sub, ...patch})
   const toggleLang = (l: string) => setSub({langs: sub.langs.includes(l) ? sub.langs.filter((x) => x !== l) : [...sub.langs, l]})
@@ -134,126 +56,13 @@ export function OptionsPanel({
   const autoLangs = video?.autoCaptions ?? []
   const langLabel = (l: string) => manualLangs.find((t) => t.lang === l)?.name ?? autoLangs.find((t) => t.lang === l)?.name ?? l
 
-  const isAudio = value.preset === 'audio'
   // The download is an audio file: "Audio only", or an audio format picked from the list.
-  const audioFile = isAudio || (value.preset === 'custom' && value.formatAudioOnly)
-  // Without the video's list (a queued job's options) whether it is audio can't be told; it stays.
-  const pickFormat = (formatId: string) => onChange({...value, formatId, formatAudioOnly: video ? isAudioFormat(video, formatId) : value.formatAudioOnly})
-  const lossy = ['mp3', 'm4a', 'opus', 'aac'].includes(value.audioFormat)
+  const audioFile = value.preset === 'audio' || (value.preset === 'custom' && value.formatAudioOnly)
 
   return (
     <div>
       {/* ---- quality ---- */}
-      <div className="optgroup">
-        <div className="opt-head">
-          Quality
-        </div>
-        <div className={video?.bestPremium ? 'seg-tagged' : undefined}>
-          <Segmented label="Quality" value={value.preset} options={presetOptions} onChange={(v) => set('preset', v)} />
-        </div>
-        {maxHeight > 0 && PRESET_HEIGHTS[value.preset] > maxHeight && (
-          <div className="hint">This video tops out at {maxHeight}p, so that's what it downloads.</div>
-        )}
-
-        {isAudio && (
-          <div className="grid3" style={{marginTop: 4}}>
-            <Field label="Audio format">
-              <select value={value.audioFormat} onChange={(e) => set('audioFormat', e.target.value as AudioFormat)}>
-                <option value="mp3">MP3</option>
-                <option value="m4a">M4A (AAC)</option>
-                <option value="opus">Opus</option>
-                <option value="aac">AAC</option>
-                <option value="flac">FLAC (lossless)</option>
-                <option value="wav">WAV (lossless)</option>
-                <option value="best">Original (no conversion)</option>
-              </select>
-            </Field>
-            {lossy && (
-              <Field label="Quality">
-                <select value={value.audioQuality} onChange={(e) => set('audioQuality', e.target.value)}>
-                  <option value="0">Best</option>
-                  <option value="2">High</option>
-                  <option value="5">Medium</option>
-                  <option value="8">Low (small files)</option>
-                </select>
-              </Field>
-            )}
-          </div>
-        )}
-
-        {mode === 'download' && video && video.audioLanguages.length > 1 && value.preset !== 'custom' && (
-          <Field label="Audio language" hint="This video has dubbed audio tracks. Formats without the chosen language use the default one.">
-            <select value={value.audioLang} onChange={(e) => set('audioLang', e.target.value)}>
-              <option value="">{languageName(video.audioLanguages[0])} (default)</option>
-              {video.audioLanguages.slice(1).map((l) => (
-                <option key={l} value={l}>
-                  {languageName(l)}
-                </option>
-              ))}
-            </select>
-          </Field>
-        )}
-
-        {value.preset === 'custom' && (
-          <div className="stack">
-            {video && (
-              <Field label="Format" hint="Video-only formats get the best audio stream added automatically.">
-                <select value={value.formatId} onChange={(e) => pickFormat(e.target.value)}>
-                  <option value="">Choose a format…</option>
-                  {customFormats.both.length > 0 && (
-                    <optgroup label="Video + audio">
-                      {customFormats.both.map((f) => (
-                        <option key={f.id} value={expressionFor(f)}>
-                          {describeFormat(f)}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {customFormats.videoOnly.length > 0 && (
-                    <optgroup label="Video only (+ best audio)">
-                      {customFormats.videoOnly.map((f) => (
-                        <option key={f.id} value={expressionFor(f)}>
-                          {describeFormat(f)}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {customFormats.audioOnly.length > 0 && (
-                    <optgroup label="Audio only">
-                      {customFormats.audioOnly.map((f) => (
-                        <option key={f.id} value={expressionFor(f)}>
-                          {describeFormat(f)}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                </select>
-              </Field>
-            )}
-            <Field label="Format expression" hint="Advanced: edit the yt-dlp -f expression directly.">
-              <input type="text" className="mono" value={value.formatId} onChange={(e) => pickFormat(e.target.value)} spellCheck={false} />
-            </Field>
-          </div>
-        )}
-
-        {value.preset === 'custom' && value.formatAudioOnly && <div className="hint">Saved as an audio file in its own format (.opus or .m4a), without converting it.</div>}
-
-        {!audioFile && (
-          <Field label="Container" hint="Auto picks what suits the codecs. MP4 plays everywhere; MKV holds anything.">
-            <Segmented
-              label="Container"
-              value={value.container || 'auto'}
-              options={[
-                {value: 'auto', label: 'Auto'},
-                {value: 'mp4', label: 'MP4'},
-                {value: 'mkv', label: 'MKV'},
-                {value: 'webm', label: 'WebM'},
-              ]}
-              onChange={(v) => set('container', v === 'auto' ? '' : (v as DownloadOptions['container']))}
-            />
-          </Field>
-        )}
-      </div>
+      <QualityPicker value={value} onChange={onChange} video={video} mode={mode} />
 
       {/* ---- subtitles ---- */}
       <div className="optgroup">

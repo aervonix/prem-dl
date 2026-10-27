@@ -3,7 +3,8 @@
 Prem-dl is a Windows desktop app for downloading video and audio with
 [yt-dlp](https://github.com/yt-dlp/yt-dlp). Paste a link, check what you're about to get, pick a
 quality and hit Download. It handles the parts of yt-dlp that are fiddly on the command line:
-playlists, queues, cookies, subtitles and keeping yt-dlp itself up to date.
+playlists, queues, cookies and subtitles. yt-dlp and ffmpeg are built in, and each release of
+Prem-dl carries the versions it was tested with.
 
 It also knows about YouTube Premium. Sign in through Chrome once and it downloads the higher
 bitrate "Premium" streams where YouTube offers them, and tells you when it will.
@@ -22,14 +23,19 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
   ended, and videos you downloaded before are skipped when "Remember downloaded videos" is on.
   Open a followed channel to browse its Videos, Shorts and Live tabs and tick older videos to
   download; ones already downloaded or in the queue are marked.
+- **Search YouTube.** Search from inside Prem-dl and the results show as the same thumbnail grid,
+  with filters for type (videos, channels, playlists), upload date and length. Tick videos to
+  download them with your default options, or open them on the Download page to choose. Ticks are
+  kept across searches, so you can collect videos from several.
 - **Lots of links at once.** Paste several links, one per line, and they're all queued. Playlists are
   expanded for you. You can also drop links, or a `.txt` file of them, anywhere on the window.
 - **Send links from Chrome.** With the helper extension, right-click a page or a link and choose
   **Download with Prem-dl**, or click its toolbar button. Prem-dl opens the link, starting first if
   it isn't running.
-- **Quality.** Best, 4K down to 360p, audio only (MP3, M4A, Opus, AAC, FLAC or WAV), or pick an
-  exact format from the list. Container can be automatic, MP4, MKV or WebM. Within the same
-  resolution, Best goes for the stream with the most data rather than the newest codec.
+- **Quality.** Best, 4K down to 360p, each with about how big the file will be, or audio only
+  (MP3, M4A, Opus, AAC, FLAC, WAV or the original stream). Or pick an exact format from a table of
+  resolution, codec, bitrate and size. Container can be automatic, MP4, MKV or WebM. Within the
+  same resolution, Best goes for the stream with the most data rather than the newest codec.
 - **Subtitles.** Save them as files, embed them in the video, or both, in any language, with or
   without auto-generated captions, and optionally converted to SRT, VTT or ASS.
 - **Extras.** Embed metadata, chapters and cover art, cut out SponsorBlock segments, or download just
@@ -42,43 +48,30 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
 - **Works in the background.** Progress shows on the taskbar button, and a Windows notification
   (with Open and Show in folder) tells you when downloads finish while you're in another app. It can
   keep running in the notification area when you close the window, and start there with Windows.
-- **Errors you can act on.** When yt-dlp fails, you get a plain explanation and, usually, a button for
-  the fix: update yt-dlp, open the cookie settings, and so on.
-- **Stays current.** yt-dlp is checked for updates on launch and every few hours. New releases are
-  verified against their published SHA-256 checksums before they replace the old one, and updates
-  wait until nothing is downloading. Prem-dl also tells you when a new version of itself is out; a
-  copy installed with Prem-dl-Setup.exe downloads the new installer, checks it and restarts updated.
+- **Errors you can act on.** When a download fails, you get a plain explanation and, usually, a
+  button for the fix: check for a new Prem-dl, open the cookie settings, and so on.
+- **Changes only with a release.** Prem-dl runs only the yt-dlp and ffmpeg built into it and never
+  updates them by itself, so the app you have keeps behaving the same until you update it. It tells
+  you when a new version is out; a copy installed with Prem-dl-Setup.exe downloads the new
+  installer, checks it and restarts updated. Fixes for sites that changed come that way.
 
 ## Getting started
 
-Each [release](https://github.com/aervonix/prem-dl/releases/latest) has two downloads:
+Each [release](https://github.com/aervonix/prem-dl/releases/latest) has two downloads. Both have
+yt-dlp and ffmpeg built in, so there's nothing else to get.
 
-- **`Prem-dl-Setup.exe`** (about 110 MB) installs Prem-dl for you, with yt-dlp and ffmpeg built
-  in, so there's nothing else to get. It installs just for you, without asking for admin rights,
-  into `%LOCALAPPDATA%\Programs\Prem-dl`, with a Start menu and desktop shortcut. Uninstall it
-  from Settings → Apps; it asks whether to keep your settings and queue.
-- **`Prem-dl.exe`** (about 13 MB) is the app on its own, with nothing to install. Put it in a
-  folder of its own and start it.
+- **`Prem-dl-Setup.exe`** (about 110 MB) installs Prem-dl just for you, without asking for admin
+  rights, into `%LOCALAPPDATA%\Programs\Prem-dl`, with a Start menu and desktop shortcut. It can
+  update itself. Uninstall it from Settings → Apps; it asks whether to keep your settings and queue.
+- **`Prem-dl.exe`** (about 118 MB) is the app on its own, with nothing to install. Put it in a
+  folder of its own and start it. To update it, download the new one from the release page.
 
 Neither is code-signed, so Windows SmartScreen may say it's from an unknown publisher the first
 time. Click **More info**, then **Run anyway**. The release notes list each file's SHA-256 if you
 want to check it first. (Or build it yourself, see below.)
 
-With `Prem-dl.exe` on its own:
-
-1. If yt-dlp isn't found, the app offers to download it for you. You can also drop `yt-dlp.exe`
-   next to `Prem-dl.exe` yourself.
-2. Install ffmpeg if you don't have it. Without it, video and audio can't be merged, so you'd
-   only get lower quality single-file downloads. If the app doesn't find ffmpeg it offers an
-   **Install ffmpeg** button, which downloads yt-dlp's own ffmpeg build (about 90 MB, checked
-   against its published SHA-256) into the app's data folder. You can also install it yourself:
-
-   ```powershell
-   winget install Gyan.FFmpeg
-   ```
-
-Either way, YouTube also needs a JavaScript runtime for some videos. If you have Node 20 or newer, Deno,
-   Bun or QuickJS installed, the app finds it and passes it to yt-dlp.
+YouTube also needs a JavaScript runtime for some videos. If you have Node 20 or newer, Deno, Bun
+or QuickJS installed, the app finds it and uses it.
 
 Your downloads go to your Downloads folder unless you change it in Settings. Each download can
 also go somewhere else via the "Save to" field under More options.
@@ -140,18 +133,18 @@ from the new place updates that.
 
 ## Where things are kept
 
-Settings, the queue, imported cookies and the app's own copy of yt-dlp live in
-`%APPDATA%\yt-dlp-gui` (the folder kept its old name so existing setups carry over). Settings →
-Advanced has a button that opens it.
+Settings, the queue, imported cookies and the unpacked tools live in `%APPDATA%\yt-dlp-gui` (the
+folder kept its old name so existing setups carry over). Settings → Advanced has a button that
+opens it.
 
-yt-dlp is looked for in this order: the path set in Settings → Advanced, next to `Prem-dl.exe`, the
-folder the app was started from, the app's own copy in `%APPDATA%\yt-dlp-gui\bin`, and finally
-`PATH`.
+Windows can't run a program from inside another, so on start Prem-dl unpacks its built-in yt-dlp
+and ffmpeg into `%APPDATA%\yt-dlp-gui\bin`, replacing whatever version was there before, and runs
+only those. Any other yt-dlp or ffmpeg on the computer is ignored. If the files go missing or stop
+running (antivirus, a clean-up tool), **Repair** in Settings → Updates unpacks them again.
 
-A bundled build (see below) carries yt-dlp, and usually ffmpeg, inside `Prem-dl.exe`. On start
-it unpacks them into `%APPDATA%\yt-dlp-gui\bin` when they're needed: yt-dlp when none is found
-(or only one on `PATH`) or the app's own copy is older, ffmpeg only when there's no ffmpeg at
-all. From then on they're updated like any copy the app installed.
+A build without the tools inside (plain `wails build`, `wails dev`) looks for yt-dlp next to
+`Prem-dl.exe`, in the folder it was started from, in `%APPDATA%\yt-dlp-gui\bin` and on `PATH`,
+and for ffmpeg next to yt-dlp, there and on `PATH`.
 
 ## Building from source
 
@@ -167,19 +160,19 @@ Then:
 ```powershell
 git clone https://github.com/aervonix/prem-dl.git
 cd prem-dl
-wails build        # builds build\bin\Prem-dl.exe
+wails build        # builds build\bin\Prem-dl.exe without tools; put yt-dlp.exe next to it
 wails dev          # runs it with live reload while you work on it
 ```
 
-To build one exe with yt-dlp and ffmpeg inside (about 118 MB instead of 13 MB):
+To build the exe the way releases are, with yt-dlp and ffmpeg inside:
 
 ```powershell
 go run ./cmd/bundle               # fetches both into bundle\, checked against their SHA-256 sums
-wails build -tags bundled         # add -o Prem-dl-bundled.exe to keep the plain build too
+wails build -tags bundled
 ```
 
-`go run ./cmd/bundle -ffmpeg=false` leaves ffmpeg out (about 31 MB); the app then offers its
-**Install ffmpeg** button as before.
+`go run ./cmd/bundle -ffmpeg=false` leaves ffmpeg out (about 31 MB); that build then looks for an
+ffmpeg on the computer.
 
 To make both release files, you also need NSIS (`winget install NSIS.NSIS`). Then:
 
@@ -188,8 +181,8 @@ To make both release files, you also need NSIS (`winget install NSIS.NSIS`). The
 ```
 
 It fetches the newest yt-dlp and ffmpeg first (`-SkipFetch` reuses `bundle\`), checks the
-built-in tools unpack, and leaves the plain `Prem-dl.exe` in `build\bin`. The installer is
-`build\windows\installer\project.nsi`.
+built-in tools unpack, then builds both files with them inside. That fetch is the only time
+yt-dlp's version changes. The installer is `build\windows\installer\project.nsi`.
 
 Run the tests with:
 
@@ -219,7 +212,7 @@ sends requests.
 main.go, app.go, tools.go   app shell and the methods the interface can call
 chrome.go, chromehelper/    the Chrome cookie helper and the extension itself
 internal/cookiebridge       one-time local handover of cookies from the extension
-internal/ytdlp              finding, installing and updating yt-dlp, analysing links,
+internal/ytdlp              finding and fetching yt-dlp, analysing links,
                             building arguments, reading progress, cookie files
 internal/queue              scheduling, process control, saving the queue, UI events
 internal/apperr             turning yt-dlp output into errors with a suggested fix
@@ -232,8 +225,8 @@ frontend/src                the interface (api.ts is the only file that talks to
 
 - Windows only. That's what it's built and tested on.
 - Premium streams depend on what YouTube offers for a given video and account, which can change.
-- It's only as good as yt-dlp. If a site changes and downloads break, updating yt-dlp (Settings →
-  Updates & tools) usually fixes it.
+- It's only as good as yt-dlp. If a site changes and downloads break, the fix arrives with the next
+  Prem-dl release that carries a newer yt-dlp.
 
 ## Licence
 

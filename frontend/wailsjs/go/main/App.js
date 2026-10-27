@@ -38,10 +38,6 @@ export function CheckFeed(arg1) {
   return window['go']['main']['App']['CheckFeed'](arg1);
 }
 
-export function CheckUpdate() {
-  return window['go']['main']['App']['CheckUpdate']();
-}
-
 export function ChromeHelperSetup() {
   return window['go']['main']['App']['ChromeHelperSetup']();
 }
@@ -122,10 +118,6 @@ export function InstallAppUpdate() {
   return window['go']['main']['App']['InstallAppUpdate']();
 }
 
-export function InstallFFmpeg() {
-  return window['go']['main']['App']['InstallFFmpeg']();
-}
-
 export function ListFeeds() {
   return window['go']['main']['App']['ListFeeds']();
 }
@@ -198,6 +190,10 @@ export function RemoveJob(arg1) {
   return window['go']['main']['App']['RemoveJob'](arg1);
 }
 
+export function RepairTools() {
+  return window['go']['main']['App']['RepairTools']();
+}
+
 export function ResumeAll() {
   return window['go']['main']['App']['ResumeAll']();
 }
@@ -230,14 +226,14 @@ export function SaveSettings(arg1) {
   return window['go']['main']['App']['SaveSettings'](arg1);
 }
 
+export function Search(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['Search'](arg1, arg2, arg3, arg4);
+}
+
 export function TestCookies() {
   return window['go']['main']['App']['TestCookies']();
 }
 
 export function UnfollowFeed(arg1) {
   return window['go']['main']['App']['UnfollowFeed'](arg1);
-}
-
-export function UpdateYtdlp() {
-  return window['go']['main']['App']['UpdateYtdlp']();
 }

@@ -707,7 +707,7 @@ export function DownloadPage() {
 
       {phase === 'idle' && !bulk && (
         <Empty title="Paste a link to get started">
-          Works with YouTube and the 1,800+ other sites yt-dlp supports. Playlists and channels show a checklist so you can pick what to download. You can also drop links, or a
+          Works with YouTube and 1,800+ other sites. Playlists and channels show a checklist so you can pick what to download. You can also drop links, or a
           .txt file of them, anywhere on the window.
         </Empty>
       )}

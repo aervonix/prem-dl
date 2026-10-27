@@ -3,73 +3,113 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
+	"hash/crc32"
 	"io"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/ytdlp"
 )
 
 // bundleFS holds the yt-dlp (yt-dlp.exe, yt-dlp.version) and optionally the ffmpeg archive
 // (ffmpeg.zip) built into this exe, or is nil for a build without them. Windows can't run a
-// program from inside another, so they are unpacked into the app's folder, where Resolve and
-// FindFFmpeg find them and updates replace them like any copy the app installed.
+// program from inside another, so they are unpacked into the app's folder. A build that carries
+// them runs nothing else (see findYtdlp), so the tools change only with a new Prem-dl.
 var bundleFS fs.FS
 
-// unpackBundle puts the built-in tools where the app looks for them. It runs once, at the start
-// of the first tool detection, before anything resolves yt-dlp.
-func (a *App) unpackBundle(ctx context.Context) {
+// bundleHas reports whether this build carries the named file.
+func bundleHas(name string) bool {
 	if bundleFS == nil {
-		return
+		return false
 	}
-	s := a.store.Get()
+	_, err := fs.Stat(bundleFS, name)
+	return err == nil
+}
+
+// bundleStampName records which bundle the app's folder holds, so each launch doesn't unpack
+// ffmpeg's 200 MB again.
+const bundleStampName = "bundle.stamp"
+
+// unpackBundle puts the built-in tools where the app runs them from. It runs once, at the start
+// of the first tool detection, before anything resolves yt-dlp, and again on a repair (force).
+// Whatever the folder held before is replaced, newer or older: the bundle is the version this
+// release was tested with.
+func (a *App) unpackBundle(ctx context.Context, force bool) error {
+	if bundleFS == nil {
+		return nil
+	}
 	dir := a.managedDir()
-	if raw, err := fs.ReadFile(bundleFS, "yt-dlp.version"); err == nil {
-		managed := ytdlp.ManagedPath(dir)
-		found, ferr := ytdlp.Resolve(s.YtdlpPath, dir)
-		have := ""
-		if ferr == nil && found.Source == ytdlp.SourceManaged {
-			have = a.versionOf(ctx, managed) // cached, so detection doesn't ask again
-		}
-		if bundledYtdlpWanted(s, found, ferr, have, strings.TrimSpace(string(raw))) {
-			if err := installBundled(ctx, managed); err != nil {
-				a.warn("couldn't unpack the built-in yt-dlp: " + err.Error())
-			}
-		}
+	stamp, err := bundleStamp()
+	if err != nil {
+		return err
+	}
+	stampPath := filepath.Join(dir, "bin", bundleStampName)
+	if !force && bundleInPlace(dir, stampPath, stamp) {
+		return nil
+	}
+	// A failed unpack must not leave the old stamp claiming the folder is complete.
+	_ = os.Remove(stampPath)
+	if err := installBundled(ctx, ytdlp.ManagedPath(dir)); err != nil {
+		return fmt.Errorf("unpacking yt-dlp: %w", err)
 	}
 	if f, err := bundleFS.Open("ffmpeg.zip"); err == nil {
 		defer f.Close()
-		ytPath := ""
-		if b, err := ytdlp.Resolve(s.YtdlpPath, dir); err == nil {
-			ytPath = b.Path
-		}
-		if ytdlp.FindFFmpeg(ctx, s.FfmpegPath, ytPath, dir).Path == "" && ytdlp.CanInstallFFmpeg() {
-			if err := installBundledFFmpeg(ctx, f, dir); err != nil {
-				a.warn("couldn't unpack the built-in ffmpeg: " + err.Error())
-			}
+		if err := installBundledFFmpeg(ctx, f, dir); err != nil {
+			return fmt.Errorf("unpacking ffmpeg: %w", err)
 		}
 	}
+	return os.WriteFile(stampPath, []byte(stamp+"\n"), 0o644)
 }
 
-// bundledYtdlpWanted decides whether the built-in yt-dlp goes into the app's folder: when there's
-// no yt-dlp, when the one found is on PATH (the app's copy outranks it), or when the app's own
-// copy is older or broken. One the user chose or placed next to the app is left in charge, and
-// a copy updated since is never downgraded.
-func bundledYtdlpWanted(s settings.Settings, found ytdlp.Binary, err error, managedVersion, bundled string) bool {
-	switch {
-	case s.YtdlpPath != "":
-		return false // a configured path wins even when it's missing; the user is told about that
-	case err != nil:
-		return errors.Is(err, ytdlp.ErrNotFound)
-	case found.Source == ytdlp.SourcePath:
-		return true
-	case found.Source == ytdlp.SourceManaged:
-		return managedVersion == "" || ytdlp.CompareVersions(managedVersion, bundled) < 0
+// bundleInPlace reports whether the app's folder already holds this bundle: the stamp matches
+// and the programs are still there (antivirus or a clean-up may have removed them since).
+func bundleInPlace(dir, stampPath, stamp string) bool {
+	raw, err := os.ReadFile(stampPath)
+	if err != nil || strings.TrimSpace(string(raw)) != stamp {
+		return false
 	}
-	return false
+	need := []string{ytdlp.ManagedPath(dir)}
+	if bundleHas("ffmpeg.zip") {
+		need = append(need, filepath.Join(ytdlp.FFmpegDir(dir), "ffmpeg.exe"), filepath.Join(ytdlp.FFmpegDir(dir), "ffprobe.exe"))
+	}
+	for _, p := range need {
+		if st, err := os.Stat(p); err != nil || st.IsDir() {
+			return false
+		}
+	}
+	return true
+}
+
+// bundleStamp identifies the built-in tools: yt-dlp's version plus a checksum of each file.
+// CRC-32 runs at memory speed, and this only tells one bundle from another.
+func bundleStamp() (string, error) {
+	raw, err := fs.ReadFile(bundleFS, "yt-dlp.version")
+	if err != nil {
+		return "", err
+	}
+	parts := []string{strings.TrimSpace(string(raw))}
+	for _, name := range []string{"yt-dlp.exe", "ffmpeg.zip"} {
+		f, err := bundleFS.Open(name)
+		if errors.Is(err, fs.ErrNotExist) && name == "ffmpeg.zip" {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		h := crc32.NewIEEE()
+		_, err = io.Copy(h, f)
+		f.Close()
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, fmt.Sprintf("%s:%08x", name, h.Sum32()))
+	}
+	return strings.Join(parts, " "), nil
 }
 
 func installBundled(ctx context.Context, dest string) error {

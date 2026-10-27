@@ -19,7 +19,7 @@ const SECTIONS: readonly {id: string; label: string; Tab: ComponentType<TabProps
   {id: 'presets', label: 'Presets', Tab: PresetsTab},
   {id: 'cookies', label: 'Cookies', Tab: CookiesTab},
   {id: 'network', label: 'Network', Tab: NetworkTab},
-  {id: 'updates', label: 'Updates & tools', Tab: UpdatesTab},
+  {id: 'updates', label: 'Updates', Tab: UpdatesTab},
   {id: 'advanced', label: 'Advanced', Tab: AdvancedTab},
 ]
 const isSection = (id: string) => SECTIONS.some((s) => s.id === id)

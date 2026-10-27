@@ -20,8 +20,7 @@ vi.mock('./api', async (importActual) => {
     api: {
       getState: vi.fn(),
       copyText: vi.fn(),
-      updateYtdlp: vi.fn(),
-      installFfmpeg: vi.fn(),
+      repairTools: vi.fn(),
       installAppUpdate: vi.fn(),
       checkAppUpdate: vi.fn(),
     },
@@ -118,24 +117,6 @@ describe('reducer', () => {
     expect(s.dismissed).toEqual({a: true, b: true})
   })
 
-  describe('autoUpdated', () => {
-    const available = {available: true, current: '1', latest: '2', channel: 'stable', error: ''}
-    const before = run([
-      {type: 'toolProgress', p: {done: 5, total: 10}},
-      {type: 'updateAvailable', info: available},
-    ])
-    it('clears the progress and the offer when it worked', () => {
-      const s = reducer(before, {type: 'autoUpdated', res: result()})
-      expect(s.toolProgress).toBeNull()
-      expect(s.updateAvailable).toBeNull()
-      expect(s.autoUpdated?.ok).toBe(true)
-    })
-    it('keeps the offer when it failed', () => {
-      const s = reducer(before, {type: 'autoUpdated', res: result({ok: false})})
-      expect(s.toolProgress).toBeNull()
-      expect(s.updateAvailable).toBe(available)
-    })
-  })
 })
 
 describe('jobsReducer', () => {
@@ -242,13 +223,13 @@ describe('AppProvider', () => {
   })
 
   it('keeps action identities across state changes', async () => {
-    const {go, toast, attempt, updateYtdlp} = ctx
+    const {go, toast, attempt, repairTools} = ctx
     await emit('settings:changed', settings({theme: 'light'}))
     await act(async () => ctx.toast('info', 'hi'))
     expect(ctx.go).toBe(go)
     expect(ctx.toast).toBe(toast)
     expect(ctx.attempt).toBe(attempt)
-    expect(ctx.updateYtdlp).toBe(updateYtdlp)
+    expect(ctx.repairTools).toBe(repairTools)
   })
 
   it('attempt returns the value, or toasts the error and returns undefined', async () => {
@@ -274,63 +255,30 @@ describe('AppProvider', () => {
     expect(ctx.state.toasts.at(-1)).toMatchObject({kind: 'error', text: "Couldn't copy to the clipboard: busy"})
   })
 
-  describe('updateYtdlp', () => {
-    it('shows progress while running, then clears it and the offer', async () => {
-      await emit('tools:update-available', {available: true})
+  describe('repairTools', () => {
+    it('marks the repair while it runs, and ignores a second click', async () => {
       let finish!: (r: UpdateResult) => void
-      mocked.updateYtdlp.mockReturnValueOnce(new Promise((r) => (finish = r)))
-      let p!: Promise<UpdateResult>
-      act(() => {
-        p = ctx.updateYtdlp()
-      })
-      expect(ctx.state.toolProgress).toEqual({done: 0, total: 0})
-      await act(async () => {
-        finish(result({message: 'Updated to 2026.10.20'}))
-        await p
-      })
-      expect(ctx.state.toolProgress).toBeNull()
-      expect(ctx.state.updateAvailable).toBeNull()
-      expect(ctx.state.toasts.at(-1)).toMatchObject({kind: 'success', text: 'Updated to 2026.10.20'})
-    })
-
-    it('turns a rejected call into a failed result', async () => {
-      mocked.updateYtdlp.mockRejectedValueOnce(new Error('offline'))
-      let res!: UpdateResult
-      await act(async () => {
-        res = await ctx.updateYtdlp()
-      })
-      expect(res.ok).toBe(false)
-      expect(ctx.state.toolProgress).toBeNull()
-      expect(ctx.state.toasts.at(-1)).toMatchObject({kind: 'error', text: 'offline'})
-    })
-  })
-
-  describe('installFfmpeg', () => {
-    it('ignores progress events unless an install is running', async () => {
-      await emit('ffmpeg:progress', {done: 1, total: 2})
-      expect(ctx.state.ffmpegProgress).toBeNull()
-
-      let finish!: (r: UpdateResult) => void
-      mocked.installFfmpeg.mockReturnValueOnce(new Promise((r) => (finish = r)))
+      mocked.repairTools.mockReturnValueOnce(new Promise((r) => (finish = r)))
       let p!: Promise<void>
       act(() => {
-        p = ctx.installFfmpeg()
+        p = ctx.repairTools()
       })
-      await emit('ffmpeg:progress', {done: 1, total: 2})
-      expect(ctx.state.ffmpegProgress).toEqual({done: 1, total: 2})
-
-      // A second click while it runs does nothing.
-      await act(() => ctx.installFfmpeg())
-      expect(mocked.installFfmpeg).toHaveBeenCalledTimes(1)
-
+      expect(ctx.state.repairing).toBe(true)
+      await act(() => ctx.repairTools())
+      expect(mocked.repairTools).toHaveBeenCalledTimes(1)
       await act(async () => {
-        finish(result({message: 'ffmpeg installed'}))
+        finish(result({message: 'Ready'}))
         await p
       })
-      expect(ctx.state.ffmpegProgress).toBeNull()
-      // A late event must not bring the bar back.
-      await emit('ffmpeg:progress', {done: 2, total: 2})
-      expect(ctx.state.ffmpegProgress).toBeNull()
+      expect(ctx.state.repairing).toBe(false)
+      expect(ctx.state.toasts.at(-1)).toMatchObject({kind: 'success', text: 'Ready'})
+    })
+
+    it('toasts a failure', async () => {
+      mocked.repairTools.mockResolvedValueOnce(result({ok: false, error: {title: 'No', message: 'locked', hint: 'Retry.'} as UpdateResult['error']}))
+      await act(() => ctx.repairTools())
+      expect(ctx.state.repairing).toBe(false)
+      expect(ctx.state.toasts.at(-1)).toMatchObject({kind: 'error', text: 'No: locked Retry.'})
     })
   })
 

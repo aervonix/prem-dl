@@ -5,7 +5,7 @@ import {plural} from '../format'
 import {Button, Modal} from './ui'
 
 /**
- * "Quit Prem-dl?" when the window is closed while downloads run or yt-dlp updates. The backend
+ * "Quit Prem-dl?" when the window is closed while downloads run. The backend
  * keeps the window open and asks here; Quit closes it for real, anything else keeps it open.
  */
 export function CloseConfirm() {
@@ -32,33 +32,26 @@ export function CloseConfirm() {
     void api.hideWindow()
   }
 
-  const updating = ask.downloads === 0 && ask.updating
   return (
     <Modal
-      title={updating ? 'yt-dlp is updating' : 'Downloads in progress'}
+      title="Downloads in progress"
       onClose={stay}
       footer={
         <>
           <Button variant="danger" onClick={quit}>
             Quit anyway
           </Button>
-          {!updating && ask.background && <Button onClick={hide}>Download in the background</Button>}
+          {ask.background && <Button onClick={hide}>Download in the background</Button>}
           <Button variant="primary" autoFocus onClick={stay}>
-            {updating ? 'Wait' : 'Keep downloading'}
+            Keep downloading
           </Button>
         </>
       }>
-      {updating ? (
-        <p>Quitting now abandons the update and keeps the current version of yt-dlp.</p>
-      ) : (
-        <>
-          <p>
-            {plural(ask.downloads, 'download')} {ask.downloads === 1 ? 'is' : 'are'} still running. Quit Prem-dl anyway?
-          </p>
-          <p className="muted">{ask.downloads === 1 ? 'It will be paused' : 'They will be paused'}; partial files are kept, so you can resume next time.</p>
-          {ask.background && <p className="muted">Or close the window and let them finish: Prem-dl stays in the notification area until you quit it there.</p>}
-        </>
-      )}
+      <p>
+        {plural(ask.downloads, 'download')} {ask.downloads === 1 ? 'is' : 'are'} still running. Quit Prem-dl anyway?
+      </p>
+      <p className="muted">{ask.downloads === 1 ? 'It will be paused' : 'They will be paused'}; partial files are kept, so you can resume next time.</p>
+      {ask.background && <p className="muted">Or close the window and let them finish: Prem-dl stays in the notification area until you quit it there.</p>}
     </Modal>
   )
 }

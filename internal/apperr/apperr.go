@@ -6,14 +6,15 @@ import (
 	"strings"
 )
 
-// Actions tell the UI which button to offer next to an error.
+// Actions tell the UI which button to offer next to an error. ActionUpdate looks for a new
+// Prem-dl: the yt-dlp inside it only changes with a release. ActionRepair unpacks the built-in
+// tools again.
 const (
-	ActionNone        = ""
-	ActionUpdate      = "update"
-	ActionCookies     = "cookies"
-	ActionInstallBin  = "install_ytdlp"
-	ActionSettings    = "settings"
-	ActionInstallFFmp = "install_ffmpeg"
+	ActionNone     = ""
+	ActionUpdate   = "update"
+	ActionCookies  = "cookies"
+	ActionRepair   = "repair"
+	ActionSettings = "settings"
 )
 
 // AppError is a structured, user-facing error. It is sent to the frontend as JSON.
@@ -74,7 +75,7 @@ var rules = []rule{
 		return AppError{
 			Code:    "cookie_decrypt",
 			Title:   "Can't read browser cookies",
-			Message: "Chrome, Edge and other Chromium browsers on Windows now encrypt their cookies in a way yt-dlp cannot read (yt-dlp issue #10927).",
+			Message: "Chrome, Edge and other Chromium browsers on Windows now encrypt their cookies in a way Prem-dl cannot read.",
 			Hint:    "Use Firefox as the cookie source, or export a cookies.txt file from your browser and import it under Settings → Cookies.",
 			Action:  ActionCookies,
 		}
@@ -92,7 +93,7 @@ var rules = []rule{
 		return AppError{
 			Code:      "cookie_locked",
 			Title:     "Browser cookie database is locked",
-			Message:   "The browser is holding its cookie database open, so yt-dlp can't copy it.",
+			Message:   "The browser is holding its cookie database open, so Prem-dl can't copy it.",
 			Hint:      "Fully close the browser (check the system tray) and try again, or import a cookies.txt file.",
 			Action:    ActionCookies,
 			Retryable: true,
@@ -157,7 +158,7 @@ var rules = []rule{
 		return AppError{
 			Code:      "network",
 			Title:     "Network problem",
-			Message:   "yt-dlp couldn't reach the server (offline, DNS failure, timeout or blocked connection).",
+			Message:   "Prem-dl couldn't reach the server (offline, DNS failure, timeout or blocked connection).",
 			Hint:      "Check your internet connection, VPN or proxy settings, then retry.",
 			Action:    ActionSettings,
 			Retryable: true,
@@ -177,8 +178,8 @@ var rules = []rule{
 		return AppError{
 			Code:    "unsupported_url",
 			Title:   "Unsupported link",
-			Message: "yt-dlp doesn't recognise this URL as a video or playlist page.",
-			Hint:    "Make sure you copied the link to the video page itself. If the site is supported, updating yt-dlp may add support.",
+			Message: "Prem-dl doesn't recognise this URL as a video or playlist page.",
+			Hint:    "Make sure you copied the link to the video page itself. If the site is new, a newer Prem-dl may add support.",
 			Action:  ActionUpdate,
 		}
 	}),
@@ -215,8 +216,8 @@ var rules = []rule{
 			Code:    "ffmpeg_missing",
 			Title:   "ffmpeg is required",
 			Message: "Merging video and audio, converting formats and embedding subtitles all need ffmpeg, which wasn't found.",
-			Hint:    "Install it with the button below, or set the location of your own copy in Settings, then try again.",
-			Action:  ActionInstallFFmp,
+			Hint:    "Repair Prem-dl's tools with the button below, then try again. If that doesn't help, install Prem-dl again.",
+			Action:  ActionRepair,
 			// Once ffmpeg is installed the same download works.
 			Retryable: true,
 		}
@@ -225,7 +226,7 @@ var rules = []rule{
 		return AppError{
 			Code:    "js_runtime",
 			Title:   "JavaScript runtime needed",
-			Message: "YouTube now requires yt-dlp to run a small piece of JavaScript, and no supported runtime (deno, node, bun or quickjs) was found.",
+			Message: "YouTube now requires a small piece of JavaScript to be run, and no supported runtime (deno, node, bun or quickjs) was found.",
 			Hint:    "Install Deno or Node.js (20+), restart the app, and retry.",
 			Action:  ActionSettings,
 		}
@@ -234,8 +235,8 @@ var rules = []rule{
 		return AppError{
 			Code:    "bad_format",
 			Title:   "That format selection isn't valid",
-			Message: "yt-dlp couldn't understand the format expression.",
-			Hint:    "Pick a quality preset instead, or check the custom format against the yt-dlp format-selection syntax.",
+			Message: "The custom format expression couldn't be understood.",
+			Hint:    "Pick a quality preset instead, or check the custom format expression.",
 			Action:  ActionNone,
 		}
 	}),
@@ -244,7 +245,7 @@ var rules = []rule{
 			Code:    "format_unavailable",
 			Title:   "That quality isn't available",
 			Message: "The site doesn't offer a format matching your selection for this video.",
-			Hint:    "Choose “Best available” or a lower resolution. If very few formats appear, update yt-dlp and make sure a JavaScript runtime is installed.",
+			Hint:    "Choose “Best available” or a lower resolution. If very few formats appear, check for a new Prem-dl and make sure a JavaScript runtime is installed.",
 			Action:  ActionUpdate,
 		}
 	}),
@@ -297,7 +298,7 @@ var rules = []rule{
 		return AppError{
 			Code:    "permission",
 			Title:   "Can't write to that folder",
-			Message: "yt-dlp was denied permission to write to the download location.",
+			Message: "Prem-dl was denied permission to write to the download location.",
 			Hint:    "Choose a folder you own (such as Downloads), or close any program using the file.",
 			Action:  ActionSettings, Retryable: true,
 		}
@@ -307,7 +308,7 @@ var rules = []rule{
 			Code:      "forbidden",
 			Title:     "Access denied by the site",
 			Message:   "The server refused the request (HTTP 401/403). This often means the site changed how it serves video.",
-			Hint:      "Update yt-dlp first. If it still fails, try signed-in cookies.",
+			Hint:      "Check for a new Prem-dl first. If it still fails, try signed-in cookies.",
 			Action:    ActionUpdate,
 			Retryable: true,
 		}
@@ -315,18 +316,18 @@ var rules = []rule{
 	r(`unable to extract|unable to download (webpage|json|video data)|signature extraction failed|nsig extraction failed|extractor error|please report this issue`, func() AppError {
 		return AppError{
 			Code:    "extractor_error",
-			Title:   "yt-dlp couldn't read this page",
-			Message: "The site probably changed its layout, which breaks the extractor in this yt-dlp version.",
-			Hint:    "Update yt-dlp (consider the nightly channel) and retry.",
+			Title:   "Couldn't read this page",
+			Message: "The site probably changed its layout, which this version of Prem-dl doesn't understand yet.",
+			Hint:    "Check for a new Prem-dl, then retry.",
 			Action:  ActionUpdate, Retryable: true,
 		}
 	}),
 	r(`traceback \(most recent call last\)|failed to execute script|unhandled exception`, func() AppError {
 		return AppError{
 			Code:    "ytdlp_crash",
-			Title:   "yt-dlp crashed",
-			Message: "yt-dlp stopped with an internal error instead of a normal message.",
-			Hint:    "Update yt-dlp and retry. If it keeps happening, open the details: they're what you'd include in a bug report.",
+			Title:   "The download tools crashed",
+			Message: "The download stopped with an internal error instead of a normal message.",
+			Hint:    "Check for a new Prem-dl and retry. If it keeps happening, open the details: they're what you'd include in a bug report.",
 			Action:  ActionUpdate, Retryable: true,
 		}
 	}),
@@ -381,13 +382,13 @@ func Classify(lines []string, runErr error) *AppError {
 		msg = runErr.Error()
 	}
 	if msg == "" {
-		msg = "yt-dlp exited without saying why."
+		msg = "The download stopped without saying why."
 	}
 	return &AppError{
 		Code:      "unknown",
 		Title:     "Download failed",
 		Message:   msg,
-		Hint:      "Open the details for the full output. Updating yt-dlp fixes many site breakages.",
+		Hint:      "Open the details for the full output. A new Prem-dl fixes many site breakages.",
 		Action:    ActionUpdate,
 		Detail:    detail,
 		Retryable: true,

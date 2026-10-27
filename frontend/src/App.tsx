@@ -9,12 +9,14 @@ import type {IconName} from './icons'
 import {DownloadPage} from './pages/DownloadPage'
 import {FollowingPage} from './pages/FollowingPage'
 import {QueuePage} from './pages/QueuePage'
+import {SearchPage} from './pages/SearchPage'
 import {SettingsPage} from './pages/SettingsPage'
 import {AppProvider, useApp, useJobs} from './store'
 import type {Page} from './store'
 
 const NAV: {page: Page; label: string; icon: IconName}[] = [
   {page: 'download', label: 'Download', icon: 'download'},
+  {page: 'search', label: 'Search', icon: 'search'},
   {page: 'queue', label: 'Queue', icon: 'list'},
   {page: 'following', label: 'Following', icon: 'bell'},
   {page: 'settings', label: 'Settings', icon: 'settings'},
@@ -24,7 +26,7 @@ function Sidebar() {
   const {state, go} = useApp()
   const jobs = useJobs()
   const busy = useMemo(() => jobs.filter((j) => ['starting', 'downloading', 'processing', 'queued'].includes(j.status)).length, [jobs])
-  const {tools, updateAvailable} = state
+  const {tools} = state
 
   return (
     <aside className="sidebar">
@@ -46,19 +48,16 @@ function Sidebar() {
       <div className="sidebar-foot">
         {tools.checking ? (
           <span>PREM-DL - CHECKING</span>
-        ) : !tools.ytdlp || tools.ytdlpError ? (
+        ) : tools.ytdlpError ? (
           <button type="button" className="foot-link bad" onClick={() => go('settings', 'updates')}>
-            PREM-DL - YT-DLP MISSING
+            PREM-DL - NEEDS REPAIR
           </button>
-        ) : updateAvailable ? (
+        ) : state.appUpdate?.available ? (
           <button type="button" className="foot-link" onClick={() => go('settings', 'updates')}>
             PREM-DL - UPDATE AVAILABLE
           </button>
-        ) : tools.upToDate ? (
-          <span>PREM-DL - UP TO DATE ({tools.ytdlp.version})</span>
         ) : (
-          // Only the installed version: no check has run on this channel, or the last one failed.
-          <span>PREM-DL - YT-DLP {tools.ytdlp.version}</span>
+          <span>PREM-DL {state.version}</span>
         )}
       </div>
     </aside>
@@ -68,7 +67,7 @@ function Sidebar() {
 function Shell() {
   const {state, go} = useApp()
 
-  // Ctrl+1/2/3/4 jump between pages.
+  // Ctrl+1 to 5 jump between pages.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.altKey || e.shiftKey) return
@@ -106,6 +105,10 @@ function Shell() {
         {/* Download and Settings stay mounted so a half-reviewed link or unsaved edits survive a visit elsewhere. */}
         <div className="page" hidden={state.page !== 'download'}>
           <DownloadPage />
+        </div>
+        {/* Search stays mounted so results and ticks survive a look at the queue. */}
+        <div className="page" hidden={state.page !== 'search'}>
+          <SearchPage />
         </div>
         <div className="page" hidden={state.page !== 'queue'}>
           {state.page === 'queue' && <QueuePage />}

@@ -6,7 +6,6 @@ import {bytes} from '../format'
 import {useApp, useJobs} from '../store'
 import {Button, IconButton, Progress} from './ui'
 import {EJS_DOCS} from './ErrorPanel'
-import {FfmpegProgress, InstallFfmpegButton} from './FfmpegInstall'
 
 function Banner({tone, icon, title, children, actions}: {tone: 'warn' | 'bad' | 'info' | 'ok'; icon: IconName; title: string; children?: ReactNode; actions?: ReactNode}) {
   return (
@@ -25,95 +24,34 @@ function Banner({tone, icon, title, children, actions}: {tone: 'warn' | 'bad' | 
 
 /** Status notices that sit above every page: missing tools, updates, interrupted downloads. */
 export function Banners() {
-  const {state, dismiss, updateYtdlp, go, setUpdateAvailable, attempt, installAppUpdate} = useApp()
+  const {state, dismiss, repairTools, go, attempt, installAppUpdate} = useApp()
   const jobs = useJobs()
-  const {tools, dismissed, toolProgress, updateAvailable, autoUpdated} = state
+  const {tools, dismissed} = state
   const ready = !tools.checking
-  const updating = toolProgress !== null
   const interrupted = jobs.filter((j) => j.status === 'paused' && j.stage === 'Interrupted').length
   const running = jobs.filter((j) => ['starting', 'downloading', 'processing'].includes(j.status)).length
 
   const out: ReactNode[] = []
 
-  if (ready && !tools.ytdlp) {
+  if (ready && tools.ytdlpError) {
     out.push(
       <Banner
-        key="noytdlp"
+        key="tools"
         tone="bad"
         icon="alert"
-        title="yt-dlp isn't installed"
+        title="Prem-dl can't download right now"
         actions={
-          <Button variant="primary" size="sm" icon="download" loading={updating} onClick={() => void updateYtdlp()}>
-            Download yt-dlp
-          </Button>
-        }>
-        {updating ? (
-          <div style={{marginTop: 6, minWidth: 220}}>
-            <Progress percent={toolProgress && toolProgress.total > 0 ? (toolProgress.done / toolProgress.total) * 100 : -1} label="Downloading yt-dlp" />
-            <div style={{marginTop: 4}}>{toolProgress && toolProgress.total > 0 ? `${bytes(toolProgress.done)} of ${bytes(toolProgress.total)}` : 'Starting…'}</div>
-          </div>
-        ) : (
-          <>
-            {tools.ytdlpError || 'The app needs yt-dlp to download anything.'} The download is checked against the official SHA-256 checksum before it is used.
-          </>
-        )}
-      </Banner>,
-    )
-  } else if (ready && tools.ytdlpError) {
-    out.push(
-      <Banner
-        key="badytdlp"
-        tone="bad"
-        icon="alert"
-        title="yt-dlp won't start"
-        actions={
-          <Button variant="primary" size="sm" icon="refresh" loading={updating} onClick={() => void updateYtdlp()}>
-            Reinstall
-          </Button>
-        }>
-        {tools.ytdlpError}
-      </Banner>,
-    )
-  }
-
-  if (updating && tools.ytdlp) {
-    out.push(
-      <Banner key="updating" tone="info" icon="refresh" title="Updating yt-dlp…">
-        <div style={{marginTop: 6, maxWidth: 360}}>
-          <Progress percent={toolProgress && toolProgress.total > 0 ? (toolProgress.done / toolProgress.total) * 100 : -1} label="Downloading yt-dlp" />
-        </div>
-      </Banner>,
-    )
-  }
-
-  if (updateAvailable && !updating && !dismissed['update']) {
-    out.push(
-      <Banner
-        key="update"
-        tone="info"
-        icon="refresh"
-        title={`yt-dlp ${updateAvailable.latest} is available`}
-        actions={
-          <>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={running > 0}
-              title={running > 0 ? 'Pause or finish the active downloads first' : undefined}
-              onClick={() => void updateYtdlp()}>
-              Update now
+          tools.builtIn ? (
+            <Button variant="primary" size="sm" icon="refresh" loading={state.repairing} onClick={() => void repairTools()}>
+              Repair
             </Button>
-            <IconButton
-              icon="x"
-              label="Dismiss"
-              onClick={() => {
-                dismiss('update')
-                setUpdateAvailable(null)
-              }}
-            />
-          </>
+          ) : (
+            <Button variant="primary" size="sm" icon="settings" onClick={() => go('settings', 'updates')}>
+              Details
+            </Button>
+          )
         }>
-        You have {updateAvailable.current || 'an older version'}. Updates need no active downloads.
+        {tools.ytdlpError} {tools.builtIn ? 'Repair puts them back. If that doesn’t help, install Prem-dl again.' : 'This build has no tools built in: put yt-dlp.exe next to it.'}
       </Banner>,
     )
   }
@@ -137,8 +75,8 @@ export function Banners() {
                     variant="primary"
                     size="sm"
                     icon="download"
-                    disabled={running > 0 || updating}
-                    title={running > 0 ? 'Pause or finish the active downloads first' : updating ? 'Wait for the yt-dlp update to finish' : undefined}
+                    disabled={running > 0 || state.repairing}
+                    title={running > 0 ? 'Pause or finish the active downloads first' : state.repairing ? 'Wait for the repair to finish' : undefined}
                     onClick={() => void installAppUpdate()}>
                     Update now
                   </Button>
@@ -174,14 +112,6 @@ export function Banners() {
     )
   }
 
-  if (autoUpdated?.ok && !dismissed['autoupdated']) {
-    out.push(
-      <Banner key="autoupdated" tone="ok" icon="checkCircle" title="yt-dlp was updated automatically" actions={<IconButton icon="x" label="Dismiss" onClick={() => dismiss('autoupdated')} />}>
-        {autoUpdated.message}
-      </Banner>,
-    )
-  }
-
   if (interrupted > 0 && !dismissed['interrupted']) {
     out.push(
       <Banner
@@ -209,25 +139,24 @@ export function Banners() {
     )
   }
 
-  if (ready && tools.ytdlp && !tools.ffmpeg && !dismissed['ffmpeg']) {
+  if (ready && tools.ytdlp && !tools.ytdlpError && !tools.ffmpeg && !dismissed['ffmpeg']) {
     out.push(
       <Banner
         key="ffmpeg"
         tone="warn"
         icon="warning"
-        title={state.ffmpegProgress ? 'Installing ffmpeg…' : "ffmpeg wasn't found"}
+        title="Part of Prem-dl's tools is missing"
         actions={
           <>
-            <InstallFfmpegButton />
-            <Button size="sm" variant="ghost" onClick={() => go('settings', 'advanced')}>
-              Locate…
-            </Button>
+            {tools.builtIn && (
+              <Button variant="primary" size="sm" icon="refresh" loading={state.repairing} onClick={() => void repairTools()}>
+                Repair
+              </Button>
+            )}
             <IconButton icon="x" label="Dismiss" onClick={() => dismiss('ffmpeg')} />
           </>
         }>
-        Without it, video and audio can't be merged, so you'd get lower-quality single files. Audio extraction, subtitle embedding and SponsorBlock also won't work.
-        {tools.canInstallFfmpeg && !state.ffmpegProgress && ' Install downloads yt-dlp’s own ffmpeg build (about 90 MB) into the app’s folder.'}
-        <FfmpegProgress />
+        Without ffmpeg, video and audio can't be merged, so you'd get lower-quality single files. Audio extraction, subtitle embedding and SponsorBlock also won't work.
       </Banner>,
     )
   }
@@ -247,7 +176,7 @@ export function Banners() {
             <IconButton icon="x" label="Dismiss" onClick={() => dismiss('js')} />
           </>
         }>
-        YouTube now needs Deno or Node.js (20+) so yt-dlp can solve its challenges. Without one, some formats may be missing or downloads may fail. Install one and restart the app.
+        YouTube now needs Deno or Node.js (20+) to solve its challenges. Without one, some formats may be missing or downloads may fail. Install one and restart the app.
       </Banner>,
     )
   }

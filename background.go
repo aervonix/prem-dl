@@ -140,7 +140,7 @@ func (a *App) quitFromTray() {
 		return
 	}
 	a.quitting.Store(true)
-	if a.q.ActiveCount() > 0 || a.updating.Load() {
+	if a.q.ActiveCount() > 0 {
 		a.showWindow()
 	}
 	wr.Quit(ctx)

@@ -1,8 +1,8 @@
+import {useState} from 'react'
 import {Icon} from '../icons'
 import {useApp} from '../store'
 import type {AppError} from '../types'
 import {Button} from './ui'
-import {InstallFfmpegButton} from './FfmpegInstall'
 
 export const EJS_DOCS = 'https://github.com/yt-dlp/yt-dlp/wiki/EJS'
 
@@ -27,8 +27,16 @@ export function ErrorPanel({
   onEdit?: () => void
   compact?: boolean
 }) {
-  const {go, updateYtdlp, copy, state} = useApp()
-  const updating = state.toolProgress !== null
+  const {go, repairTools, checkAppUpdate, toast, copy, state} = useApp()
+  const [checking, setChecking] = useState(false)
+  // A new Prem-dl shows in a banner at the top; say so when there isn't one.
+  const checkUpdate = async () => {
+    setChecking(true)
+    const u = await checkAppUpdate()
+    setChecking(false)
+    if (u?.error) toast('error', `Couldn't check for updates: ${u.error}`)
+    else if (u && !u.available) toast('info', `Prem-dl ${u.current} is the newest version. A fix may come in a later release.`)
+  }
 
   return (
     <div className={`errpanel${compact ? ' compact' : ''}`} role="alert">
@@ -39,14 +47,14 @@ export function ErrorPanel({
       <div className="m">{error.message}</div>
       {error.hint && <div className="h">{error.hint}</div>}
       <div className="a">
-        {error.action === 'update' && (
-          <Button size="sm" variant="primary" icon="refresh" loading={updating} onClick={() => void updateYtdlp()}>
-            Update yt-dlp
+        {error.action === 'update' && !state.appUpdate?.available && (
+          <Button size="sm" variant="primary" icon="refresh" loading={checking} onClick={() => void checkUpdate()}>
+            Check for updates
           </Button>
         )}
-        {error.action === 'install_ytdlp' && (
-          <Button size="sm" variant="primary" icon="download" loading={updating} onClick={() => void updateYtdlp()}>
-            Download yt-dlp
+        {(error.action === 'repair' || error.action === 'install_ytdlp' || error.action === 'install_ffmpeg') && state.tools.builtIn && (
+          <Button size="sm" variant="primary" icon="refresh" loading={state.repairing} onClick={() => void repairTools()}>
+            Repair
           </Button>
         )}
         {error.action === 'cookies' && (
@@ -58,14 +66,6 @@ export function ErrorPanel({
           <Button size="sm" variant="primary" icon="settings" onClick={() => go('settings')}>
             Open settings
           </Button>
-        )}
-        {error.action === 'install_ffmpeg' && (
-          <>
-            <InstallFfmpegButton />
-            <Button size="sm" icon="settings" onClick={() => go('settings', 'advanced')}>
-              Set ffmpeg location
-            </Button>
-          </>
         )}
         {onWait && error.code === 'upcoming' && (
           <Button size="sm" variant="primary" icon="clock" onClick={onWait}>

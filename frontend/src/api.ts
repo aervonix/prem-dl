@@ -43,7 +43,6 @@ export type _Guards = [
   Expect<Guard<main.SettingsResponse, T.SettingsResponse>>,
   Expect<Guard<main.CookieResponse, T.CookieResponse>>,
   Expect<Guard<main.ChromeHelperInfo, T.ChromeHelperInfo>>,
-  Expect<Guard<main.UpdateInfo, T.UpdateInfo>>,
   Expect<Guard<main.UpdateResult, T.UpdateResult>>,
   Expect<Guard<main.AppUpdate, T.AppUpdate>>,
   Expect<Guard<main.ArchiveInfo, T.ArchiveInfo>>,
@@ -59,6 +58,7 @@ export type _Guards = [
   Expect<Guard<ytdlp.PlaylistEntry, T.PlaylistEntry>>,
   Expect<Guard<ytdlp.PlaylistInfo, T.PlaylistInfo>>,
   Expect<Guard<ytdlp.ProbeResult, T.ProbeResult>>,
+  Expect<Guard<ytdlp.SearchFilter, T.SearchFilter>>,
   Expect<Guard<follow.Feed, T.Feed>>,
   Expect<Guard<follow.NewFeed, T.NewFeed>>,
   Expect<Guard<follow.Target, T.FeedTarget>>,
@@ -125,9 +125,8 @@ export const api = {
   getChromeCookies: () => cast<T.CookieResponse>(App.GetChromeCookies()),
   cancelChromeCookies: App.CancelChromeCookies,
 
-  checkUpdate: () => cast<T.UpdateInfo>(App.CheckUpdate()),
-  updateYtdlp: () => cast<T.UpdateResult>(App.UpdateYtdlp()),
-  installFfmpeg: () => cast<T.UpdateResult>(App.InstallFFmpeg()),
+  /** Unpack the tools built into Prem-dl again and re-detect them. */
+  repairTools: () => cast<T.UpdateResult>(App.RepairTools()),
   checkAppUpdate: () => cast<T.AppUpdate>(App.CheckAppUpdate()),
   /** Download the new Prem-dl's installer and run it; on success the app quits and restarts. */
   installAppUpdate: () => cast<T.UpdateResult>(App.InstallAppUpdate()),
@@ -142,6 +141,9 @@ export const api = {
   /** List a followed feed's videos: a channel tab ('' = the first followed one), up to limit (0 = all). */
   browseFeed: (id: string, tab: T.ChannelTab | '', limit: number) => cast<T.ProbeResponse>(App.BrowseFeed(id, tab, limit)),
   cancelBrowse: App.CancelBrowse,
+  /** YouTube results for query, count of them from the 1-based position first. */
+  search: (query: string, filter: T.SearchFilter, first: number, count: number) =>
+    cast<T.ProbeResponse>(App.Search(query, filter as unknown as ytdlp.SearchFilter, first, count)),
   /** Check one feed now, or with '' every feed that isn't paused. */
   checkFeed: App.CheckFeed,
 }
@@ -151,11 +153,7 @@ export interface BackendEvents {
   'jobs:update': T.Job[]
   'jobs:remove': string[]
   'tools:status': T.ToolStatus
-  'tools:progress': {done: number; total: number}
   'bulk:progress': {done: number; total: number}
-  'ffmpeg:progress': {done: number; total: number}
-  'tools:update-available': T.UpdateInfo
-  'tools:auto-updated': T.UpdateResult
   /** A check for a new Prem-dl ran (only sent when it worked). */
   'app:update': T.AppUpdate
   'app:update-progress': {done: number; total: number}

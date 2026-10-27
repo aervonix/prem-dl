@@ -30,10 +30,12 @@ func TestBuiltInToolsUnpack(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := &App{dataDir: dir, store: store, versions: map[versionKey]string{}}
-	a.unpackBundle(context.Background())
+	if err := a.unpackBundle(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
 
-	bin, err := ytdlp.Resolve("", dir)
-	if err != nil || bin.Source != ytdlp.SourceManaged {
+	bin, err := a.findYtdlp()
+	if err != nil {
 		t.Fatalf("yt-dlp: %+v, %v", bin, err)
 	}
 	if v := a.versionOf(context.Background(), bin.Path); v != strings.TrimSpace(string(want)) {
@@ -42,7 +44,7 @@ func TestBuiltInToolsUnpack(t *testing.T) {
 	if ffErr != nil {
 		return // built without ffmpeg
 	}
-	ff := ytdlp.FindFFmpeg(context.Background(), "", bin.Path, dir)
+	ff := a.findFFmpeg(context.Background(), bin.Path)
 	if !strings.EqualFold(filepath.Dir(ff.Path), ytdlp.FFmpegDir(dir)) || ff.Version == "" {
 		t.Fatalf("ffmpeg: %+v", ff)
 	}

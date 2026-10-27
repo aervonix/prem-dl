@@ -185,8 +185,8 @@ func (a *App) selfUpdateBusy() *apperr.AppError {
 	if n := a.q.ActiveCount(); n > 0 {
 		return downloadsRunning(n)
 	}
-	if a.updating.Load() || a.ffmpegBusy.Load() {
-		return apperr.New("busy", "Tools are updating", "yt-dlp or ffmpeg is being updated.",
+	if a.repairing.Load() {
+		return apperr.New("busy", "Tools are being repaired", "Prem-dl is unpacking its download tools again.",
 			"Wait for it to finish, then update Prem-dl.", apperr.ActionNone)
 	}
 	return nil

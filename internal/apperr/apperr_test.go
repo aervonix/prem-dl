@@ -105,7 +105,7 @@ func TestClassify(t *testing.T) {
 			name:   "ffmpeg",
 			lines:  []string{"ERROR: Postprocessing: ffprobe and ffmpeg not found. Please install or provide the path using --ffmpeg-location"},
 			code:   "ffmpeg_missing",
-			action: ActionInstallFFmp,
+			action: ActionRepair,
 		},
 		{
 			// Observed: subtitles embedded in an .m4a, then --embed-metadata (ffmpeg 9.0.2).

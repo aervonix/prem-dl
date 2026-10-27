@@ -2,45 +2,27 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"yt-dlp-gui/internal/apperr"
-	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/ytdlp"
 )
 
 // ToolStatus describes the external programs the app depends on.
 type ToolStatus struct {
-	Checking    bool              `json:"checking"`
-	Ytdlp       *ytdlp.Binary     `json:"ytdlp"` // nil when no executable was found
-	YtdlpError  string            `json:"ytdlpError"`
-	FFmpeg      *ytdlp.FFmpeg     `json:"ffmpeg"` // nil when ffmpeg was not found
-	JSRuntimes  []ytdlp.JSRuntime `json:"jsRuntimes"`
-	ManagedPath string            `json:"managedPath"`
-	// FFmpegManaged is set when the ffmpeg in use is the one InstallFFmpeg put in the app's
-	// folder; CanInstallFFmpeg when there is a build for this computer.
-	FFmpegManaged    bool `json:"ffmpegManaged"`
-	CanInstallFFmpeg bool `json:"canInstallFfmpeg"`
-	// UpToDate is set when the last successful update check, on the current channel, found
-	// nothing newer than the installed yt-dlp. False when no check has run or the last one failed.
-	UpToDate bool `json:"upToDate"`
+	Checking   bool              `json:"checking"`
+	Ytdlp      *ytdlp.Binary     `json:"ytdlp"` // nil when no executable was found
+	YtdlpError string            `json:"ytdlpError"`
+	FFmpeg     *ytdlp.FFmpeg     `json:"ffmpeg"` // nil when ffmpeg was not found
+	JSRuntimes []ytdlp.JSRuntime `json:"jsRuntimes"`
+	// BuiltIn is set when this build carries its own yt-dlp and ffmpeg and runs only those.
+	BuiltIn bool `json:"builtIn"`
 }
 
-// UpdateInfo is the result of comparing the installed yt-dlp with the newest release.
-type UpdateInfo struct {
-	Current   string `json:"current"`
-	Latest    string `json:"latest"`
-	Available bool   `json:"available"`
-	Channel   string `json:"channel"`
-	Error     string `json:"error"`
-}
-
-// UpdateResult is the outcome of installing or updating yt-dlp.
+// UpdateResult is the outcome of updating Prem-dl or repairing its tools.
 type UpdateResult struct {
 	OK       bool             `json:"ok"`
 	Previous string           `json:"previous"`
@@ -69,31 +51,31 @@ func (a *App) detectTools() {
 	ctx, cancel := context.WithTimeout(a.root, 90*time.Second)
 	defer cancel()
 	// Unpacking ffmpeg takes a few seconds; it must not eat into detection's own time.
-	a.unpackOnce.Do(func() { a.unpackBundle(a.root) })
-	s := a.store.Get()
+	a.unpackOnce.Do(func() {
+		if err := a.unpackBundle(a.root, false); err != nil {
+			a.warn("couldn't unpack the built-in tools: " + err.Error())
+		}
+	})
 
-	st := ToolStatus{ManagedPath: ytdlp.ManagedPath(a.managedDir()), JSRuntimes: []ytdlp.JSRuntime{}}
+	st := ToolStatus{JSRuntimes: []ytdlp.JSRuntime{}, BuiltIn: bundleFS != nil}
 
-	bin, err := ytdlp.Resolve(s.YtdlpPath, a.managedDir())
+	bin, err := a.findYtdlp()
 	if err != nil {
-		st.YtdlpError = err.Error()
+		st.YtdlpError = errToolsMissing.Message
 	} else {
 		bin.Version = a.versionOf(ctx, bin.Path)
 		st.Ytdlp = &bin
 		if bin.Version == "" {
-			st.YtdlpError = "yt-dlp was found but didn't run. The file may be damaged. Reinstall it from Settings → Updates."
+			st.YtdlpError = "Prem-dl's download tools didn't start. The files may be damaged or blocked by antivirus."
 		}
-		st.UpToDate = a.upToDate(bin.Version)
 	}
 	ytPath := ""
 	if st.Ytdlp != nil {
 		ytPath = st.Ytdlp.Path
 	}
-	if ff := ytdlp.FindFFmpeg(ctx, s.FfmpegPath, ytPath, a.managedDir()); ff.Path != "" {
+	if ff := a.findFFmpeg(ctx, ytPath); ff.Path != "" {
 		st.FFmpeg = &ff
-		st.FFmpegManaged = strings.EqualFold(filepath.Dir(ff.Path), ytdlp.FFmpegDir(a.managedDir()))
 	}
-	st.CanInstallFFmpeg = ytdlp.CanInstallFFmpeg()
 	st.JSRuntimes = append(st.JSRuntimes, ytdlp.DetectJSRuntimes(ctx)...)
 
 	a.toolsMu.Lock()
@@ -144,9 +126,6 @@ func (a *App) currentTools() ToolStatus {
 	if t.JSRuntimes == nil {
 		t.JSRuntimes = []ytdlp.JSRuntime{}
 	}
-	if t.ManagedPath == "" {
-		t.ManagedPath = ytdlp.ManagedPath(a.managedDir())
-	}
 	return t
 }
 
@@ -162,9 +141,31 @@ func (a *App) ensureTools(ctx context.Context) ToolStatus {
 	return a.currentTools()
 }
 
-var errBinaryMissing = apperr.New("binary_missing", "yt-dlp isn't installed",
-	"The app couldn't find a yt-dlp executable to run.",
-	"Download it from Settings → Updates, or point the app at an existing yt-dlp.exe.", apperr.ActionInstallBin)
+var errToolsMissing = apperr.New("binary_missing", "Download tools are missing",
+	"Prem-dl's download tools are missing from its folder.",
+	"Repair them from Settings → Updates. If that doesn't help, install Prem-dl again.", apperr.ActionRepair)
+
+// findYtdlp locates the yt-dlp to run. A build with the tools built in runs only its own copy,
+// so yt-dlp changes only with a Prem-dl release. Other builds (wails dev, a plain wails build)
+// look next to the app, in the working folder, in the app's folder, then on PATH.
+func (a *App) findYtdlp() (ytdlp.Binary, error) {
+	if bundleFS == nil {
+		return ytdlp.Resolve("", a.managedDir())
+	}
+	p := ytdlp.ManagedPath(a.managedDir())
+	if st, err := os.Stat(p); err != nil || st.IsDir() {
+		return ytdlp.Binary{}, ytdlp.ErrNotFound
+	}
+	return ytdlp.Binary{Path: p, Source: ytdlp.SourceManaged}, nil
+}
+
+// findFFmpeg is findYtdlp for ffmpeg. A bundle built without ffmpeg looks for one like other builds.
+func (a *App) findFFmpeg(ctx context.Context, ytdlpPath string) ytdlp.FFmpeg {
+	if bundleHas("ffmpeg.zip") {
+		return ytdlp.FFmpegAt(ctx, filepath.Join(ytdlp.FFmpegDir(a.managedDir()), "ffmpeg.exe"))
+	}
+	return ytdlp.FindFFmpeg(ctx, "", ytdlpPath, a.managedDir())
+}
 
 // buildEnv prepares one yt-dlp invocation. The returned cleanup removes per-run temp files.
 func (a *App) buildEnv(ctx context.Context) (ytdlp.Env, func(), error) {
@@ -174,9 +175,9 @@ func (a *App) buildEnv(ctx context.Context) (ytdlp.Env, func(), error) {
 		return ytdlp.Env{}, func() {}, err
 	}
 	s := a.store.Get()
-	bin, err := ytdlp.Resolve(s.YtdlpPath, a.managedDir())
+	bin, err := a.findYtdlp()
 	if err != nil {
-		return ytdlp.Env{}, func() {}, errBinaryMissing
+		return ytdlp.Env{}, func() {}, errToolsMissing
 	}
 	env := ytdlp.Env{Bin: bin.Path, Settings: s, JSRuntimes: tools.JSRuntimes}
 	if tools.FFmpeg != nil {
@@ -203,267 +204,35 @@ func (a *App) buildEnv(ctx context.Context) (ytdlp.Env, func(), error) {
 	return env, cleanup, nil
 }
 
-// ---- updates ----
+// ---- repair ----
 
-func (a *App) checkUpdate(ctx context.Context) UpdateInfo {
-	s := a.store.Get()
-	info := UpdateInfo{Channel: s.UpdateChannel}
-	tools := a.ensureTools(ctx)
-	if tools.Ytdlp != nil {
-		info.Current = tools.Ytdlp.Version
+// repairTools unpacks the built-in tools again, over whatever the app's folder holds, and
+// re-detects them. Builds without built-in tools only re-detect.
+func (a *App) repairTools(ctx context.Context) UpdateResult {
+	if !a.repairing.CompareAndSwap(false, true) {
+		return UpdateResult{Error: apperr.New("busy", "Already repairing", "The tools are already being repaired.", "", apperr.ActionNone)}
 	}
-	latest, err := ytdlp.LatestVersion(ctx, ytdlp.HTTPClient(s.Proxy, 20*time.Second), s.UpdateChannel)
-	if err != nil {
-		info.Error = err.Error()
-		return info
-	}
-	info.Latest = latest
-	info.Available = ytdlp.UpdateAvailable(info.Current, latest, s.UpdateChannel)
-	_, _ = a.updateSettings(func(v *settings.Settings) {
-		v.LastUpdateCheck = time.Now()
-		v.LatestYtdlp, v.LatestYtdlpChannel = latest, s.UpdateChannel
-	})
-	a.republishUpToDate()
-	return info
-}
+	defer a.repairing.Store(false)
+	a.ensureTools(ctx) // the first unpack is done by then
 
-// upToDate reports whether the last successful check, made on the current channel, found nothing
-// newer than the installed version. Checks run at most every few hours, so this is what lets the
-// UI say "up to date" between them.
-func (a *App) upToDate(installed string) bool {
-	s := a.store.Get()
-	return installed != "" && s.LatestYtdlp != "" && s.LatestYtdlpChannel == s.UpdateChannel &&
-		!ytdlp.UpdateAvailable(installed, s.LatestYtdlp, s.UpdateChannel)
-}
-
-// republishUpToDate recomputes ToolStatus.UpToDate after a check or a channel change, without a
-// full detection pass, and tells the UI if it changed.
-func (a *App) republishUpToDate() {
-	installed := ""
-	a.toolsMu.Lock()
-	ready := a.toolsReady
-	if a.tools.Ytdlp != nil {
-		installed = a.tools.Ytdlp.Version
-	}
-	a.toolsMu.Unlock()
-	if !ready {
-		return // the first detection pass computes it
-	}
-	// Settings are read outside toolsMu, so no lock is taken while holding it.
-	up := a.upToDate(installed)
-
-	a.toolsMu.Lock()
-	same := a.tools.Ytdlp != nil && a.tools.Ytdlp.Version == installed // no newer pass replaced it
-	changed := same && a.tools.UpToDate != up
-	if changed {
-		a.tools.UpToDate = up
-	}
-	st := a.tools
-	a.toolsMu.Unlock()
-	if changed {
-		a.emit("tools:status", st)
-	}
-}
-
-// installOrUpdate downloads the newest yt-dlp over the current one (or into the managed folder).
-func (a *App) installOrUpdate(ctx context.Context) UpdateResult {
-	if !a.updating.CompareAndSwap(false, true) {
-		return UpdateResult{Error: apperr.New("busy", "Update already running", "An update is already in progress.", "", apperr.ActionNone)}
-	}
-	defer a.updating.Store(false)
-
-	// Nothing new may start while the binary is swapped: a run starting between the renames
-	// would find no yt-dlp, and one holding the old file open would leave it behind.
-	n := a.q.Hold()
-	defer a.q.Release()
-	if n > 0 {
-		return UpdateResult{Error: apperr.New("busy", "Downloads are running",
-			fmt.Sprintf("%d download(s) are using yt-dlp, which can't be replaced while it runs.", n),
-			"Pause or finish the active downloads, then update.", apperr.ActionNone)}
-	}
-
-	s := a.store.Get()
-	tools := a.ensureTools(ctx)
-	res := UpdateResult{}
-	dest := ytdlp.ManagedPath(a.managedDir())
-	inPlace := false
-	if tools.Ytdlp != nil {
-		res.Previous = tools.Ytdlp.Version
-		// Binaries the user placed (or configured) are updated in place. One found on PATH belongs to
-		// a package manager, so a private managed copy is installed instead of touching it.
-		if tools.Ytdlp.Source != ytdlp.SourcePath && tools.Ytdlp.Source != "" {
-			dest = tools.Ytdlp.Path
-			inPlace = true
-		}
-	}
-
-	client := ytdlp.HTTPClient(s.Proxy, 5*time.Minute)
-	progress := func(done, total int64) {
-		a.emit("tools:progress", map[string]int64{"done": done, "total": total})
-	}
-	version, err := ytdlp.Install(ctx, client, s.UpdateChannel, dest, progress)
-	if err != nil && inPlace && errors.Is(err, os.ErrPermission) {
-		// The folder isn't writable (e.g. Program Files): fall back to the managed copy, which
-		// then takes precedence through the explicit path setting.
-		dest = ytdlp.ManagedPath(a.managedDir())
-		version, err = ytdlp.Install(ctx, client, s.UpdateChannel, dest, progress)
-		if err == nil {
-			if _, serr := a.updateSettings(func(v *settings.Settings) { v.YtdlpPath = dest }); serr != nil {
-				res.Message = "The original location isn't writable, so yt-dlp was installed to the app's own folder, but the setting couldn't be saved (" + serr.Error() + "). Set the yt-dlp path in Advanced settings to " + dest + ". "
-			} else {
-				res.Message = "The original location isn't writable, so yt-dlp was installed to the app's own folder and will be used from now on. "
-			}
-		}
-	}
-	if err != nil {
-		res.Error = classifyUpdateError(err)
-		return res
-	}
-
-	res.OK = true
-	res.Version = version
-	res.Path = dest
-	switch {
-	case res.Previous == "":
-		res.Message += "yt-dlp " + version + " installed."
-	case ytdlp.CompareVersions(res.Previous, version) == 0:
-		res.Message += "yt-dlp " + version + " reinstalled (already the newest version)."
-	default:
-		res.Message += "yt-dlp updated from " + res.Previous + " to " + version + "."
-	}
-	// What was just installed is the channel's latest release.
-	_, _ = a.updateSettings(func(v *settings.Settings) {
-		v.LastUpdateCheck = time.Now()
-		v.LatestYtdlp, v.LatestYtdlpChannel = version, s.UpdateChannel
-	})
-	a.detectTools()
-	return res
-}
-
-// installFFmpeg downloads yt-dlp's ffmpeg build into the app's folder, or replaces the copy it
-// installed before.
-func (a *App) installFFmpeg(ctx context.Context) UpdateResult {
-	if !a.ffmpegBusy.CompareAndSwap(false, true) {
-		return UpdateResult{Error: apperr.New("busy", "Already installing", "ffmpeg is already being installed.", "", apperr.ActionNone)}
-	}
-	defer a.ffmpegBusy.Store(false)
-
-	res := UpdateResult{}
-	dir := ytdlp.FFmpegDir(a.managedDir())
-	if _, err := os.Stat(dir); err == nil {
-		// Replacing a copy that downloads are using fails on its DLLs, so nothing new may start.
+	if bundleFS != nil {
+		// Nothing new may start while the programs are swapped, and running ones hold them open.
 		n := a.q.Hold()
 		defer a.q.Release()
 		if n > 0 {
 			return UpdateResult{Error: apperr.New("busy", "Downloads are running",
-				fmt.Sprintf("%d download(s) may be using ffmpeg, which can't be replaced while it runs.", n),
+				fmt.Sprintf("%d download(s) are using the tools, which can't be replaced while they run.", n),
 				"Pause or finish the active downloads, then try again.", apperr.ActionNone)}
 		}
-		if t := a.currentTools(); t.FFmpeg != nil && t.FFmpegManaged {
-			res.Previous = t.FFmpeg.Version
+		if err := a.unpackBundle(ctx, true); err != nil {
+			hint := "Check that the app's data folder is writable and not locked by antivirus, or install Prem-dl again."
+			return UpdateResult{Error: apperr.New("repair_failed", "Couldn't repair the tools", err.Error(), hint, apperr.ActionNone)}
 		}
-	}
-
-	s := a.store.Get()
-	progress := func(done, total int64) {
-		a.emit("ffmpeg:progress", map[string]int64{"done": done, "total": total})
-	}
-	version, err := ytdlp.InstallFFmpeg(ctx, ytdlp.HTTPClient(s.Proxy, 15*time.Minute), a.managedDir(), progress)
-	if err != nil {
-		res.Error = classifyFFmpegError(err)
-		return res
-	}
-	res.OK = true
-	res.Version = version
-	res.Path = filepath.Join(dir, "ffmpeg.exe")
-	if res.Previous != "" {
-		res.Message = "ffmpeg updated from " + res.Previous + " to " + version + "."
-	} else {
-		res.Message = "ffmpeg " + version + " installed."
-	}
-	if s.FfmpegPath != "" {
-		res.Message += " Your ffmpeg location setting still points to another copy; clear it under Settings → Advanced to use this one."
 	}
 	a.detectTools()
-	return res
-}
-
-func classifyFFmpegError(err error) *apperr.AppError {
-	switch {
-	case errors.Is(err, os.ErrPermission):
-		return apperr.New("install_permission", "Can't write ffmpeg", err.Error(),
-			"Check that the app's data folder is writable and not locked by antivirus.", apperr.ActionNone)
-	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
-		return apperr.New("install_timeout", "Download timed out", "Downloading ffmpeg took too long.", "Check your connection and try again.", apperr.ActionNone)
+	if t := a.currentTools(); t.YtdlpError != "" {
+		return UpdateResult{Error: apperr.New("repair_failed", "The tools still don't work", t.YtdlpError,
+			"Install Prem-dl again from its latest release.", apperr.ActionNone)}
 	}
-	return apperr.New("install_failed", "Couldn't install ffmpeg", err.Error(),
-		"Check your internet connection (and proxy) and try again.", apperr.ActionNone)
-}
-
-func classifyUpdateError(err error) *apperr.AppError {
-	switch {
-	case errors.Is(err, os.ErrPermission):
-		return apperr.New("update_permission", "Can't write yt-dlp", err.Error(),
-			"Move yt-dlp.exe to a folder you own, or run the app as administrator once.", apperr.ActionSettings)
-	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
-		return apperr.New("update_timeout", "Update timed out", "Downloading yt-dlp took too long.", "Check your connection and try again.", apperr.ActionNone)
-	default:
-		ae := apperr.Classify([]string{"ERROR: " + err.Error()}, err)
-		if ae.Code == "unknown" {
-			ae = apperr.New("update_failed", "Update failed", err.Error(),
-				"Check your internet connection (and proxy) and try again.", apperr.ActionNone)
-		}
-		return ae
-	}
-}
-
-// autoUpdateLoop checks for a new yt-dlp shortly after launch and every few hours after that.
-func (a *App) autoUpdateLoop() {
-	timer := time.NewTimer(4 * time.Second)
-	defer timer.Stop()
-	for {
-		select {
-		case <-a.quit:
-			return
-		case <-timer.C:
-		}
-		next := 6 * time.Hour
-		if a.autoUpdateOnce() {
-			next = 10 * time.Minute
-		}
-		timer.Reset(next)
-	}
-}
-
-// autoUpdateOnce updates yt-dlp if a newer release exists. It reports whether it should be
-// retried soon because downloads were running and the update had to wait.
-func (a *App) autoUpdateOnce() (retrySoon bool) {
-	s := a.store.Get()
-	if !s.AutoUpdate {
-		return false
-	}
-	tools := a.ensureTools(a.root)
-	if tools.Ytdlp == nil {
-		return false // first-run install is offered in the UI rather than done silently
-	}
-	if time.Since(s.LastUpdateCheck) < 5*time.Hour {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(a.root, 30*time.Second)
-	info := a.checkUpdate(ctx)
-	cancel()
-	if info.Error != "" || !info.Available {
-		return false
-	}
-	if a.q.ActiveCount() > 0 {
-		a.emit("tools:update-available", info)
-		// Forget the check so the retry isn't skipped as "recently checked".
-		_, _ = a.updateSettings(func(v *settings.Settings) { v.LastUpdateCheck = time.Time{} })
-		return true
-	}
-	ctx, cancel = context.WithTimeout(a.root, 6*time.Minute)
-	defer cancel()
-	res := a.installOrUpdate(ctx)
-	a.emit("tools:auto-updated", res)
-	return false
+	return UpdateResult{OK: true, Message: "Prem-dl's download tools are ready."}
 }

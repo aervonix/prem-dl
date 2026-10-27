@@ -5,7 +5,7 @@ single-instance ID, Chrome helper extension ID) keep the old name on purpose, so
 and the loaded helper keep working.
 
 Windows desktop app for yt-dlp. **Go** backend, **React + TypeScript** frontend, joined by **Wails v2**
-(WebView2). The Go side owns the queue, output parsing, error classification, cookies and yt-dlp updates;
+(WebView2). The Go side owns the queue, output parsing, error classification, cookies and the built-in tools;
 the UI is not a thin wrapper over a shell command. See `README.md` for the feature list.
 
 ## Commands
@@ -15,7 +15,7 @@ wails dev                 # live reload; bridge also at http://localhost:34115 f
 wails build               # -> build\bin\Prem-dl.exe (copy yt-dlp.exe next to it)
 go run ./cmd/bundle; wails build -tags bundled   # one exe with yt-dlp + ffmpeg inside (bundle.go)
 go test -tags bundled . -run BuiltIn             # the embedded tools unpack and run
-.\scripts\release.ps1     # build\release: Prem-dl.exe (plain) + Prem-dl-Setup.exe (NSIS, bundled) + SHA256SUMS
+.\scripts\release.ps1     # build\release: Prem-dl.exe + Prem-dl-Setup.exe (NSIS), both bundled, + SHA256SUMS
 go test ./...             # offline unit tests (~10 s)
 go vet ./...; gofmt -l app.go main.go tools.go internal
 cd frontend; npx tsc --noEmit; npm test             # vitest: format.ts, store.tsx reducers + provider
@@ -29,13 +29,22 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 
 - `main.go`, `app.go`, `tools.go` – Wails shell; every exported `App` method is callable from TS.
 - `internal/apperr` – raw yt-dlp output -> `AppError` (code, title, message, hint, action button).
-- `internal/ytdlp` – binary resolve/install/update, probe, `args.go` (option -> flags), `progress.go`
+- `internal/ytdlp` – binary resolve/fetch (used by `cmd/bundle`), probe, `args.go` (option -> flags), `progress.go`
   (line parser + multi-stream `Tracker`), cookie file inspect/import.
 - `internal/queue` – scheduler, process control, persistence (`queue.json`), batched UI events.
 - `internal/follow` – followed channels/playlists (`feeds.json`): baseline of what's there, periodic
   checks that queue unseen video IDs. Deps are injected like `queue`; `following.go` wires them.
 - `bundle.go` (+ `bundle_embed.go` under `-tags bundled`) – unpacks the yt-dlp/ffmpeg built into
   the exe into the managed `bin` folder during the first tool detection; `cmd/bundle` fetches them.
+  **yt-dlp and ffmpeg change only with a Prem-dl release** (user's decision): no in-app update,
+  install or channel, no custom tool paths, and a bundled build runs only its own copies
+  (`findYtdlp`/`findFFmpeg`). `bin\bundle.stamp` records which bundle is unpacked; a different one
+  replaces it, newer or older. `RepairTools` unpacks again. The main UI doesn't name yt-dlp (one
+  version line in Settings → Updates is for bug reports); errors say "Prem-dl" and `ActionUpdate`
+  means "check for a new Prem-dl".
+- `search.go` + `internal/ytdlp/search.go` – YouTube search: a `youtube.com/results` link read like a
+  playlist (`--playlist-items=N:M` pages it). Results are `PlaylistEntry`s shown by `pages/SearchPage.tsx`
+  in the shared `VideoGrid`.
 - `internal/settings` – `Settings` + `DownloadOptions`, validation, atomic writes. Data lives in `%APPDATA%\yt-dlp-gui`.
 - `internal/sys` – hidden consoles, process-tree kill (`taskkill /T`), open/reveal in Explorer, the tray
   icon + taskbar progress (`shell_windows.go`, raw Win32/COM on its own thread), per-user registry entries.
@@ -46,8 +55,9 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - `frontend/src` – `api.ts` is the ONLY file that calls Go; `types.ts` mirrors the Go JSON by hand;
   `store.tsx` is the reducer fed by backend events; `pages/`, `components/`, one `styles.css`.
   `pages/settings/` holds one component per Settings tab (all stay mounted, hidden when not shown);
-  `SettingsPage.tsx` owns the draft and the save bar. Tests sit next to their file (`*.test.ts[x]`) and
-  mock `./api` (see `store.test.tsx`).
+  `SettingsPage.tsx` owns the draft and the save bar. `components/QualityPicker.tsx` is the Quality
+  section; `quality.ts` mirrors yt-dlp's stream choice (`QualitySort`) to estimate each preset's size.
+  Tests sit next to their file (`*.test.ts[x]`) and mock `./api` (see `store.test.tsx`).
 
 ## Conventions
 
@@ -98,6 +108,13 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - A missing tab is `This channel does not have a shorts tab` (`no_tab`, skipped when other tabs are
   checked). A wrong/deleted channel says `Playlists that require authentication may not extract
   correctly...`, not 404 (`page_unreadable`, matched before the generic sign-in rule).
+- Search filters go in the results link's `sp` parameter, a protobuf `{2: {1: date, 2: type, 3: length}}`
+  (`ytdlp.SearchURL`). YouTube still honours those, but ignores its sort orders (date, views) since
+  its 2025 filter redesign, so there is no sort. Results say only "3 years ago";
+  `--extractor-args=youtubetab:approximate_date` turns that into `timestamp`. Channel avatars come
+  as `//yt3.ggpht.com/...` (`pickThumb` adds `https:`).
+- Quality sizes in the UI are estimates from the probe's `filesize`/`filesize_approx`: `quality.ts`
+  picks streams like `bv*[height<=h]+ba` under `QualitySort`. Change one, change the other.
 
 **Wails / Go**
 - Wails runtime helpers (`ClipboardGetText`, dialogs, ...) call `log.Fatal` on a nil/bad context, killing

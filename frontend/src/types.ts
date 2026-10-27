@@ -6,7 +6,8 @@ export interface AppError {
   title: string
   message: string
   hint: string
-  action: '' | 'update' | 'cookies' | 'install_ytdlp' | 'settings' | 'install_ffmpeg'
+  /** 'install_ytdlp' and 'install_ffmpeg' come from failures saved by older versions; they mean 'repair'. */
+  action: '' | 'update' | 'cookies' | 'repair' | 'settings' | 'install_ytdlp' | 'install_ffmpeg'
   detail: string
   retryable: boolean
 }
@@ -90,15 +91,8 @@ export interface Settings {
   sleepInterval: number
   useArchive: boolean
   cookies: Cookies
-  autoUpdate: boolean
-  updateChannel: 'stable' | 'nightly' | 'master'
-  lastUpdateCheck: string
-  latestYtdlp: string
-  latestYtdlpChannel: string
   /** Look for new Prem-dl releases. */
   checkAppUpdates: boolean
-  ytdlpPath: string
-  ffmpegPath: string
   theme: 'system' | 'light' | 'dark'
   /** A click when a download finishes. */
   notifySound: boolean
@@ -194,12 +188,8 @@ export interface ToolStatus {
   ytdlpError: string
   ffmpeg: FFmpeg | null
   jsRuntimes: JSRuntime[]
-  managedPath: string
-  /** The ffmpeg in use is the one the app installed. */
-  ffmpegManaged: boolean
-  canInstallFfmpeg: boolean
-  /** The last successful update check on this channel found nothing newer. */
-  upToDate: boolean
+  /** This build carries its own yt-dlp and ffmpeg and runs only those. */
+  builtIn: boolean
 }
 
 export interface AppState {
@@ -387,14 +377,6 @@ export interface CookieTest {
   error: AppError | null
 }
 
-export interface UpdateInfo {
-  current: string
-  latest: string
-  available: boolean
-  channel: string
-  error: string
-}
-
 /** What a check for a new Prem-dl found (main.AppUpdate). */
 export interface AppUpdate {
   current: string
@@ -428,6 +410,14 @@ export interface ArchiveInfo {
 }
 
 export type ChannelTab = 'videos' | 'shorts' | 'streams'
+
+/** Narrows a YouTube search (ytdlp.SearchFilter); '' means any. */
+export interface SearchFilter {
+  type: '' | 'video' | 'channel' | 'playlist'
+  uploaded: '' | 'hour' | 'today' | 'week' | 'month' | 'year'
+  /** short is under 4 minutes, medium 4 to 20, long over 20. */
+  length: '' | 'short' | 'medium' | 'long'
+}
 
 /** A followed channel or playlist (follow.Feed). */
 export interface Feed {

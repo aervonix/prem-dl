@@ -118,7 +118,7 @@ export function GeneralTab({draft, upd}: TabProps) {
             label="File name template"
             hint={
               <>
-                Uses yt-dlp's <button type="button" className="link" onClick={() => void api.openExternal('https://github.com/yt-dlp/yt-dlp#output-template')}>output template</button> syntax and must end with <code>.%(ext)s</code>.
+                Uses the <button type="button" className="link" onClick={() => void api.openExternal('https://github.com/yt-dlp/yt-dlp#output-template')}>output template</button> syntax and must end with <code>.%(ext)s</code>.
               </>
             }>
             <input ref={templateInput} type="text" className="mono" value={draft.filenameTemplate} onChange={(e) => upd({filenameTemplate: e.target.value})} spellCheck={false} />

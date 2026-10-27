@@ -180,10 +180,7 @@ export namespace main {
 	    ytdlpError: string;
 	    ffmpeg?: ytdlp.FFmpeg;
 	    jsRuntimes: ytdlp.JSRuntime[];
-	    managedPath: string;
-	    ffmpegManaged: boolean;
-	    canInstallFfmpeg: boolean;
-	    upToDate: boolean;
+	    builtIn: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ToolStatus(source);
@@ -196,10 +193,7 @@ export namespace main {
 	        this.ytdlpError = source["ytdlpError"];
 	        this.ffmpeg = this.convertValues(source["ffmpeg"], ytdlp.FFmpeg);
 	        this.jsRuntimes = this.convertValues(source["jsRuntimes"], ytdlp.JSRuntime);
-	        this.managedPath = source["managedPath"];
-	        this.ffmpegManaged = source["ffmpegManaged"];
-	        this.canInstallFfmpeg = source["canInstallFfmpeg"];
-	        this.upToDate = source["upToDate"];
+	        this.builtIn = source["builtIn"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -583,26 +577,6 @@ export namespace main {
 		}
 	}
 	
-	export class UpdateInfo {
-	    current: string;
-	    latest: string;
-	    available: boolean;
-	    channel: string;
-	    error: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new UpdateInfo(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.current = source["current"];
-	        this.latest = source["latest"];
-	        this.available = source["available"];
-	        this.channel = source["channel"];
-	        this.error = source["error"];
-	    }
-	}
 	export class UpdateResult {
 	    ok: boolean;
 	    previous: string;
@@ -928,14 +902,7 @@ export namespace settings {
 	    sleepInterval: number;
 	    useArchive: boolean;
 	    cookies: Cookies;
-	    autoUpdate: boolean;
-	    updateChannel: string;
-	    lastUpdateCheck: string;
-	    latestYtdlp: string;
-	    latestYtdlpChannel: string;
 	    checkAppUpdates: boolean;
-	    ytdlpPath: string;
-	    ffmpegPath: string;
 	    theme: string;
 	    notifySound: boolean;
 	    notifyPopup: boolean;
@@ -965,14 +932,7 @@ export namespace settings {
 	        this.sleepInterval = source["sleepInterval"];
 	        this.useArchive = source["useArchive"];
 	        this.cookies = this.convertValues(source["cookies"], Cookies);
-	        this.autoUpdate = source["autoUpdate"];
-	        this.updateChannel = source["updateChannel"];
-	        this.lastUpdateCheck = source["lastUpdateCheck"];
-	        this.latestYtdlp = source["latestYtdlp"];
-	        this.latestYtdlpChannel = source["latestYtdlpChannel"];
 	        this.checkAppUpdates = source["checkAppUpdates"];
-	        this.ytdlpPath = source["ytdlpPath"];
-	        this.ffmpegPath = source["ffmpegPath"];
 	        this.theme = source["theme"];
 	        this.notifySound = source["notifySound"];
 	        this.notifyPopup = source["notifyPopup"];
@@ -1371,6 +1331,22 @@ export namespace ytdlp {
 		    }
 		    return a;
 		}
+	}
+	export class SearchFilter {
+	    type: string;
+	    uploaded: string;
+	    length: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchFilter(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.type = source["type"];
+	        this.uploaded = source["uploaded"];
+	        this.length = source["length"];
+	    }
 	}
 	
 

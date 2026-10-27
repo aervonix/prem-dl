@@ -151,20 +151,27 @@ func FindFFmpeg(ctx context.Context, custom, ytdlpPath, managedDir string) FFmpe
 		candidates = append(candidates, p)
 	}
 	for _, c := range candidates {
-		if !isFile(c) {
-			continue
+		if f := FFmpegAt(ctx, c); f.Path != "" {
+			return f
 		}
-		out, err := run(ctx, 10*time.Second, c, "-version")
-		if err != nil {
-			continue
-		}
-		f := FFmpeg{Path: c}
-		if m := ffmpegVersionRe.FindStringSubmatch(out); m != nil {
-			f.Version = m[1]
-		}
-		return f
 	}
 	return FFmpeg{}
+}
+
+// FFmpegAt checks the ffmpeg at path runs, and reads its version. Path is empty when it doesn't.
+func FFmpegAt(ctx context.Context, path string) FFmpeg {
+	if !isFile(path) {
+		return FFmpeg{}
+	}
+	out, err := run(ctx, 10*time.Second, path, "-version")
+	if err != nil {
+		return FFmpeg{}
+	}
+	f := FFmpeg{Path: path}
+	if m := ffmpegVersionRe.FindStringSubmatch(out); m != nil {
+		f.Version = m[1]
+	}
+	return f
 }
 
 // JSRuntime is a JavaScript engine yt-dlp can use to solve YouTube's challenges.

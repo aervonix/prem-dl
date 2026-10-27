@@ -49,8 +49,7 @@ type App struct {
 	firstTools sync.Once
 	toolsFirst chan struct{} // closed once the first detection pass has published
 
-	updating   atomic.Bool
-	ffmpegBusy atomic.Bool
+	repairing atomic.Bool // RepairTools is unpacking the built-in tools again
 
 	// Prem-dl's own updates; see app_update.go.
 	appUpdate    atomic.Pointer[AppUpdate] // the last successful check
@@ -63,6 +62,9 @@ type App struct {
 
 	browseMu     sync.Mutex
 	browseCancel context.CancelFunc // set while BrowseFeed lists a channel
+
+	searchMu     sync.Mutex
+	searchCancel context.CancelFunc // set while Search runs
 
 	bulkMu     sync.Mutex
 	bulkCancel context.CancelFunc // set while EnqueueLinks runs
@@ -155,7 +157,6 @@ func (a *App) startup(ctx context.Context) {
 	a.feeds.Start()
 	a.applyTheme(a.store.Get().Theme)
 	a.detectOnce.Do(func() { go a.detectTools() })
-	go a.autoUpdateLoop()
 	go a.appUpdateLoop()
 	go a.startBackground(ctx)
 }
@@ -163,11 +164,10 @@ func (a *App) startup(ctx context.Context) {
 // CloseRequest is sent as "app:confirm-close" when closing needs the user's say-so.
 type CloseRequest struct {
 	Downloads  int  `json:"downloads"`  // running downloads that would be paused
-	Updating   bool `json:"updating"`   // yt-dlp is being replaced
 	Background bool `json:"background"` // the window can hide in the tray instead (HideWindow)
 }
 
-// beforeClose asks for confirmation when downloads are still running (or yt-dlp is updating),
+// beforeClose asks for confirmation when downloads are still running,
 // and remembers where the window was when it does close. When the app is set to keep running in
 // the tray, closing the window only hides it; the tray icon's Quit closes for real.
 //
@@ -192,8 +192,7 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 		return true
 	}
 	n := a.q.ActiveCount()
-	updating := a.updating.Load()
-	if n == 0 && !updating {
+	if n == 0 {
 		return false
 	}
 	a.closeMu.Lock()
@@ -201,7 +200,7 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 	a.closeAsked, a.closeShown = true, false
 	a.closeMu.Unlock()
 	if !unseen {
-		a.emit("app:confirm-close", CloseRequest{Downloads: n, Updating: updating, Background: a.shell.Load() != nil})
+		a.emit("app:confirm-close", CloseRequest{Downloads: n, Background: a.shell.Load() != nil})
 		return true
 	}
 
@@ -212,16 +211,6 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 		Buttons:       []string{"Quit", "Keep downloading"},
 		DefaultButton: "Keep downloading",
 		CancelButton:  "Keep downloading",
-	}
-	switch {
-	case n > 0:
-	case a.updating.Load():
-		opts.Title = "Updating yt-dlp"
-		opts.Message = "yt-dlp is being updated. Quit anyway?\n\nThe update will be abandoned and the current version kept."
-		opts.Buttons = []string{"Quit", "Wait"}
-		opts.DefaultButton, opts.CancelButton = "Wait", "Wait"
-	default:
-		return false
 	}
 	choice, err := wr.MessageDialog(ctx, opts)
 	if err != nil {
@@ -339,9 +328,6 @@ func (a *App) SaveSettings(s settings.Settings) SettingsResponse {
 		return SettingsResponse{Settings: a.store.Get(), Error: err.Error()}
 	}
 	prev := a.store.Get()
-	// Not user-editable; a draft opened before a check must not roll them back.
-	s.LastUpdateCheck = prev.LastUpdateCheck
-	s.LatestYtdlp, s.LatestYtdlpChannel = prev.LatestYtdlp, prev.LatestYtdlpChannel
 	// The sign-in entry is changed first, so a failure leaves the setting as it was.
 	startChanged := s.StartWithWindows != prev.StartWithWindows
 	if startChanged {
@@ -362,18 +348,12 @@ func (a *App) SaveSettings(s settings.Settings) SettingsResponse {
 	if saved.FollowEvery != prev.FollowEvery {
 		a.feeds.Kick()
 	}
-	if saved.UpdateChannel != prev.UpdateChannel {
-		a.republishUpToDate() // the last check was for the old channel
-	}
 	a.applyTheme(saved.Theme)
 	a.q.Kick() // a changed concurrency limit takes effect immediately
-	if saved.YtdlpPath != prev.YtdlpPath || saved.FfmpegPath != prev.FfmpegPath {
-		go a.detectTools()
-	}
 	return SettingsResponse{Settings: saved}
 }
 
-// RefreshTools re-detects yt-dlp, ffmpeg and JavaScript runtimes.
+// RefreshTools re-detects the download tools and JavaScript runtimes.
 func (a *App) RefreshTools() ToolStatus {
 	a.detectTools()
 	return a.currentTools()
@@ -930,25 +910,12 @@ func (a *App) TestCookies() ytdlp.CookieTest {
 	}
 }
 
-// ---- updates ----
+// ---- tools ----
 
-// CheckUpdate compares the installed yt-dlp with the newest release.
-func (a *App) CheckUpdate() UpdateInfo {
-	ctx, cancel := context.WithTimeout(a.root, 30*time.Second)
+// RepairTools unpacks the tools built into Prem-dl again, for when they went missing or stopped
+// running (antivirus, a clean-up), and re-detects them.
+func (a *App) RepairTools() UpdateResult {
+	ctx, cancel := context.WithTimeout(a.root, 5*time.Minute)
 	defer cancel()
-	return a.checkUpdate(ctx)
-}
-
-// InstallFFmpeg downloads ffmpeg into the app's folder, or updates the copy it installed before.
-func (a *App) InstallFFmpeg() UpdateResult {
-	ctx, cancel := context.WithTimeout(a.root, 15*time.Minute)
-	defer cancel()
-	return a.installFFmpeg(ctx)
-}
-
-// UpdateYtdlp installs the newest yt-dlp (or installs it for the first time).
-func (a *App) UpdateYtdlp() UpdateResult {
-	ctx, cancel := context.WithTimeout(a.root, 6*time.Minute)
-	defer cancel()
-	return a.installOrUpdate(ctx)
+	return a.repairTools(ctx)
 }

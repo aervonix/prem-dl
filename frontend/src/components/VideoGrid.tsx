@@ -1,13 +1,43 @@
-import {memo, useCallback, useRef, useState} from 'react'
+import {memo, useCallback, useMemo, useRef, useState} from 'react'
 import type {Dispatch, MouseEvent, SetStateAction} from 'react'
 import {ago, compactCount, duration} from '../format'
 import {Icon} from '../icons'
-import type {PlaylistEntry} from '../types'
+import {useJobs} from '../store'
+import type {JobStatus, PlaylistEntry} from '../types'
 import {Button} from './ui'
 
 /** Whether an entry can be ticked: not private or deleted, not a playlist, not a stream yet to start. */
 export function selectable(e: PlaylistEntry): boolean {
   return !e.unavailable && !e.isPlaylist && e.liveStatus !== 'is_upcoming'
+}
+
+// What a video's jobs say about it; when one link has several jobs, the busiest wins.
+const STATUS: Partial<Record<JobStatus, [rank: number, text: string]>> = {
+  completed: [1, 'Downloaded'],
+  queued: [2, 'In queue'],
+  paused: [2, 'In queue'],
+  starting: [3, 'Downloading'],
+  downloading: [3, 'Downloading'],
+  processing: [3, 'Downloading'],
+}
+
+/** A VideoGrid status for each video from the queue: "Downloaded", "In queue"... or ''. */
+export function useJobStatus(): (e: PlaylistEntry) => string {
+  const jobs = useJobs()
+  const statusByUrl = useMemo(() => {
+    const m = new Map<string, [number, string]>()
+    for (const j of jobs) {
+      const s = STATUS[j.status]
+      if (s && s[0] > (m.get(j.url)?.[0] ?? 0)) m.set(j.url, s)
+    }
+    return m
+  }, [jobs])
+  return useCallback((e: PlaylistEntry) => statusByUrl.get(e.url)?.[1] ?? '', [statusByUrl])
+}
+
+/** Whether a link is a YouTube channel rather than a playlist (search results list both). */
+function isChannelLink(url: string): boolean {
+  return /youtube\.com\/(channel\/|@|c\/|user\/)/.test(url)
 }
 
 /** "110K views · 3 days ago", from what the listing says. */
@@ -50,7 +80,7 @@ const Card = memo(function Card({
         )}
         {e.liveStatus === 'is_live' && <span className="vtag live">LIVE</span>}
         {e.liveStatus === 'is_upcoming' && <span className="vtag">Upcoming</span>}
-        {playlist && <span className="vtag">Playlist</span>}
+        {playlist && <span className="vtag">{isChannelLink(e.url) ? 'Channel' : 'Playlist'}</span>}
         {e.duration > 0 && <span className="dur">{duration(e.duration)}</span>}
         {can && (
           // The control assistive tech meets; the card around it is a bigger target for the mouse.

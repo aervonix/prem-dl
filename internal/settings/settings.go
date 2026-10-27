@@ -110,14 +110,7 @@ type Settings struct {
 	SleepInterval       float64         `json:"sleepInterval"` // seconds to wait before each download starts
 	UseArchive          bool            `json:"useArchive"`    // skip videos already downloaded before
 	Cookies             Cookies         `json:"cookies"`
-	AutoUpdate          bool            `json:"autoUpdate"`
-	UpdateChannel       string          `json:"updateChannel"` // stable | nightly | master
-	LastUpdateCheck     time.Time       `json:"lastUpdateCheck" ts_type:"string"`
-	LatestYtdlp         string          `json:"latestYtdlp"`        // newest release the last successful check found
-	LatestYtdlpChannel  string          `json:"latestYtdlpChannel"` // the channel that check asked about
-	CheckAppUpdates     bool            `json:"checkAppUpdates"`    // look for new Prem-dl releases
-	YtdlpPath           string          `json:"ytdlpPath"`
-	FfmpegPath          string          `json:"ffmpegPath"`
+	CheckAppUpdates     bool            `json:"checkAppUpdates"`  // look for new Prem-dl releases
 	Theme               string          `json:"theme"`            // system | light | dark
 	NotifySound         bool            `json:"notifySound"`      // a click when a download finishes
 	NotifyPopup         bool            `json:"notifyPopup"`      // a card in the corner when one finishes
@@ -145,9 +138,7 @@ func Default() Settings {
 		AutoRetry:           true,
 		UseArchive:          false,
 		Cookies:             Cookies{Mode: "none", Browser: "firefox"},
-		AutoUpdate:          true,
 		CheckAppUpdates:     true,
-		UpdateChannel:       "stable",
 		Theme:               "system",
 		NotifySound:         true,
 		NotifyPopup:         true,
@@ -377,9 +368,6 @@ func (s *Settings) Validate() error {
 	}
 	if s.Cookies.Mode == "file" && strings.TrimSpace(s.Cookies.File) == "" {
 		return errors.New("choose a cookies.txt file, or switch the cookie source")
-	}
-	if !oneOf(s.UpdateChannel, "stable", "nightly", "master") {
-		s.UpdateChannel = "stable"
 	}
 	if !oneOf(s.Theme, "system", "light", "dark") {
 		s.Theme = "system"

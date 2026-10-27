@@ -24,8 +24,6 @@ export function CheckAppUpdate():Promise<main.AppUpdate>;
 
 export function CheckFeed(arg1:string):Promise<void>;
 
-export function CheckUpdate():Promise<main.UpdateInfo>;
-
 export function ChromeHelperSetup():Promise<main.ChromeHelperInfo>;
 
 export function ClearArchive():Promise<main.ArchiveInfo>;
@@ -66,8 +64,6 @@ export function InspectFeed(arg1:string):Promise<main.TargetResponse>;
 
 export function InstallAppUpdate():Promise<main.UpdateResult>;
 
-export function InstallFFmpeg():Promise<main.UpdateResult>;
-
 export function ListFeeds():Promise<Array<follow.Feed>>;
 
 export function MoveJobToTop(arg1:string):Promise<void>;
@@ -104,6 +100,8 @@ export function RemoveCookieFile():Promise<main.CookieResponse>;
 
 export function RemoveJob(arg1:string):Promise<void>;
 
+export function RepairTools():Promise<main.UpdateResult>;
+
 export function ResumeAll():Promise<void>;
 
 export function ResumeJob(arg1:string):Promise<void>;
@@ -120,8 +118,8 @@ export function RevealFile(arg1:string):Promise<void>;
 
 export function SaveSettings(arg1:settings.Settings):Promise<main.SettingsResponse>;
 
+export function Search(arg1:string,arg2:ytdlp.SearchFilter,arg3:number,arg4:number):Promise<main.ProbeResponse>;
+
 export function TestCookies():Promise<ytdlp.CookieTest>;
 
 export function UnfollowFeed(arg1:string):Promise<void>;
-
-export function UpdateYtdlp():Promise<main.UpdateResult>;

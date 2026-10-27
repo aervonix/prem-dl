@@ -2,7 +2,8 @@ import {useEffect, useState} from 'react'
 import {api, errMessage} from '../api'
 import {useApp} from '../store'
 import type {DownloadOptions, Job, VideoInfo} from '../types'
-import {isAudioFormat, OptionsPanel, optionsProblem} from './OptionsPanel'
+import {isAudioFormat} from '../quality'
+import {OptionsPanel, optionsProblem} from './OptionsPanel'
 import {Button, Modal, Spinner} from './ui'
 
 /** Changes a failed or cancelled download's options and runs it again. */

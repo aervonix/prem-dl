@@ -243,6 +243,15 @@ const (
 // which costs megabytes of decoded image per row; it is the fallback when nothing listed is
 // big enough, and then the widest listed one, then any.
 func pickThumb(r *rawInfo, minWidth float64) string {
+	u := choseThumb(r, minWidth)
+	// Channel avatars in YouTube's search results come scheme-relative ("//yt3.ggpht.com/...").
+	if strings.HasPrefix(u, "//") {
+		u = "https:" + u
+	}
+	return u
+}
+
+func choseThumb(r *rawInfo, minWidth float64) string {
 	best, bestW, widest, widestW, first := "", 0.0, "", 0.0, ""
 	for _, t := range r.Thumbnails {
 		if t.URL == "" {

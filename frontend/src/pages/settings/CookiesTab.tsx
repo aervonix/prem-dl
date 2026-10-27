@@ -141,7 +141,7 @@ export function CookiesTab({draft, saved, upd}: TabProps) {
       <Card
         id="cookies"
         title="Cookies"
-        sub="Lets yt-dlp act as you: for age-restricted, members-only or private videos, and to get past YouTube's “confirm you're not a bot” check.">
+        sub="Lets Prem-dl act as you: for age-restricted, members-only or private videos, and to get past YouTube's “confirm you're not a bot” check.">
         <div className="radio-cards" role="group" aria-label="Cookie source">
           {(
             [
@@ -231,7 +231,7 @@ export function CookiesTab({draft, saved, upd}: TabProps) {
                 <div className="body">
                   <div className="title">{browser.label} may not work on Windows</div>
                   <div className="text">
-                    Recent Chrome-based browsers encrypt cookies in a way yt-dlp can't read, which fails with “Failed to decrypt with DPAPI”. Use <b>Firefox</b>, or export a <b>cookies.txt file</b>
+                    Recent Chrome-based browsers encrypt cookies in a way Prem-dl can't read, which fails with “Failed to decrypt with DPAPI”. Use <b>Firefox</b>, or export a <b>cookies.txt file</b>
                     and import it instead. Use “Test” to see whether yours works.
                   </div>
                 </div>
@@ -312,7 +312,7 @@ export function CookiesTab({draft, saved, upd}: TabProps) {
               </ol>
               <p className="hint" style={{marginTop: 8}}>
                 Treat the file like a password: anyone with it can use your logged-in session. This app keeps its own private copy and gives each download a temporary one. See the{' '}
-                <button type="button" className="link" onClick={() => void api.openExternal(COOKIE_FAQ)}>yt-dlp FAQ</button>.
+                <button type="button" className="link" onClick={() => void api.openExternal(COOKIE_FAQ)}>cookie FAQ</button>.
               </p>
             </details>
           </div>

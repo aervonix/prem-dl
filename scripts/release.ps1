@@ -1,7 +1,7 @@
-# Builds the two release files into build\release:
-#   Prem-dl.exe        the app on its own; it downloads yt-dlp (and offers ffmpeg) on first start
-#   Prem-dl-Setup.exe  an installer for the current user, with yt-dlp and ffmpeg built in
-# plus SHA256SUMS.txt. Needs Go, Node, the Wails CLI and NSIS (winget install NSIS.NSIS).
+# Builds the two release files into build\release, both with yt-dlp and ffmpeg built in:
+#   Prem-dl.exe        the app on its own (portable)
+#   Prem-dl-Setup.exe  an installer for the current user
+# plus SHA256SUMS.txt. The app runs only the tools it carries, so yt-dlp changes with releases. Needs Go, Node, the Wails CLI and NSIS (winget install NSIS.NSIS).
 #
 #   .\scripts\release.ps1             # fetches the newest yt-dlp and ffmpeg first
 #   .\scripts\release.ps1 -SkipFetch  # uses what bundle\ already holds
@@ -42,22 +42,16 @@ $out = Join-Path $root 'build\release'
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory $out | Out-Null
 
-# -trimpath keeps this PC's folders (and the user name in them) out of the exe.
-Run 'Building Prem-dl.exe' { wails build -trimpath }
-Copy-Item $exe (Join-Path $out 'Prem-dl.exe')
-
 if (-not $SkipFetch -or -not (Test-Path 'bundle\yt-dlp.exe')) {
     Run 'Fetching yt-dlp and ffmpeg' { go run ./cmd/bundle }
 }
-if (-not (Test-Path 'bundle\ffmpeg.zip')) { throw "bundle\ffmpeg.zip is missing; the installer must carry ffmpeg. Run without -SkipFetch." }
+if (-not (Test-Path 'bundle\ffmpeg.zip')) { throw "bundle\ffmpeg.zip is missing; releases must carry ffmpeg. Run without -SkipFetch." }
 Run 'Checking the built-in tools unpack' { go test -tags bundled . -run BuiltIn -count=1 }
-Run 'Building Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis }
-Copy-Item (Join-Path $bin 'Prem-dl-Setup.exe') $out
+# -trimpath keeps this PC's folders (and the user name in them) out of the exe.
+Run 'Building Prem-dl.exe and Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis }
+Copy-Item $exe, (Join-Path $bin 'Prem-dl-Setup.exe') $out
 # wails fills in its template with this build's values; the template is what's committed.
 git checkout -- build/windows/installer/wails_tools.nsh
-
-# The bundled build replaced build\bin\Prem-dl.exe; leave the plain one there, as after `wails build`.
-Copy-Item (Join-Path $out 'Prem-dl.exe') $exe -Force
 
 $sums = Get-ChildItem $out -Filter *.exe | ForEach-Object {
     '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name

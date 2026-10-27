@@ -3,11 +3,11 @@ import type {SetStateAction} from 'react'
 import {api, errMessage} from '../api'
 import {ErrorPanel} from '../components/ErrorPanel'
 import {FeedDialog, TAB_LABELS} from '../components/FeedDialog'
-import {VideoGrid, selectable} from '../components/VideoGrid'
+import {VideoGrid, selectable, useJobStatus} from '../components/VideoGrid'
 import {Button, Empty, IconButton, Spinner} from '../components/ui'
 import {hostOf, plural} from '../format'
-import {useApp, useJobs} from '../store'
-import type {AppError, ChannelTab, Feed, JobStatus, NewJob, PlaylistEntry} from '../types'
+import {useApp} from '../store'
+import type {AppError, ChannelTab, Feed, NewJob, PlaylistEntry} from '../types'
 
 const FIRST = 60 // videos listed when a tab opens
 const MORE = 120 // and added by "Show more"
@@ -21,16 +21,6 @@ interface Listing {
   error: AppError | null
 }
 
-// What a video's jobs say about it; when one link has several jobs, the busiest wins.
-const STATUS: Partial<Record<JobStatus, [rank: number, text: string]>> = {
-  completed: [1, 'Downloaded'],
-  queued: [2, 'In queue'],
-  paused: [2, 'In queue'],
-  starting: [3, 'Downloading'],
-  downloading: [3, 'Downloading'],
-  processing: [3, 'Downloading'],
-}
-
 /**
  * A followed channel or playlist, laid out like YouTube: its videos as a grid, a tab each for a
  * channel's Videos, Shorts and Live, and a checkbox on every video to download several at once.
@@ -38,7 +28,6 @@ const STATUS: Partial<Record<JobStatus, [rank: number, text: string]>> = {
  */
 export function ChannelView({feed, onBack}: {feed: Feed; onBack: () => void}) {
   const {toast, go} = useApp()
-  const jobs = useJobs()
   const channel = feed.tabs.length > 0
   const [tab, setTab] = useState<ChannelTab | ''>(channel ? feed.tabs[0] : '')
   const [lists, setLists] = useState<Partial<Record<string, Listing>>>({})
@@ -111,15 +100,7 @@ export function ChannelView({feed, onBack}: {feed: Feed; onBack: () => void}) {
     [entries],
   )
 
-  const statusByUrl = useMemo(() => {
-    const m = new Map<string, [number, string]>()
-    for (const j of jobs) {
-      const s = STATUS[j.status]
-      if (s && s[0] > (m.get(j.url)?.[0] ?? 0)) m.set(j.url, s)
-    }
-    return m
-  }, [jobs])
-  const status = useCallback((e: PlaylistEntry) => statusByUrl.get(e.url)?.[1] ?? '', [statusByUrl])
+  const status = useJobStatus()
 
   const tickable = useMemo(() => entries.filter(selectable), [entries])
   const pickedHere = tickable.filter((e) => picked.has(e.id)).length

@@ -12,33 +12,80 @@ import (
 	"yt-dlp-gui/internal/ytdlp"
 )
 
-func TestBundledYtdlpWanted(t *testing.T) {
-	none := settings.Settings{}
-	custom := settings.Settings{YtdlpPath: `C:\tools\yt-dlp.exe`}
-	at := func(src string) ytdlp.Binary { return ytdlp.Binary{Path: `C:\x\yt-dlp.exe`, Source: src} }
-	cases := []struct {
-		name    string
-		s       settings.Settings
-		found   ytdlp.Binary
-		err     error
-		managed string
-		want    bool
-	}{
-		{"none anywhere", none, ytdlp.Binary{}, ytdlp.ErrNotFound, "", true},
-		{"configured path, even missing", custom, ytdlp.Binary{}, ytdlp.ErrNotFound, "", false},
-		{"next to the app", none, at(ytdlp.SourceApp), nil, "", false},
-		{"working directory", none, at(ytdlp.SourceCwd), nil, "", false},
-		{"on PATH", none, at(ytdlp.SourcePath), nil, "", true},
-		{"own copy older", none, at(ytdlp.SourceManaged), nil, "2026.09.01", true},
-		{"own copy the same", none, at(ytdlp.SourceManaged), nil, "2026.10.21", false},
-		{"own copy updated since", none, at(ytdlp.SourceManaged), nil, "2026.11.02", false},
-		{"own copy doesn't run", none, at(ytdlp.SourceManaged), nil, "", true},
-		{"some other failure", none, ytdlp.Binary{}, errors.New("boom"), "", false},
+func TestBundleInPlace(t *testing.T) {
+	old := bundleFS
+	defer func() { bundleFS = old }()
+	bundleFS = fstest.MapFS{
+		"yt-dlp.exe":     {Data: []byte("yt")},
+		"yt-dlp.version": {Data: []byte("2026.10.21\n")},
+		"ffmpeg.zip":     {Data: []byte("zip")},
 	}
-	for _, c := range cases {
-		if got := bundledYtdlpWanted(c.s, c.found, c.err, c.managed, "2026.10.21"); got != c.want {
-			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+	stamp, err := bundleStamp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	stampPath := filepath.Join(dir, "bin", bundleStampName)
+	write := func(p, data string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
 		}
+		if err := os.WriteFile(p, []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if bundleInPlace(dir, stampPath, stamp) {
+		t.Error("an empty folder counts as unpacked")
+	}
+	write(ytdlp.ManagedPath(dir), "yt")
+	write(filepath.Join(ytdlp.FFmpegDir(dir), "ffmpeg.exe"), "ff")
+	write(filepath.Join(ytdlp.FFmpegDir(dir), "ffprobe.exe"), "fp")
+	write(stampPath, stamp+"\n")
+	if !bundleInPlace(dir, stampPath, stamp) {
+		t.Error("the same bundle is unpacked again")
+	}
+
+	// Another release's bundle replaces it, whether it's newer or older.
+	bundleFS.(fstest.MapFS)["yt-dlp.exe"] = &fstest.MapFile{Data: []byte("other")}
+	other, _ := bundleStamp()
+	if other == stamp || bundleInPlace(dir, stampPath, other) {
+		t.Error("a different yt-dlp.exe keeps the old one")
+	}
+	// A program removed since (antivirus, a clean-up) is put back.
+	os.Remove(filepath.Join(ytdlp.FFmpegDir(dir), "ffprobe.exe"))
+	if bundleInPlace(dir, stampPath, stamp) {
+		t.Error("a missing ffprobe.exe isn't noticed")
+	}
+}
+
+// A build with the tools built in runs only its own copy, even with another yt-dlp.exe at hand.
+func TestBuiltInRunsOnlyItsOwn(t *testing.T) {
+	old := bundleFS
+	defer func() { bundleFS = old }()
+	bundleFS = fstest.MapFS{"yt-dlp.version": {Data: []byte("2026.10.21\n")}}
+
+	wd := t.TempDir()
+	t.Chdir(wd)
+	if err := os.WriteFile(filepath.Join(wd, ytdlp.Name()), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{dataDir: t.TempDir()}
+	if _, err := a.findYtdlp(); !errors.Is(err, ytdlp.ErrNotFound) {
+		t.Fatalf("found %v before unpacking", err)
+	}
+	managed := ytdlp.ManagedPath(a.dataDir)
+	os.MkdirAll(filepath.Dir(managed), 0o755)
+	if err := os.WriteFile(managed, []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := a.findYtdlp(); err != nil || b.Path != managed {
+		t.Fatalf("%+v, %v; want the app's own copy", b, err)
+	}
+
+	bundleFS = nil // a plain build takes the one in the working folder
+	if b, err := a.findYtdlp(); err != nil || b.Source != ytdlp.SourceCwd {
+		t.Fatalf("plain build: %+v, %v", b, err)
 	}
 }
 
@@ -71,10 +118,12 @@ func TestIntegrationUnpackBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := &App{dataDir: dir, store: store, versions: map[versionKey]string{}}
-	a.unpackBundle(context.Background())
+	if err := a.unpackBundle(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
 
-	got, err := ytdlp.Resolve("", dir)
-	if err != nil || got.Source != ytdlp.SourceManaged {
+	got, err := a.findYtdlp()
+	if err != nil {
 		t.Fatalf("after unpacking: %+v, %v", got, err)
 	}
 	if v := a.versionOf(context.Background(), got.Path); v != version {
@@ -82,9 +131,19 @@ func TestIntegrationUnpackBundle(t *testing.T) {
 	}
 	// A second launch finds it in place and leaves it alone.
 	st, _ := os.Stat(got.Path)
-	a.unpackBundle(context.Background())
+	if err := a.unpackBundle(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
 	if st2, _ := os.Stat(got.Path); !st2.ModTime().Equal(st.ModTime()) {
 		t.Error("unpacked again over the same version")
+	}
+	// A repair puts it back after it went missing.
+	os.Remove(got.Path)
+	if err := a.unpackBundle(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if v := a.versionOf(context.Background(), got.Path); v != version {
+		t.Errorf("repaired version %q, want %q", v, version)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "bin", "ffmpeg")); err == nil {
 		t.Error("ffmpeg was unpacked without being bundled")
