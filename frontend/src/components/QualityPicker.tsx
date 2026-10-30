@@ -153,7 +153,7 @@ export function QualityPicker({
       {custom && value.formatAudioOnly && <div className="hint">Saved as an audio file in its own format (.opus or .m4a), without converting it.</div>}
 
       {!audioKind && (
-        <Field label="Container" hint="Auto picks what suits the codecs. MP4 plays everywhere; MKV holds anything.">
+        <Field label="Container" hint="Auto saves as MP4 where it can. MP4 plays everywhere; MKV holds anything.">
           <Segmented
             label="Container"
             value={value.container || 'auto'}

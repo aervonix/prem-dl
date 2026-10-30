@@ -520,17 +520,21 @@ func TestFormatPresets(t *testing.T) {
 		want []string
 	}{
 		{"720", settings.DownloadOptions{Preset: "720"},
-			[]string{"--format=bv*[height<=720]+ba/b[height<=720]/bv*[height<=?720]+ba/b[height<=?720]", "--format-sort=res,fps,hdr:12,vbr"}},
+			[]string{"--format=bv*[height<=720]+ba/b[height<=720]/bv*[height<=?720]+ba/b[height<=?720]", "--format-sort=res,fps,hdr:12,vbr", "--merge-output-format=mp4"}},
 		// Observed (ulLBRyVrI1Y, signed in): default ranking picked the 0.4 Mbps AV1 "1080p Premium"
 		// stream over the 2.8 Mbps VP9 one. Bitrate now outranks codec at equal resolution.
 		{"best ranks bitrate above codec", settings.DownloadOptions{Preset: "best"},
-			[]string{"--format=bv*+ba/b", "--format-sort=res,fps,hdr:12,vbr"}},
+			[]string{"--format=bv*+ba/b", "--format-sort=res,fps,hdr:12,vbr", "--merge-output-format=mp4"}},
 		{"audio mp3", settings.DownloadOptions{Preset: "audio", AudioFormat: "mp3", AudioQuality: "0"},
 			[]string{"--format=ba/b", "--extract-audio", "--audio-format=mp3", "--audio-quality=0"}},
 		{"audio flac has no quality", settings.DownloadOptions{Preset: "audio", AudioFormat: "flac", AudioQuality: "0"},
 			[]string{"--format=ba/b", "--extract-audio", "--audio-format=flac"}},
 		{"custom with container", settings.DownloadOptions{Preset: "custom", FormatID: "137+140", Container: "mp4"},
 			[]string{"--format=137+140", "--merge-output-format=mp4", "--remux-video=mp4"}},
+		// Auto merges into MP4 (VP9/AV1 + Opus would be WebM, then MKV with a thumbnail) but
+		// doesn't remux a single stream, whose codecs MP4 may not hold.
+		{"auto merges into mp4", settings.DownloadOptions{Preset: "custom", FormatID: "248+251"},
+			[]string{"--format=248+251", "--merge-output-format=mp4"}},
 		// Observed: h264 into WebM fails in ffmpeg; with the fallback it becomes .mkv, VP9 stays .webm.
 		{"webm falls back to mkv", settings.DownloadOptions{Preset: "best", Container: "webm"},
 			[]string{"--format=bv*+ba/b", "--format-sort=res,fps,hdr:12,vbr", "--merge-output-format=webm/mkv", "--remux-video=webm>webm/mkv"}},

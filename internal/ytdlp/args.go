@@ -264,6 +264,12 @@ func FormatArgs(o settings.DownloadOptions) []string {
 	}
 	switch o.Container {
 	case "":
+		// Merged streams go into MP4, which plays almost everywhere. Left to itself yt-dlp picks
+		// WebM for YouTube's VP9/AV1 with Opus, and MKV once a thumbnail is embedded. ffmpeg puts
+		// those codecs in MP4 too (observed: VP9 + Opus with subtitles, chapters and cover art).
+		// A single-stream download keeps its own type: unlike merging, remuxing doesn't check the
+		// codecs, and VP8 or Vorbis would fail in MP4.
+		a = append(a, "--merge-output-format=mp4")
 	case "webm":
 		// WebM only holds VP8/VP9/AV1 with Opus/Vorbis. Anything else (h264 is common outside
 		// YouTube) goes into MKV rather than failing in ffmpeg.
