@@ -8,4 +8,5 @@ frontend/dist
 /bundle/
 # release files from scripts/release.ps1, and the WebView2 bootstrapper wails -nsis downloads
 /build/release/
+/build/tools/
 /build/windows/installer/tmp/

@@ -164,7 +164,7 @@ func RegisterURLScheme(scheme, name, exe string) error {
 		{"Exec", SchemeCommand(exe)},
 		{"Icon", scheme},
 		{"Terminal", "false"},
-		{"Categories", "AudioVideo;Network;"},
+		{"Categories", "AudioVideo;Video;"},
 		{"MimeType", "x-scheme-handler/" + scheme + ";"},
 		{"StartupWMClass", scheme},
 	})
@@ -266,6 +266,18 @@ func InstallIcon(name string, pngData []byte) error {
 		}
 	}
 	return nil
+}
+
+// SystemIcon reports whether a package installed the icon name into a system icon theme.
+func SystemIcon(name string) bool {
+	for _, dir := range dataDirs() {
+		for _, size := range iconSizesOnDisk {
+			if isRegular(filepath.Join(dir, "icons", "hicolor", fmt.Sprintf("%dx%d", size, size), "apps", name+".png")) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // argbImage turns scaleARGB's pixels back into an image.

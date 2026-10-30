@@ -11,5 +11,11 @@ import (
 //go:embed build/appicon.png
 var appIcon []byte
 
-// installDesktopIcon puts the icon where the desktop entries, dock and notifications find it.
-func installDesktopIcon() error { return sys.InstallIcon(urlScheme, appIcon) }
+// installDesktopIcon puts the icon where the desktop entries, dock and notifications find it,
+// unless a package (the .deb) installed it already.
+func installDesktopIcon() error {
+	if sys.SystemIcon(urlScheme) {
+		return nil
+	}
+	return sys.InstallIcon(urlScheme, appIcon)
+}

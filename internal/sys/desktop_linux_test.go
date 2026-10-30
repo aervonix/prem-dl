@@ -167,6 +167,15 @@ func TestInstallIcon(t *testing.T) {
 	if err := InstallIcon("prem-dl", []byte("not a png")); err == nil {
 		t.Fatal("a broken icon was accepted")
 	}
+
+	// The user's own copy isn't a package's.
+	if SystemIcon("prem-dl") {
+		t.Fatal("the user's icon counts as a package's")
+	}
+	t.Setenv("XDG_DATA_DIRS", filepath.Join(home, "data"))
+	if !SystemIcon("prem-dl") {
+		t.Fatal("a package's icon isn't found")
+	}
 }
 
 func TestAppPathPrefersTheAppImage(t *testing.T) {
