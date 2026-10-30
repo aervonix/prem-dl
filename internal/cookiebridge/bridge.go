@@ -89,7 +89,15 @@ func (s *Session) HelperURL() string {
 func (s *Session) Wait(ctx context.Context, openWithin, answerWithin time.Duration) ([]Cookie, error) {
 	srv := &http.Server{Handler: s, ReadHeaderTimeout: 10 * time.Second}
 	go srv.Serve(s.ln)
-	defer srv.Close()
+	// Shutdown, not Close: the delivery handler hands over the result before it writes its
+	// reply, and Close would cut that reply off, so the page reported a failure that wasn't.
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if srv.Shutdown(ctx) != nil {
+			srv.Close()
+		}
+	}()
 
 	opened := time.NewTimer(openWithin)
 	defer opened.Stop()
