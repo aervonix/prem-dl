@@ -22,7 +22,7 @@ cd frontend; npx tsc --noEmit; npm test             # vitest: format.ts, store.t
 wails generate module     # REQUIRED after changing any Go struct that crosses to the UI
 # opt-in tests against real yt-dlp + internet:
 $env:YTGUI_INTEGRATION="1"; $env:YTGUI_YTDLP="C:\Code\yt-dlp-gui\yt-dlp.exe"
-go test ./internal/queue ./internal/ytdlp -run Integration -v
+go test ./internal/queue ./internal/ytdlp ./internal/follow -run Integration -v
 ```
 
 ## Layout
@@ -178,7 +178,7 @@ cp bundle/yt-dlp .                # dev builds then use it, not the old one apt 
 go test ./...; go vet ./...; gofmt -l app.go main.go tools.go internal
 GORACE=atexit_sleep_ms=0 go test -race ./...
 cd frontend && npm ci && npx tsc --noEmit && npm test
-YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test ./internal/queue ./internal/ytdlp -run Integration -v
+YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test ./internal/queue ./internal/ytdlp ./internal/follow -run Integration -v
 scripts/release.sh [--skip-fetch]  # build/release: prem-dl_<v>_amd64.deb, Prem-dl-x86_64.AppImage, SHA256SUMS-linux.txt
 ```
 

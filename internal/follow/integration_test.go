@@ -20,7 +20,9 @@ func TestIntegrationFollowFindsNewUploads(t *testing.T) {
 	if os.Getenv("YTGUI_INTEGRATION") != "1" || bin == "" {
 		t.Skip("set YTGUI_INTEGRATION=1 and YTGUI_YTDLP=<path to yt-dlp> to run")
 	}
-	env := ytdlp.Env{Bin: bin, Settings: settings.Default(), JSRuntimes: ytdlp.DetectJSRuntimes(context.Background())}
+	s := settings.Default()
+	s.ForceIPv4 = os.Getenv("YTGUI_FORCE_IPV4") == "1" // for a network whose IPv6 doesn't work
+	env := ytdlp.Env{Bin: bin, Settings: s, JSRuntimes: ytdlp.DetectJSRuntimes(context.Background())}
 	var queued []queue.NewJob
 	m := New(Deps{
 		List: func(ctx context.Context, link string, limit int) (*ytdlp.ProbeResult, error) {
