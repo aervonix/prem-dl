@@ -51,7 +51,7 @@ func (a *App) startBackground(ctx context.Context) {
 		a.updateShell(a.act.current())
 	}
 	a.startLinkBridge()
-	a.registerWithWindows()
+	a.registerWithSystem()
 	a.initNotifications(ctx)
 	// A helper that was set up before gets the current files, ready for Reload in Chrome.
 	if _, err := os.Stat(a.chromeHelperDir()); err == nil {
@@ -186,22 +186,26 @@ func (a *App) openLink(raw string) error {
 	return nil
 }
 
-// ---- registry ----
+// ---- registration ----
 
-// startCommand is what starting with Windows runs.
-func startCommand(exe string) string { return `"` + exe + `" ` + backgroundFlag }
+// startCommand is what starting at sign-in runs.
+func startCommand(exe string) string { return sys.CommandLine(exe, backgroundFlag) }
 
-// registerWithWindows points the prem-dl: link type, and the sign-in entry when it's on, at this
-// exe, in case it moved. Dev builds leave both alone so they never take over from the real app.
-func (a *App) registerWithWindows() {
+// registerWithSystem points the prem-dl: link type, and the sign-in entry when it's on, at this
+// exe, in case it moved (the registry on Windows, desktop entries on Linux). Dev builds leave
+// both alone so they never take over from the real app.
+func (a *App) registerWithSystem() {
 	if devBuild {
 		return
 	}
-	exe, err := os.Executable()
+	exe, err := sys.AppPath()
 	if err != nil {
 		return
 	}
-	if sys.URLSchemeCommand(urlScheme) != `"`+exe+`" "%1"` {
+	if err := installDesktopIcon(); err != nil {
+		wr.LogWarning(a.rt(), "couldn't install the icon: "+err.Error())
+	}
+	if sys.URLSchemeCommand(urlScheme) != sys.SchemeCommand(exe) {
 		if err := sys.RegisterURLScheme(urlScheme, "Prem-dl", exe); err != nil {
 			wr.LogWarning(a.rt(), "couldn't register prem-dl: links: "+err.Error())
 		}
@@ -219,7 +223,7 @@ func setStartWithWindows(on bool) error {
 	if !on {
 		return sys.SetRunAtSignIn(runName, "")
 	}
-	exe, err := os.Executable()
+	exe, err := sys.AppPath()
 	if err != nil {
 		return err
 	}

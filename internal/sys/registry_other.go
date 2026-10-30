@@ -1,8 +1,16 @@
-//go:build !windows
+//go:build !windows && !linux
 
 package sys
 
-import "errors"
+import (
+	"errors"
+	"os"
+	"strings"
+)
+
+func AppPath() (string, error)                      { return os.Executable() }
+func CommandLine(exe string, args ...string) string { return exe + " " + strings.Join(args, " ") }
+func SchemeCommand(exe string) string               { return exe }
 
 func RegisterURLScheme(scheme, name, exe string) error { return nil }
 func URLSchemeCommand(string) string                   { return "" }

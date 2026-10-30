@@ -7,6 +7,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
@@ -45,6 +46,14 @@ func main() {
 		},
 		Windows: &windows.Options{
 			Theme: windows.SystemDefault,
+		},
+		Linux: &linux.Options{
+			// Names the window to the desktop, matching the prem-dl.desktop entry, so the dock
+			// shows its name and icon.
+			ProgramName: "prem-dl",
+			Icon:        appIcon,
+			// What Wails picks when Linux options are left out (wails#2977).
+			WebviewGpuPolicy: linux.WebviewGpuPolicyNever,
 		},
 		Bind: []interface{}{
 			app,

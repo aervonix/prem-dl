@@ -54,6 +54,17 @@ func RegisterURLScheme(scheme, name, exe string) error {
 	return setString(root+`\shell\open\command`, "", `"`+exe+`" "%1"`)
 }
 
+// AppPath is the program the registry entries point at.
+func AppPath() (string, error) { return os.Executable() }
+
+// CommandLine is the command that starts exe with args, as the Run key holds it.
+func CommandLine(exe string, args ...string) string {
+	return `"` + exe + `" ` + strings.Join(args, " ")
+}
+
+// SchemeCommand is the command RegisterURLScheme points a link type at.
+func SchemeCommand(exe string) string { return `"` + exe + `" "%1"` }
+
 // URLSchemeCommand is the command line a scheme is registered to run, or "".
 func URLSchemeCommand(scheme string) string {
 	return getString(classesKey+`\`+scheme+`\shell\open\command`, "")
