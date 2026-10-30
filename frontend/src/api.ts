@@ -36,6 +36,7 @@ export type _Guards = [
   Expect<Guard<main.AppState, T.AppState>>,
   Expect<Guard<main.ToolStatus, T.ToolStatus>>,
   Expect<Guard<main.ProbeResponse, T.ProbeResponse>>,
+  Expect<Guard<main.SearchResponse, T.SearchResponse>>,
   Expect<Guard<main.EnqueueResponse, T.EnqueueResponse>>,
   Expect<Guard<main.BulkResponse, T.BulkResponse>>,
   Expect<Guard<main.LinkFailure, T.LinkFailure>>,
@@ -145,9 +146,9 @@ export const api = {
   /** List a followed feed's videos: a channel tab ('' = the first followed one), up to limit (0 = all). */
   browseFeed: (id: string, tab: T.ChannelTab | '', limit: number) => cast<T.ProbeResponse>(App.BrowseFeed(id, tab, limit)),
   cancelBrowse: App.CancelBrowse,
-  /** YouTube results for query, count of them from the 1-based position first. */
+  /** YouTube results for query from the 1-based position first: at most count, fewer when one page of YouTube's holds fewer. */
   search: (query: string, filter: T.SearchFilter, first: number, count: number) =>
-    cast<T.ProbeResponse>(App.Search(query, filter as unknown as ytdlp.SearchFilter, first, count)),
+    cast<T.SearchResponse>(App.Search(query, filter as unknown as ytdlp.SearchFilter, first, count)),
   /** Check one feed now, or with '' every feed that isn't paused. */
   checkFeed: App.CheckFeed,
 }

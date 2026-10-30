@@ -22,6 +22,7 @@ import (
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
 	"yt-dlp-gui/internal/ytdlp"
+	"yt-dlp-gui/internal/ytsearch"
 )
 
 const appVersion = "0.1.2"
@@ -68,6 +69,7 @@ type App struct {
 
 	searchMu     sync.Mutex
 	searchCancel context.CancelFunc // set while Search runs
+	searcher     *ytsearch.Searcher // reads YouTube's results without yt-dlp; see search.go
 
 	bulkMu     sync.Mutex
 	bulkCancel context.CancelFunc // set while EnqueueLinks runs
@@ -113,6 +115,7 @@ func NewApp(launch launchArgs) *App {
 		toolsFirst: make(chan struct{}),
 		launch:     launch,
 		infos:      ytdlp.NewInfoCache(),
+		searcher:   ytsearch.New(),
 	}
 	a.root, a.stopAll = context.WithCancel(context.Background())
 	a.q = queue.New(queue.Deps{

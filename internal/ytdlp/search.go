@@ -29,34 +29,51 @@ var (
 // MaxQuery is the longest search accepted, in characters; YouTube's own box stops at about 100.
 const MaxQuery = 200
 
-// SearchURL is YouTube's results page for query, with the filter as its "sp" parameter: a
-// protobuf message {2: {1: uploaded, 2: type, 3: length}}, base64-encoded. Observed values match
-// YouTube's own: videos only is EgIQAQ==, this week's videos EgQIAxAB.
+// SearchURL is YouTube's results page for query, with the filter as its "sp" parameter.
 func SearchURL(query string, f SearchFilter) string {
 	q := url.Values{"search_query": {strings.TrimSpace(query)}}
+	if sp := SearchParams(f); sp != "" {
+		q.Set("sp", sp)
+	}
+	return "https://www.youtube.com/results?" + q.Encode()
+}
+
+// SearchParams encodes the filter the way YouTube's results page does: a protobuf message
+// {2: {1: uploaded, 2: type, 3: length}}, base64-encoded; "" for no filter. Observed values
+// match YouTube's own: videos only is EgIQAQ==, this week's videos EgQIAxAB.
+func SearchParams(f SearchFilter) string {
 	var inner []byte
 	for i, v := range []byte{searchUploaded[f.Uploaded], searchType[f.Type], searchLength[f.Length]} {
 		if v != 0 {
 			inner = append(inner, byte(i+1)<<3, v) // field i+1, varint
 		}
 	}
-	if len(inner) > 0 {
-		msg := append([]byte{2<<3 | 2, byte(len(inner))}, inner...) // field 2, length-delimited
-		q.Set("sp", base64.StdEncoding.EncodeToString(msg))
+	if len(inner) == 0 {
+		return ""
 	}
-	return "https://www.youtube.com/results?" + q.Encode()
+	msg := append([]byte{2<<3 | 2, byte(len(inner))}, inner...) // field 2, length-delimited
+	return base64.StdEncoding.EncodeToString(msg)
+}
+
+// CleanQuery trims a search and refuses an empty or overlong one.
+func CleanQuery(query string) (string, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return "", apperr.New("empty_search", "Nothing to search for", "Type what you're looking for.", "", apperr.ActionNone)
+	}
+	if utf8.RuneCountInString(query) > MaxQuery {
+		return "", apperr.New("long_search", "That search is too long",
+			"Searches can be up to "+strconv.Itoa(MaxQuery)+" characters.", "Shorten it and try again.", apperr.ActionNone)
+	}
+	return query, nil
 }
 
 // Search lists YouTube's results for query, count of them starting at the 1-based position
 // first. Entries are numbered from first. Channels and playlists among them are IsPlaylist.
 func Search(ctx context.Context, env Env, query string, f SearchFilter, first, count int) (*ProbeResult, error) {
-	query = strings.TrimSpace(query)
-	if query == "" {
-		return nil, apperr.New("empty_search", "Nothing to search for", "Type what you're looking for.", "", apperr.ActionNone)
-	}
-	if utf8.RuneCountInString(query) > MaxQuery {
-		return nil, apperr.New("long_search", "That search is too long",
-			"Searches can be up to "+strconv.Itoa(MaxQuery)+" characters.", "Shorten it and try again.", apperr.ActionNone)
+	query, err := CleanQuery(query)
+	if err != nil {
+		return nil, err
 	}
 	first, count = max(first, 1), max(count, 1)
 	args := []string{

@@ -323,6 +323,14 @@ export interface ProbeResponse {
   cancelled: boolean
 }
 
+export interface SearchResponse {
+  result: ProbeResult | null
+  error: AppError | null
+  cancelled: boolean
+  /** There are results after these ("Show more"). */
+  more: boolean
+}
+
 export interface EnqueueResponse {
   added: number
   skipped: number

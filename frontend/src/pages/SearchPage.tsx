@@ -8,7 +8,7 @@ import {plural} from '../format'
 import {useApp} from '../store'
 import type {AppError, NewJob, PlaylistEntry, SearchFilter} from '../types'
 
-const PAGE = 24 // results asked for at a time
+const PAGE = 24 // results asked for at a time; a call can return fewer (one page of YouTube's)
 
 const ANY: SearchFilter = {type: '', uploaded: '', length: ''}
 
@@ -58,7 +58,7 @@ export function SearchPage() {
       if (res.error) return setError(res.error)
       const got = res.result?.playlist?.entries ?? []
       fetched.current = first - 1 + got.length
-      setEnded(got.length < PAGE)
+      setEnded(!res.more)
       // Pages can overlap when YouTube reshuffles between requests.
       setEntries((prev) => {
         const seen = new Set(prev.map((e) => e.id))

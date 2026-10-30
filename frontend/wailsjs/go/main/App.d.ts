@@ -120,7 +120,7 @@ export function RevealFile(arg1:string):Promise<void>;
 
 export function SaveSettings(arg1:settings.Settings):Promise<main.SettingsResponse>;
 
-export function Search(arg1:string,arg2:ytdlp.SearchFilter,arg3:number,arg4:number):Promise<main.ProbeResponse>;
+export function Search(arg1:string,arg2:ytdlp.SearchFilter,arg3:number,arg4:number):Promise<main.SearchResponse>;
 
 export function SetWindowFocused(arg1:boolean):Promise<void>;
 
