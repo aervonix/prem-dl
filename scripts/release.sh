@@ -52,12 +52,13 @@ mkdir -p "$out"
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 
-if ! $skip_fetch || [ ! -f bundle/yt-dlp ]; then
+if ! $skip_fetch || [ ! -f bundle/yt-dlp.zip ]; then
   step "Fetching yt-dlp and ffmpeg"
   go run ./cmd/bundle
 fi
-[ -f bundle/yt-dlp ] || fail "bundle/yt-dlp is missing (bundle/ holds another platform's tools?). Run without --skip-fetch."
+[ -f bundle/yt-dlp.zip ] || fail "bundle/yt-dlp.zip is missing. Run without --skip-fetch."
 [ -f bundle/ffmpeg.zip ] || fail "bundle/ffmpeg.zip is missing; releases must carry ffmpeg. Run without --skip-fetch."
+# Also fails when bundle/ holds another platform's tools (fetched on Windows): they don't run here.
 step "Checking the built-in tools unpack"
 go test -tags bundled . -run BuiltIn -count=1
 step "Building Prem-dl"

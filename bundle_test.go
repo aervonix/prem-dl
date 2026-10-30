@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 
@@ -16,7 +17,7 @@ func TestBundleInPlace(t *testing.T) {
 	old := bundleFS
 	defer func() { bundleFS = old }()
 	bundleFS = fstest.MapFS{
-		ytdlp.Name():     {Data: []byte("yt")},
+		"yt-dlp.zip":     {Data: []byte("yt")},
 		"yt-dlp.version": {Data: []byte("2026.10.21\n")},
 		"ffmpeg.zip":     {Data: []byte("zip")},
 	}
@@ -47,7 +48,7 @@ func TestBundleInPlace(t *testing.T) {
 	}
 
 	// Another release's bundle replaces it, whether it's newer or older.
-	bundleFS.(fstest.MapFS)[ytdlp.Name()] = &fstest.MapFile{Data: []byte("other")}
+	bundleFS.(fstest.MapFS)["yt-dlp.zip"] = &fstest.MapFile{Data: []byte("other")}
 	other, _ := bundleStamp()
 	if other == stamp || bundleInPlace(dir, stampPath, other) {
 		t.Error("a different yt-dlp keeps the old one")
@@ -89,30 +90,38 @@ func TestBuiltInRunsOnlyItsOwn(t *testing.T) {
 	}
 }
 
-// Opt-in: unpacks a real yt-dlp the way a bundled build does.
+// Opt-in: unpacks the real yt-dlp in bundle/ (go run ./cmd/bundle) the way a bundled build does.
 //
-//	$env:YTGUI_INTEGRATION = "1"; $env:YTGUI_YTDLP = "C:\path\to\yt-dlp.exe"; go test . -run Integration -v
+//	$env:YTGUI_INTEGRATION = "1"; go test . -run Integration -v
 func TestIntegrationUnpackBundle(t *testing.T) {
-	bin := os.Getenv("YTGUI_YTDLP")
-	if os.Getenv("YTGUI_INTEGRATION") != "1" || bin == "" {
-		t.Skip("set YTGUI_INTEGRATION=1 and YTGUI_YTDLP=<path to yt-dlp> to run")
+	if os.Getenv("YTGUI_INTEGRATION") != "1" {
+		t.Skip("set YTGUI_INTEGRATION=1 to run")
 	}
-	exe, err := os.ReadFile(bin)
+	archive, err := os.ReadFile(filepath.Join("bundle", "yt-dlp.zip"))
+	if err != nil {
+		t.Skip("run go run ./cmd/bundle first:", err)
+	}
+	raw, err := os.ReadFile(filepath.Join("bundle", "yt-dlp.version"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	version, err := ytdlp.Version(context.Background(), bin)
-	if err != nil {
-		t.Fatal(err)
-	}
+	version := strings.TrimSpace(string(raw))
 	// Away from the repository, whose own yt-dlp.exe would be found in the working directory.
 	t.Chdir(t.TempDir())
 	t.Setenv("PATH", "")
 	old := bundleFS
-	bundleFS = fstest.MapFS{"yt-dlp.exe": {Data: exe}, "yt-dlp.version": {Data: []byte(version + "\n")}}
+	bundleFS = fstest.MapFS{"yt-dlp.zip": {Data: archive}, "yt-dlp.version": {Data: raw}}
 	defer func() { bundleFS = old }()
 
 	dir := t.TempDir()
+	// What releases up to 0.1.2 unpacked: the single-file yt-dlp, straight into bin.
+	legacy := filepath.Join(dir, "bin", ytdlp.Name())
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, []byte("old"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	store, err := settings.Open(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -128,6 +137,9 @@ func TestIntegrationUnpackBundle(t *testing.T) {
 	}
 	if v := a.versionOf(context.Background(), got.Path); v != version {
 		t.Errorf("unpacked version %q, want %q", v, version)
+	}
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Error("the old single-file yt-dlp was left behind")
 	}
 	// A second launch finds it in place and leaves it alone.
 	st, _ := os.Stat(got.Path)

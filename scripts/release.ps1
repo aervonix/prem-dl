@@ -42,10 +42,11 @@ $out = Join-Path $root 'build\release'
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory $out | Out-Null
 
-if (-not $SkipFetch -or -not (Test-Path 'bundle\yt-dlp.exe')) {
+if (-not $SkipFetch -or -not (Test-Path 'bundle\yt-dlp.zip')) {
     Run 'Fetching yt-dlp and ffmpeg' { go run ./cmd/bundle }
 }
 if (-not (Test-Path 'bundle\ffmpeg.zip')) { throw "bundle\ffmpeg.zip is missing; releases must carry ffmpeg. Run without -SkipFetch." }
+# Also fails when bundle\ holds another platform's tools (fetched on Linux): they don't run here.
 Run 'Checking the built-in tools unpack' { go test -tags bundled . -run BuiltIn -count=1 }
 # -trimpath keeps this PC's folders (and the user name in them) out of the exe.
 Run 'Building Prem-dl.exe and Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis }

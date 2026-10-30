@@ -2,6 +2,7 @@
 package ytdlp
 
 import (
+	"archive/zip"
 	"bufio"
 	"bytes"
 	"context"
@@ -83,9 +84,18 @@ func Resolve(custom, managedDir string) (Binary, error) {
 	return Binary{}, ErrNotFound
 }
 
-// ManagedPath is where the app installs its own copy of yt-dlp.
+// ManagedPath is where the app runs its own copy of yt-dlp from: the launcher of yt-dlp's
+// unpacked build, in YtdlpDir.
 func ManagedPath(managedDir string) string {
-	return filepath.Join(managedDir, "bin", Name())
+	return filepath.Join(YtdlpDir(managedDir), Name())
+}
+
+// YtdlpDir is where the app installs yt-dlp: a folder of its own, since the unpacked build is
+// a launcher plus the _internal folder it loads. The single-file builds unpack about 85 MB into
+// the temp folder on every run (RAM on Linux, scanned by antivirus on Windows), which doubled
+// the time yt-dlp took to start (0.62 s against 0.31 s on Linux).
+func YtdlpDir(managedDir string) string {
+	return filepath.Join(managedDir, "bin", "ytdlp")
 }
 
 func run(ctx context.Context, timeout time.Duration, path string, args ...string) (string, error) {
@@ -261,23 +271,24 @@ func channelRepo(channel string) string {
 	}
 }
 
+// assetName is the zip of yt-dlp's unpacked ("onedir") build for this computer.
 func assetName() string {
 	switch runtime.GOOS {
 	case "windows":
 		switch runtime.GOARCH {
 		case "arm64":
-			return "yt-dlp_arm64.exe"
+			return "yt-dlp_win_arm64.zip"
 		case "386":
-			return "yt-dlp_x86.exe"
+			return "yt-dlp_win_x86.zip"
 		}
-		return "yt-dlp.exe"
+		return "yt-dlp_win.zip"
 	case "darwin":
-		return "yt-dlp_macos"
+		return "yt-dlp_macos.zip"
 	default:
 		if runtime.GOARCH == "arm64" {
-			return "yt-dlp_linux_aarch64"
+			return "yt-dlp_linux_aarch64.zip"
 		}
-		return "yt-dlp_linux"
+		return "yt-dlp_linux.zip"
 	}
 }
 
@@ -373,95 +384,114 @@ func tagFromLocation(loc string) string {
 	return ""
 }
 
-// Install downloads the newest yt-dlp for the channel to dest, verifying its SHA-256 against the
-// release's checksum file and running it once before swapping it in. A previous file at dest is
-// replaced atomically where the OS allows and restored if anything fails.
-func Install(ctx context.Context, client *http.Client, channel, dest string, progress ProgressFunc) (string, error) {
-	repo := channelRepo(channel)
+// Download fetches the newest unpacked build of yt-dlp for the channel as a zip at path,
+// verified against the release's SHA-256 sums. Install unpacks it.
+func Download(ctx context.Context, client *http.Client, channel, path string, progress ProgressFunc) error {
 	name := assetName()
-	base := releaseBase(ctx, client, repo)
-
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return "", err
-	}
-
+	base := releaseBase(ctx, client, channelRepo(channel))
 	sums, err := fetchAll(ctx, client, base+"SHA2-256SUMS", 1<<20)
 	if err != nil {
-		return "", fmt.Errorf("downloading checksums: %w", err)
+		return fmt.Errorf("downloading checksums: %w", err)
 	}
 	want, ok := parseChecksum(sums, name)
 	if !ok {
-		return "", fmt.Errorf("no checksum published for %s; refusing to install an unverified binary", name)
+		return fmt.Errorf("no checksum published for %s; refusing an unverified download", name)
 	}
-
-	newPath := dest + ".new"
-	hash, err := downloadTo(ctx, client, base+name, newPath, progress)
+	hash, err := downloadTo(ctx, client, base+name, path, progress)
+	if err == nil && hash != want {
+		err = errors.New("the downloaded yt-dlp failed its SHA-256 check and was discarded")
+	}
 	if err != nil {
-		os.Remove(newPath)
-		return "", err
+		os.Remove(path)
 	}
-	if hash != want {
-		os.Remove(newPath)
-		return "", errors.New("the downloaded file failed its SHA-256 check and was discarded")
-	}
-	return swapIn(ctx, newPath, dest)
+	return err
 }
 
-// InstallFrom installs the yt-dlp read from src (the copy built into the app) at dest, the same
-// way Install does once the download is verified.
-func InstallFrom(ctx context.Context, src io.Reader, dest string) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-		return "", err
-	}
-	newPath := dest + ".new"
-	w, err := os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+// Install unpacks a zip Download fetched (the copy built into the app) next to YtdlpDir, runs
+// it once and swaps it in for the folder there. It returns the version.
+func Install(ctx context.Context, archive io.ReaderAt, size int64, managedDir string) (string, error) {
+	z, err := zip.NewReader(archive, size)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("unpacking yt-dlp: %w", err)
 	}
-	_, err = io.Copy(w, src)
-	if cerr := w.Close(); err == nil {
-		err = cerr
+	dir := YtdlpDir(managedDir)
+	staged := dir + ".new"
+	_ = os.RemoveAll(staged)
+	if err := extractYtdlp(z, staged); err != nil {
+		os.RemoveAll(staged)
+		return "", fmt.Errorf("unpacking yt-dlp: %w", err)
 	}
+	version, err := Version(ctx, filepath.Join(staged, Name()))
 	if err != nil {
-		os.Remove(newPath)
-		return "", fmt.Errorf("writing yt-dlp: %w", err)
-	}
-	return swapIn(ctx, newPath, dest)
-}
-
-// swapIn runs the yt-dlp at newPath once and moves it to dest, replacing any file there
-// atomically where the OS allows and restoring it if anything fails.
-func swapIn(ctx context.Context, newPath, dest string) (string, error) {
-	if runtime.GOOS != "windows" {
-		_ = os.Chmod(newPath, 0o755)
-	}
-	version, err := Version(ctx, newPath)
-	if err != nil {
-		os.Remove(newPath)
+		os.RemoveAll(staged)
 		return "", fmt.Errorf("the new yt-dlp does not run: %w", err)
 	}
+	if err := swapDir(staged, dir); err != nil {
+		return "", fmt.Errorf("installing yt-dlp: %w", err)
+	}
+	return version, nil
+}
 
-	oldPath := dest + ".old"
+// extractYtdlp unpacks the unpacked build's zip into dest: the launcher, the one file at the
+// top (yt-dlp_linux, yt-dlp.exe...), saved as Name(), and the _internal folder it loads.
+// Entries that would land outside dest, and anything but files and folders, are refused.
+func extractYtdlp(z *zip.Reader, dest string) error {
+	launcher := ""
+	for _, f := range z.File {
+		name := filepath.FromSlash(strings.TrimSuffix(f.Name, "/"))
+		if !filepath.IsLocal(name) {
+			return fmt.Errorf("the archive holds an unsafe path, %q", f.Name)
+		}
+		switch {
+		case f.FileInfo().IsDir():
+			if err := os.MkdirAll(filepath.Join(dest, name), 0o755); err != nil {
+				return err
+			}
+			continue
+		case !f.Mode().IsRegular():
+			return fmt.Errorf("%q in the archive isn't a plain file", f.Name)
+		case !strings.ContainsRune(name, filepath.Separator):
+			if launcher != "" {
+				return fmt.Errorf("the archive holds two programs, %s and %s", launcher, name)
+			}
+			launcher, name = name, Name()
+		}
+		path := filepath.Join(dest, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := extractFile(f, path); err != nil {
+			return err
+		}
+	}
+	if launcher == "" {
+		return errors.New("yt-dlp is missing from the archive")
+	}
+	return nil
+}
+
+// swapDir moves staged to dir. The folder there is moved aside first and put back if staged
+// can't move in; staged is removed when anything fails.
+func swapDir(staged, dir string) error {
+	old := dir + ".old"
+	_ = os.RemoveAll(old)
 	hadOld := false
-	if isFile(dest) {
-		_ = os.Remove(oldPath)
-		if err := os.Rename(dest, oldPath); err != nil {
-			os.Remove(newPath)
-			return "", fmt.Errorf("can't replace %s (is it in use or read-only?): %w", dest, err)
+	if _, err := os.Stat(dir); err == nil {
+		if err := os.Rename(dir, old); err != nil {
+			os.RemoveAll(staged)
+			return fmt.Errorf("can't replace %s (is it in use?): %w", dir, err)
 		}
 		hadOld = true
 	}
-	if err := os.Rename(newPath, dest); err != nil {
+	if err := os.Rename(staged, dir); err != nil {
 		if hadOld {
-			_ = os.Rename(oldPath, dest)
+			_ = os.Rename(old, dir)
 		}
-		os.Remove(newPath)
-		return "", fmt.Errorf("installing yt-dlp: %w", err)
+		os.RemoveAll(staged)
+		return err
 	}
-	if hadOld {
-		_ = os.Remove(oldPath)
-	}
-	return version, nil
+	_ = os.RemoveAll(old)
+	return nil
 }
 
 func fetchAll(ctx context.Context, client *http.Client, u string, limit int64) ([]byte, error) {

@@ -1,6 +1,6 @@
 // Command bundle fetches the tools a bundled build for this platform carries into bundle/: the
-// newest yt-dlp (yt-dlp.exe on Windows) and its version and, unless -ffmpeg=false, yt-dlp's ffmpeg
-// build as ffmpeg.zip (Linux's tar.xz repacked). Both are checked against their published SHA-256
+// newest yt-dlp's unpacked build as yt-dlp.zip and its version and, unless -ffmpeg=false, yt-dlp's
+// ffmpeg build as ffmpeg.zip (Linux's tar.xz repacked). Both are checked against their published SHA-256
 // sums, the same way the app installs them. Then:
 //
 //	wails build -tags bundled
@@ -38,20 +38,27 @@ func run(ctx context.Context, dir, channel string, withFFmpeg bool) error {
 	}
 	client := ytdlp.HTTPClient("", 15*time.Minute)
 
-	// A yt-dlp fetched for another platform into the same folder would be bundled too.
+	// Earlier versions of this command fetched the single-file yt-dlp.
 	for _, name := range []string{"yt-dlp", "yt-dlp.exe"} {
-		if name == ytdlp.Name() {
-			continue
-		}
 		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
 
 	fmt.Println("yt-dlp:")
-	version, err := ytdlp.Install(ctx, client, channel, filepath.Join(dir, ytdlp.Name()), progress)
+	ytZip := filepath.Join(dir, "yt-dlp.zip")
+	err := ytdlp.Download(ctx, client, channel, ytZip+".part", progress)
 	fmt.Println()
 	if err != nil {
+		return err
+	}
+	defer os.Remove(ytZip + ".part")
+	// Unpacked once, to check it runs here and to learn its version.
+	version, err := tryYtdlp(ctx, ytZip+".part")
+	if err != nil {
+		return err
+	}
+	if err := os.Rename(ytZip+".part", ytZip); err != nil {
 		return err
 	}
 	if err := os.WriteFile(filepath.Join(dir, "yt-dlp.version"), []byte(version+"\n"), 0o644); err != nil {
@@ -76,6 +83,24 @@ func run(ctx context.Context, dir, channel string, withFFmpeg bool) error {
 		return err
 	}
 	return os.Rename(part, zipPath)
+}
+
+func tryYtdlp(ctx context.Context, archive string) (string, error) {
+	f, err := os.Open(archive)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	tmp, err := os.MkdirTemp("", "ytgui-bundle-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tmp)
+	return ytdlp.Install(ctx, f, st.Size(), tmp)
 }
 
 func progress(done, total int64) {

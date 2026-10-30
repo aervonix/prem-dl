@@ -36,6 +36,10 @@ go test ./internal/queue ./internal/ytdlp ./internal/follow -run Integration -v
   checks that queue unseen video IDs. Deps are injected like `queue`; `following.go` wires them.
 - `bundle.go` (+ `bundle_embed.go` under `-tags bundled`) – unpacks the yt-dlp/ffmpeg built into
   the exe into the managed `bin` folder during the first tool detection; `cmd/bundle` fetches them.
+  yt-dlp is its unpacked ("onedir") build, `yt-dlp.zip` -> `bin/ytdlp/` (launcher renamed to
+  `yt-dlp[.exe]` + `_internal/`): the single-file build unpacked 85 MB to the temp folder on
+  every run, and took 0.62 s to start against 0.31 s. Releases up to 0.1.2 used `bin/yt-dlp[.exe]`,
+  which the first unpack deletes.
   **yt-dlp and ffmpeg change only with a Prem-dl release** (user's decision): no in-app update,
   install or channel, no custom tool paths, and a bundled build runs only its own copies
   (`findYtdlp`/`findFFmpeg`). `bin\bundle.stamp` records which bundle is unpacked; a different one
@@ -174,7 +178,7 @@ go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0     # keep in step wit
 wails dev -tags webkit2_41        # every wails command needs this tag (only webkit2gtk 4.1 exists)
 wails build -tags webkit2_41      # -> build/bin/Prem-dl
 go run ./cmd/bundle; wails build -tags "webkit2_41 bundled" -trimpath   # one binary with the tools
-cp bundle/yt-dlp .                # dev builds then use it, not the old one apt puts on PATH
+unzip -qo bundle/yt-dlp.zip -d yt-dlp.d && ln -sf yt-dlp.d/yt-dlp_linux yt-dlp   # dev builds use it, not apt's
 go test ./...; go vet ./...; gofmt -l app.go main.go tools.go internal
 GORACE=atexit_sleep_ms=0 go test -race ./...
 cd frontend && npm ci && npx tsc --noEmit && npm test
@@ -188,14 +192,15 @@ scripts/release.sh [--skip-fetch]  # build/release: prem-dl_<v>_amd64.deb, Prem-
 - `GORACE=atexit_sleep_ms=0`: the queue tests run the test binary itself as a fake yt-dlp, and a race
   build sleeps 1 s on exit, so `TestPauseAfterYtdlpExitedStillCompletes` pauses before "yt-dlp" exits.
 - Data folder: `~/.config/yt-dlp-gui` (`os.UserConfigDir`).
-- `bundle/` holds one platform's tools (`yt-dlp_linux` saved as `yt-dlp`); run `cmd/bundle` again
-  after switching OS. yt-dlp's Linux ffmpeg builds are static only (177 MB each for ffmpeg and
-  ffprobe) and come as tar.xz; `DownloadFFmpeg` repacks the two plus the licence into the same
+- `bundle/` holds one platform's tools (`yt-dlp_linux.zip` saved as `yt-dlp.zip`); run `cmd/bundle`
+  again after switching OS (the `BuiltIn` test in the release scripts catches a mix-up). yt-dlp's
+  Linux ffmpeg builds are static only (177 MB each for ffmpeg and ffprobe) and come as tar.xz; `DownloadFFmpeg` repacks the two plus the licence into the same
   `ffmpeg.zip` layout (140 MB), so the app unpacks one format and needs no xz at runtime.
-- yt-dlp_linux is a PyInstaller launcher that unpacks 85 MB into `/tmp/_MEI*` on every run, and
-  `/tmp` is tmpfs (RAM) on Ubuntu. SIGKILL leaves that copy behind, so `KillTree` sends SIGTERM to
-  the group first and SIGKILL after 5 s, and every `CommandContext` run of yt-dlp uses
-  `sys.EndTreeOnCancel` (exec's default kills only the launcher; its child kept the pipes open).
+- The single-file yt-dlp_linux (a dev build may still run one) is a PyInstaller launcher that
+  unpacks 85 MB into `/tmp/_MEI*` on every run, and `/tmp` is tmpfs (RAM) on Ubuntu. SIGKILL leaves
+  that copy behind, so `KillTree` sends SIGTERM to the group first and SIGKILL after 5 s, and every
+  `CommandContext` run of yt-dlp uses `sys.EndTreeOnCancel` (exec's default kills only the
+  launcher; its child kept the pipes open). The unpacked build is one process.
 - This machine's network has broken IPv6 (an address and a route, but nothing gets through).
   Browsers fall back to IPv4 at once; yt-dlp hangs on each IPv6 address, so every YouTube read hits
   the 5-minute timeout. Settings → Network → Use IPv4 only (`ForceIPv4`, `--force-ipv4`) is for

@@ -8,9 +8,9 @@ import (
 )
 
 // The tools fetched into bundle/ by `go run ./cmd/bundle`, built into the exe by
-// `wails build -tags bundled`.
+// `wails build -tags bundled`. Named one by one, so nothing else left there is built in.
 //
-//go:embed bundle
+//go:embed bundle/*.zip bundle/yt-dlp.version
 var bundleFiles embed.FS
 
 func init() {

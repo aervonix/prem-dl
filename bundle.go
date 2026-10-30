@@ -16,8 +16,8 @@ import (
 	"yt-dlp-gui/internal/ytdlp"
 )
 
-// bundleFS holds the yt-dlp (ytdlp.Name(), yt-dlp.version) and optionally the ffmpeg archive
-// (ffmpeg.zip) built into this exe, or is nil for a build without them. A program can't be run
+// bundleFS holds yt-dlp's unpacked build (yt-dlp.zip, and yt-dlp.version) and optionally the
+// ffmpeg archive (ffmpeg.zip) built into this exe, or is nil for a build without them. A program can't be run
 // from inside another, so they are unpacked into the app's folder. A build that carries
 // them runs nothing else (see findYtdlp), so the tools change only with a new Prem-dl.
 var bundleFS fs.FS
@@ -54,12 +54,15 @@ func (a *App) unpackBundle(ctx context.Context, force bool) error {
 	}
 	// A failed unpack must not leave the old stamp claiming the folder is complete.
 	_ = os.Remove(stampPath)
-	if err := installBundled(ctx, ytdlp.ManagedPath(dir)); err != nil {
+	if err := installBundled(ctx, "yt-dlp.zip", dir, ytdlp.Install); err != nil {
 		return fmt.Errorf("unpacking yt-dlp: %w", err)
 	}
-	if f, err := bundleFS.Open("ffmpeg.zip"); err == nil {
-		defer f.Close()
-		if err := installBundledFFmpeg(ctx, f, dir); err != nil {
+	// Releases up to 0.1.2 ran the single-file yt-dlp from bin.
+	for _, suffix := range []string{"", ".old", ".new"} {
+		_ = os.Remove(filepath.Join(dir, "bin", ytdlp.Name()+suffix))
+	}
+	if bundleHas("ffmpeg.zip") {
+		if err := installBundled(ctx, "ffmpeg.zip", dir, ytdlp.InstallFFmpegFrom); err != nil {
 			return fmt.Errorf("unpacking ffmpeg: %w", err)
 		}
 	}
@@ -93,7 +96,7 @@ func bundleStamp() (string, error) {
 		return "", err
 	}
 	parts := []string{strings.TrimSpace(string(raw))}
-	for _, name := range []string{ytdlp.Name(), "ffmpeg.zip"} {
+	for _, name := range []string{"yt-dlp.zip", "ffmpeg.zip"} {
 		f, err := bundleFS.Open(name)
 		if errors.Is(err, fs.ErrNotExist) && name == "ffmpeg.zip" {
 			continue
@@ -112,19 +115,14 @@ func bundleStamp() (string, error) {
 	return strings.Join(parts, " "), nil
 }
 
-func installBundled(ctx context.Context, dest string) error {
-	f, err := bundleFS.Open(ytdlp.Name())
+// installBundled unpacks the built-in archive name with install. Files built into the exe can be
+// read at any offset, which zip needs; anything else is read into memory first.
+func installBundled(ctx context.Context, name, dir string, install func(context.Context, io.ReaderAt, int64, string) (string, error)) error {
+	f, err := bundleFS.Open(name)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	_, err = ytdlp.InstallFrom(ctx, f, dest)
-	return err
-}
-
-// installBundledFFmpeg unpacks the built-in archive. Files built into the exe can be read at any
-// offset, which zip needs; anything else is read into memory first.
-func installBundledFFmpeg(ctx context.Context, f fs.File, dir string) error {
 	st, err := f.Stat()
 	if err != nil {
 		return err
@@ -137,7 +135,7 @@ func installBundledFFmpeg(ctx context.Context, f fs.File, dir string) error {
 		}
 		ra = strings.NewReader(string(data))
 	}
-	_, err = ytdlp.InstallFFmpegFrom(ctx, ra, st.Size(), dir)
+	_, err = install(ctx, ra, st.Size(), dir)
 	return err
 }
 

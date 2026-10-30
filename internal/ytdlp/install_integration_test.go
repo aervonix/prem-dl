@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Opt-in: downloads the real yt-dlp release into a temp dir.
+// Opt-in: downloads the real yt-dlp release and installs it into a temp dir.
 //
 //	$env:YTGUI_INTEGRATION = "1"; go test ./internal/ytdlp -run InstallIntegration -v
 func TestInstallIntegration(t *testing.T) {
@@ -19,24 +19,37 @@ func TestInstallIntegration(t *testing.T) {
 	defer cancel()
 	client := HTTPClient("", 4*time.Minute)
 
-	dest := filepath.Join(t.TempDir(), "bin", Name())
+	archive := filepath.Join(t.TempDir(), "yt-dlp.zip")
+	managed := t.TempDir()
 	var last int64
-	v, err := Install(ctx, client, "stable", dest, func(done, total int64) { last = done })
-	if err != nil {
-		t.Fatalf("fresh install: %v", err)
+	if err := Download(ctx, client, "stable", archive, func(done, total int64) { last = done }); err != nil {
+		t.Fatalf("download: %v", err)
 	}
+	install := func() string {
+		t.Helper()
+		f, err := os.Open(archive)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		st, _ := f.Stat()
+		v, err := Install(ctx, f, st.Size(), managed)
+		if err != nil {
+			t.Fatalf("install: %v", err)
+		}
+		return v
+	}
+	v := install()
 	t.Logf("installed %s (%d bytes downloaded)", v, last)
-	if got, err := Version(ctx, dest); err != nil || got != v {
+	if got, err := Version(ctx, ManagedPath(managed)); err != nil || got != v {
 		t.Fatalf("installed binary reports %q, %v; want %q", got, err, v)
 	}
 
-	// Installing over an existing file replaces it and leaves no stray files behind.
-	if _, err := Install(ctx, client, "stable", dest, nil); err != nil {
-		t.Fatalf("reinstall over existing: %v", err)
-	}
-	entries, _ := os.ReadDir(filepath.Dir(dest))
+	// Installing over an existing copy replaces it and leaves no stray folders behind.
+	install()
+	entries, _ := os.ReadDir(filepath.Dir(YtdlpDir(managed)))
 	if len(entries) != 1 {
-		t.Fatalf("expected only the binary after reinstall, found %d entries: %v", len(entries), entries)
+		t.Fatalf("expected only the yt-dlp folder after reinstall, found %v", entries)
 	}
 
 	latest, err := LatestVersion(ctx, client, "stable")

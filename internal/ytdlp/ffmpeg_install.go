@@ -203,25 +203,9 @@ func installFFmpegZip(ctx context.Context, archive *zip.Reader, managedDir strin
 		version = m[1]
 	}
 
-	// Swap: the previous copy is moved aside first and restored if the new one can't move in.
-	old := dir + ".old"
-	_ = os.RemoveAll(old)
-	hadOld := false
-	if _, err := os.Stat(dir); err == nil {
-		if err := os.Rename(dir, old); err != nil {
-			os.RemoveAll(staged)
-			return "", fmt.Errorf("replacing ffmpeg (is it in use?): %w", err)
-		}
-		hadOld = true
-	}
-	if err := os.Rename(staged, dir); err != nil {
-		if hadOld {
-			_ = os.Rename(old, dir)
-		}
-		os.RemoveAll(staged)
+	if err := swapDir(staged, dir); err != nil {
 		return "", fmt.Errorf("installing ffmpeg: %w", err)
 	}
-	_ = os.RemoveAll(old)
 	return version, nil
 }
 
