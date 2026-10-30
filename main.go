@@ -21,11 +21,12 @@ func main() {
 	if p, ok := app.savedWindow(); ok && p.Maximised {
 		start = options.Maximised
 	}
+	width, height := app.openSize(defaultWidth, defaultHeight)
 
 	err := wails.Run(&options.App{
 		Title:     "Prem-dl",
-		Width:     1100,
-		Height:    760,
+		Width:     width,
+		Height:    height,
 		MinWidth:  820,
 		MinHeight: 560,
 		// Its position and normal size are restored in startup (see window.go).

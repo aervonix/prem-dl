@@ -23,6 +23,7 @@ vi.mock('./api', async (importActual) => {
       repairTools: vi.fn(),
       installAppUpdate: vi.fn(),
       checkAppUpdate: vi.fn(),
+      setWindowFocused: vi.fn(),
     },
   }
 })
@@ -161,6 +162,7 @@ describe('AppProvider', () => {
     handlers.clear()
     vi.clearAllMocks()
     mocked.getState.mockResolvedValue(appState())
+    mocked.setWindowFocused.mockResolvedValue()
     host = document.createElement('div')
     root = createRoot(host)
     await act(async () =>
@@ -205,6 +207,14 @@ describe('AppProvider', () => {
     expect(jobs.map((j) => j.id)).toEqual(['c', 'a', 'b'])
     await emit('jobs:remove', ['a'])
     expect(jobs.map((j) => j.id)).toEqual(['c', 'b'])
+  })
+
+  it('tells the backend when the window gains or loses the focus', () => {
+    expect(mocked.setWindowFocused).toHaveBeenCalledTimes(1) // how it started
+    act(() => void window.dispatchEvent(new Event('blur')))
+    expect(mocked.setWindowFocused).toHaveBeenLastCalledWith(false)
+    act(() => void window.dispatchEvent(new Event('focus')))
+    expect(mocked.setWindowFocused).toHaveBeenLastCalledWith(true)
   })
 
   it('only navigates to pages it knows', async () => {

@@ -106,6 +106,7 @@ export const api = {
   cancelClose: App.CancelClose,
   confirmClose: App.ConfirmClose,
   hideWindow: App.HideWindow,
+  setWindowFocused: App.SetWindowFocused,
   getArchiveInfo: () => cast<T.ArchiveInfo>(App.GetArchiveInfo()),
   clearArchive: () => cast<T.ArchiveInfo>(App.ClearArchive()),
   revealArchive: App.RevealArchive,

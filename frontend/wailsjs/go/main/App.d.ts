@@ -120,6 +120,8 @@ export function SaveSettings(arg1:settings.Settings):Promise<main.SettingsRespon
 
 export function Search(arg1:string,arg2:ytdlp.SearchFilter,arg3:number,arg4:number):Promise<main.ProbeResponse>;
 
+export function SetWindowFocused(arg1:boolean):Promise<void>;
+
 export function TestCookies():Promise<ytdlp.CookieTest>;
 
 export function UnfollowFeed(arg1:string):Promise<void>;

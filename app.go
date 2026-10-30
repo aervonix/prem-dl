@@ -151,7 +151,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctxPtr.Store(&ctx)
 	// The window exists but isn't shown yet: move it to where it was last closed.
 	if p, ok := a.savedWindow(); ok {
-		sys.RestoreMainWindow(p)
+		a.restorePlacement(p)
 	}
 	a.q.Start()
 	a.feeds.Start()

@@ -253,6 +253,21 @@ export function AppProvider({children}: {children: ReactNode}) {
     }
   }, [dispatch, toast])
 
+  // Tell the backend when the window gains or loses the focus, which decides whether a finished
+  // download gets a desktop notification. Linux can't be asked; Windows ignores it.
+  useEffect(() => {
+    const report = (focused: boolean) => void api.setWindowFocused(focused).catch(() => {})
+    const onFocus = () => report(true)
+    const onBlur = () => report(false)
+    report(document.hasFocus())
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [])
+
   // Keep the theme attribute in sync with the setting.
   const theme = state.settings?.theme ?? 'system'
   useEffect(() => {

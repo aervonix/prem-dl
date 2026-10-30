@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"time"
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -37,6 +36,11 @@ const (
 	toastDone   = "download-done"
 	toastFailed = "download-failed"
 )
+
+var toastActions = map[string][]wr.NotificationAction{
+	toastDone:   {{ID: "open", Title: "Open"}, {ID: "reveal", Title: "Show in folder"}},
+	toastFailed: {{ID: "retry", Title: "Retry"}},
+}
 
 // startBackground runs once at startup, after the window exists.
 func (a *App) startBackground(ctx context.Context) {
@@ -232,25 +236,9 @@ func setStartWithWindows(on bool) error {
 
 // ---- notifications ----
 
-func (a *App) initNotifications(ctx context.Context) {
-	if exe, err := os.Executable(); err == nil {
-		// Wails registers the app under the exe's file name, which Windows would show as its name.
-		_ = sys.SetToastName(filepath.Base(exe), "Prem-dl")
-	}
-	if err := wr.InitializeNotifications(ctx); err != nil {
-		wr.LogWarning(ctx, "notifications unavailable: "+err.Error())
-		return
-	}
-	_ = wr.RegisterNotificationCategory(ctx, wr.NotificationCategory{ID: toastDone, Actions: []wr.NotificationAction{
-		{ID: "open", Title: "Open"},
-		{ID: "reveal", Title: "Show in folder"},
-	}})
-	_ = wr.RegisterNotificationCategory(ctx, wr.NotificationCategory{ID: toastFailed, Actions: []wr.NotificationAction{
-		{ID: "retry", Title: "Retry"},
-	}})
-	wr.OnNotificationResponse(ctx, a.onNotification)
-	a.toasts.Store(true)
-}
+// SetWindowFocused is the page saying the window gained or lost the keyboard focus. Linux can't
+// be asked which window has it; on Windows, MainWindowInFront asks Windows and this does nothing.
+func (a *App) SetWindowFocused(focused bool) { sys.SetMainWindowFocused(focused) }
 
 // notifyFinished shows a Windows notification for downloads that just finished, unless the
 // window is in front: the page shows its own card then.
@@ -262,12 +250,7 @@ func (a *App) notifyFinished(jobs []queue.Job) {
 	if !a.hidden.Load() && sys.MainWindowInFront() {
 		return
 	}
-	n := finishToast(jobs)
-	send := wr.SendNotification
-	if n.CategoryID != "" {
-		send = wr.SendNotificationWithActions
-	}
-	if err := send(ctx, n); err != nil {
+	if err := a.sendNotification(ctx, finishToast(jobs)); err != nil {
 		wr.LogWarning(ctx, "notification failed: "+err.Error())
 	}
 }

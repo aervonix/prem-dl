@@ -230,6 +230,10 @@ export function Search(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['Search'](arg1, arg2, arg3, arg4);
 }
 
+export function SetWindowFocused(arg1) {
+  return window['go']['main']['App']['SetWindowFocused'](arg1);
+}
+
 export function TestCookies() {
   return window['go']['main']['App']['TestCookies']();
 }
