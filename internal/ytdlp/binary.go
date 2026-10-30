@@ -46,10 +46,7 @@ type Binary struct {
 
 // Name is the executable file name on this platform.
 func Name() string {
-	if runtime.GOOS == "windows" {
-		return "yt-dlp.exe"
-	}
-	return "yt-dlp"
+	return exeName("yt-dlp", runtime.GOOS)
 }
 
 func isFile(p string) bool {
@@ -129,10 +126,7 @@ var ffmpegVersionRe = regexp.MustCompile(`ffmpeg version (\S+)`)
 // FindFFmpeg looks at the user's path, next to yt-dlp, in the app's own install (managedDir),
 // then PATH. Any of them may be empty.
 func FindFFmpeg(ctx context.Context, custom, ytdlpPath, managedDir string) FFmpeg {
-	name := "ffmpeg"
-	if runtime.GOOS == "windows" {
-		name = "ffmpeg.exe"
-	}
+	name := FFmpegName()
 	var candidates []string
 	if custom != "" {
 		if st, err := os.Stat(custom); err == nil && st.IsDir() {

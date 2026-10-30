@@ -159,14 +159,16 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 
 ## Linux
 
-Being ported (Ubuntu, Wails on WebKitGTK). Until it's done, `internal/sys` uses the `_other.go`
-stubs: no tray, autostart or `prem-dl:` links, and the tools still have Windows names.
+Being ported (Ubuntu, Wails on WebKitGTK). Downloads work; `internal/sys` still uses the
+`_other.go` stubs for the rest: no tray, autostart or `prem-dl:` links.
 
 ```bash
 sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0     # keep in step with go.mod
 wails dev -tags webkit2_41        # every wails command needs this tag (only webkit2gtk 4.1 exists)
 wails build -tags webkit2_41      # -> build/bin/Prem-dl
+go run ./cmd/bundle; wails build -tags "webkit2_41 bundled" -trimpath   # one binary with the tools
+cp bundle/yt-dlp .                # dev builds then use it, not the old one apt puts on PATH
 go test ./...; go vet ./...; gofmt -l app.go main.go tools.go internal
 GORACE=atexit_sleep_ms=0 go test -race ./...
 cd frontend && npm ci && npx tsc --noEmit && npm test
@@ -180,6 +182,13 @@ YTGUI_INTEGRATION=1 YTGUI_YTDLP=/path/to/yt-dlp go test ./internal/queue ./inter
 - `GORACE=atexit_sleep_ms=0`: the queue tests run the test binary itself as a fake yt-dlp, and a race
   build sleeps 1 s on exit, so `TestPauseAfterYtdlpExitedStillCompletes` pauses before "yt-dlp" exits.
 - Data folder: `~/.config/yt-dlp-gui` (`os.UserConfigDir`).
+- `bundle/` holds one platform's tools (`yt-dlp_linux` saved as `yt-dlp`); run `cmd/bundle` again
+  after switching OS. yt-dlp's Linux ffmpeg builds are static only (177 MB each for ffmpeg and
+  ffprobe) and come as tar.xz; `DownloadFFmpeg` repacks the two plus the licence into the same
+  `ffmpeg.zip` layout (140 MB), so the app unpacks one format and needs no xz at runtime.
+- This machine's network has broken IPv6 (an address and a route, but nothing gets through).
+  Browsers fall back to IPv4 at once; yt-dlp hangs on each IPv6 address, so every YouTube read hits
+  the 5-minute timeout. Run integration tests through a wrapper that adds `--force-ipv4`.
 
 ## Windows environment notes
 

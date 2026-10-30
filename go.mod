@@ -3,6 +3,7 @@ module yt-dlp-gui
 go 1.25.0
 
 require (
+	github.com/ulikunitz/xz v0.5.17
 	github.com/wailsapp/wails/v2 v2.17.0
 	golang.org/x/sys v0.46.0
 )

@@ -1,6 +1,7 @@
-// Command bundle fetches the tools a bundled build carries into bundle/: the newest yt-dlp.exe
-// (and its version) and, unless -ffmpeg=false, yt-dlp's ffmpeg build as ffmpeg.zip. Both are
-// checked against their published SHA-256 sums, the same way the app installs them. Then:
+// Command bundle fetches the tools a bundled build for this platform carries into bundle/: the
+// newest yt-dlp (yt-dlp.exe on Windows) and its version and, unless -ffmpeg=false, yt-dlp's ffmpeg
+// build as ffmpeg.zip (Linux's tar.xz repacked). Both are checked against their published SHA-256
+// sums, the same way the app installs them. Then:
 //
 //	wails build -tags bundled
 package main
@@ -20,7 +21,7 @@ import (
 func main() {
 	dir := flag.String("dir", "bundle", "folder to fill")
 	channel := flag.String("channel", "stable", "yt-dlp release channel: stable, nightly or master")
-	withFFmpeg := flag.Bool("ffmpeg", true, "also bundle ffmpeg (about 87 MB)")
+	withFFmpeg := flag.Bool("ffmpeg", true, "also bundle ffmpeg (about 90 MB on Windows, 140 MB on Linux)")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -37,8 +38,18 @@ func run(ctx context.Context, dir, channel string, withFFmpeg bool) error {
 	}
 	client := ytdlp.HTTPClient("", 15*time.Minute)
 
+	// A yt-dlp fetched for another platform into the same folder would be bundled too.
+	for _, name := range []string{"yt-dlp", "yt-dlp.exe"} {
+		if name == ytdlp.Name() {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+
 	fmt.Println("yt-dlp:")
-	version, err := ytdlp.Install(ctx, client, channel, filepath.Join(dir, "yt-dlp.exe"), progress)
+	version, err := ytdlp.Install(ctx, client, channel, filepath.Join(dir, ytdlp.Name()), progress)
 	fmt.Println()
 	if err != nil {
 		return err

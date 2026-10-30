@@ -162,7 +162,7 @@ func (a *App) findYtdlp() (ytdlp.Binary, error) {
 // findFFmpeg is findYtdlp for ffmpeg. A bundle built without ffmpeg looks for one like other builds.
 func (a *App) findFFmpeg(ctx context.Context, ytdlpPath string) ytdlp.FFmpeg {
 	if bundleHas("ffmpeg.zip") {
-		return ytdlp.FFmpegAt(ctx, filepath.Join(ytdlp.FFmpegDir(a.managedDir()), "ffmpeg.exe"))
+		return ytdlp.FFmpegAt(ctx, filepath.Join(ytdlp.FFmpegDir(a.managedDir()), ytdlp.FFmpegName()))
 	}
 	return ytdlp.FindFFmpeg(ctx, "", ytdlpPath, a.managedDir())
 }

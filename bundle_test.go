@@ -16,7 +16,7 @@ func TestBundleInPlace(t *testing.T) {
 	old := bundleFS
 	defer func() { bundleFS = old }()
 	bundleFS = fstest.MapFS{
-		"yt-dlp.exe":     {Data: []byte("yt")},
+		ytdlp.Name():     {Data: []byte("yt")},
 		"yt-dlp.version": {Data: []byte("2026.10.21\n")},
 		"ffmpeg.zip":     {Data: []byte("zip")},
 	}
@@ -39,23 +39,23 @@ func TestBundleInPlace(t *testing.T) {
 		t.Error("an empty folder counts as unpacked")
 	}
 	write(ytdlp.ManagedPath(dir), "yt")
-	write(filepath.Join(ytdlp.FFmpegDir(dir), "ffmpeg.exe"), "ff")
-	write(filepath.Join(ytdlp.FFmpegDir(dir), "ffprobe.exe"), "fp")
+	write(filepath.Join(ytdlp.FFmpegDir(dir), ytdlp.FFmpegName()), "ff")
+	write(filepath.Join(ytdlp.FFmpegDir(dir), ytdlp.FFprobeName()), "fp")
 	write(stampPath, stamp+"\n")
 	if !bundleInPlace(dir, stampPath, stamp) {
 		t.Error("the same bundle is unpacked again")
 	}
 
 	// Another release's bundle replaces it, whether it's newer or older.
-	bundleFS.(fstest.MapFS)["yt-dlp.exe"] = &fstest.MapFile{Data: []byte("other")}
+	bundleFS.(fstest.MapFS)[ytdlp.Name()] = &fstest.MapFile{Data: []byte("other")}
 	other, _ := bundleStamp()
 	if other == stamp || bundleInPlace(dir, stampPath, other) {
-		t.Error("a different yt-dlp.exe keeps the old one")
+		t.Error("a different yt-dlp keeps the old one")
 	}
 	// A program removed since (antivirus, a clean-up) is put back.
-	os.Remove(filepath.Join(ytdlp.FFmpegDir(dir), "ffprobe.exe"))
+	os.Remove(filepath.Join(ytdlp.FFmpegDir(dir), ytdlp.FFprobeName()))
 	if bundleInPlace(dir, stampPath, stamp) {
-		t.Error("a missing ffprobe.exe isn't noticed")
+		t.Error("a missing ffprobe isn't noticed")
 	}
 }
 

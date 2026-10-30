@@ -16,9 +16,9 @@ import (
 	"yt-dlp-gui/internal/ytdlp"
 )
 
-// bundleFS holds the yt-dlp (yt-dlp.exe, yt-dlp.version) and optionally the ffmpeg archive
-// (ffmpeg.zip) built into this exe, or is nil for a build without them. Windows can't run a
-// program from inside another, so they are unpacked into the app's folder. A build that carries
+// bundleFS holds the yt-dlp (ytdlp.Name(), yt-dlp.version) and optionally the ffmpeg archive
+// (ffmpeg.zip) built into this exe, or is nil for a build without them. A program can't be run
+// from inside another, so they are unpacked into the app's folder. A build that carries
 // them runs nothing else (see findYtdlp), so the tools change only with a new Prem-dl.
 var bundleFS fs.FS
 
@@ -75,7 +75,7 @@ func bundleInPlace(dir, stampPath, stamp string) bool {
 	}
 	need := []string{ytdlp.ManagedPath(dir)}
 	if bundleHas("ffmpeg.zip") {
-		need = append(need, filepath.Join(ytdlp.FFmpegDir(dir), "ffmpeg.exe"), filepath.Join(ytdlp.FFmpegDir(dir), "ffprobe.exe"))
+		need = append(need, filepath.Join(ytdlp.FFmpegDir(dir), ytdlp.FFmpegName()), filepath.Join(ytdlp.FFmpegDir(dir), ytdlp.FFprobeName()))
 	}
 	for _, p := range need {
 		if st, err := os.Stat(p); err != nil || st.IsDir() {
@@ -93,7 +93,7 @@ func bundleStamp() (string, error) {
 		return "", err
 	}
 	parts := []string{strings.TrimSpace(string(raw))}
-	for _, name := range []string{"yt-dlp.exe", "ffmpeg.zip"} {
+	for _, name := range []string{ytdlp.Name(), "ffmpeg.zip"} {
 		f, err := bundleFS.Open(name)
 		if errors.Is(err, fs.ErrNotExist) && name == "ffmpeg.zip" {
 			continue
@@ -113,7 +113,7 @@ func bundleStamp() (string, error) {
 }
 
 func installBundled(ctx context.Context, dest string) error {
-	f, err := bundleFS.Open("yt-dlp.exe")
+	f, err := bundleFS.Open(ytdlp.Name())
 	if err != nil {
 		return err
 	}
