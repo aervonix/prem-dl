@@ -160,8 +160,8 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 ## Linux
 
 Being ported (Ubuntu, Wails on WebKitGTK). Done: downloads, tray, notifications, `prem-dl:`
-links, start at sign-in, window size. Still Windows-only: the Chrome helper's setup (`chrome.go`)
-and Prem-dl's own updates. Linux code is in `*_linux.go`; `_other.go` covers the rest (macOS).
+links, start at sign-in, window size, cookies and the Chrome helper. Still Windows-only:
+Prem-dl's own updates and the release scripts. Linux code is in `*_linux.go`; `_other.go` covers the rest (macOS).
 
 ```bash
 sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
@@ -211,6 +211,21 @@ YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test ./interna
   private `dbus-daemon`.
 - Wayland doesn't let apps read or set their window's position: only size and maximised are kept.
   `WindowShow` is `gtk_window_present`, which GNOME honours for a link handed over by a second launch.
+- An app started from the desktop, dock or a link gets the session's PATH, without what nvm, fnm,
+  Volta, Deno's or Bun's installers add to a terminal's: `DetectJSRuntimes` also looks there
+  (`jsruntime_unix.go`). This machine's Node is nvm's; `wails dev` from a shell hides the problem.
+
+**Cookies and the Chrome helper**
+- yt-dlp reads Chromium browsers' cookies on Linux (GNOME keyring); the DPAPI failure is
+  Windows-only, so Linux leads with "From a browser". `detectBrowsers` (`chrome_linux.go`) lists
+  what's installed. A browser yt-dlp doesn't know by name (Helium, Flatpak Chrome) is read as its
+  family with the profile folder as `Profile` (`chromium:/path/Default`); the family picks the
+  keyring entry, so Flatpak Chrome must be `chrome:`, not `chromium:`.
+- The helper runs in `helperBrowser` (Settings), else the default browser if Chromium-based, else
+  the first found; it is started in its own session (`startBrowser`). Snap/Flatpak browsers get the
+  helper in `~/Prem-dl helper`, since they can't open hidden folders (untested: none here).
+- Tested with Helium (ungoogled-chromium based): Load unpacked, Get cookies, right-click
+  Download with Prem-dl, with the app running and not.
 - This machine is registered with `build/bin/Prem-dl` (the user's choice); a bundled build run from
   there unpacks its tools into `~/.config/yt-dlp-gui/bin`.
 
