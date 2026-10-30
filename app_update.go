@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -76,7 +77,8 @@ func (a *App) checkAppUpdate(ctx context.Context) AppUpdate {
 		return u
 	}
 	u.Latest, u.Page, u.Notes, u.Size = r.Version, r.Page, r.Notes, r.Size
-	u.Available = selfupdate.Newer(appVersion, r.Version)
+	// A Linux copy isn't told about a release without a Linux build.
+	u.Available = selfupdate.Newer(appVersion, r.Version) && r.HasBuildFor(runtime.GOOS)
 	u.CanInstall = u.Available && r.SetupURL != "" && r.SumsURL != "" && a.installDir() != ""
 	a.appUpdate.Store(&u)
 	a.emit("app:update", u)

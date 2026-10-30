@@ -29,6 +29,16 @@ const (
 	SumsAsset  = "SHA256SUMS.txt"
 )
 
+// The Linux files a release may carry (scripts/release.sh); the .deb's name has the version in it.
+const (
+	AppImageAsset  = "Prem-dl-x86_64.AppImage"
+	LinuxSumsAsset = "SHA256SUMS-linux.txt"
+)
+
+func isDeb(name string) bool {
+	return strings.HasPrefix(name, "prem-dl_") && strings.HasSuffix(name, "_amd64.deb")
+}
+
 // apiBase is GitHub's API; tests point it at a local server.
 var apiBase = "https://api.github.com"
 
@@ -44,6 +54,16 @@ type Release struct {
 	SetupURL string // "" if the release has no installer
 	Size     int64  // the installer's size
 	SumsURL  string
+	Linux    bool // it has a Linux build (the AppImage or the .deb)
+}
+
+// HasBuildFor reports whether the release has something for goos to install. Linux builds came
+// later and may be missing from a release; every release has the Windows ones.
+func (r Release) HasBuildFor(goos string) bool {
+	if goos == "linux" {
+		return r.Linux
+	}
+	return true
 }
 
 // Latest asks GitHub for the newest release. Drafts and pre-releases are never "latest".
@@ -95,6 +115,10 @@ func Latest(ctx context.Context, client *http.Client) (Release, error) {
 			r.SetupURL, r.Size = a.URL, a.Size
 		case SumsAsset:
 			r.SumsURL = a.URL
+		case AppImageAsset:
+			r.Linux = true
+		default:
+			r.Linux = r.Linux || isDeb(a.Name)
 		}
 	}
 	return r, nil

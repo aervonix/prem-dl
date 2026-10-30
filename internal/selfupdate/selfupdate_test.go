@@ -124,3 +124,35 @@ func TestDownloadNeedsChecksums(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// A release only counts for Linux when it has a Linux build; for Windows, always.
+func TestLinuxBuilds(t *testing.T) {
+	for _, tc := range []struct {
+		assets []string
+		linux  bool
+	}{
+		{[]string{SetupAsset, SumsAsset, "Prem-dl.exe"}, false},
+		{[]string{SetupAsset, SumsAsset, AppImageAsset, LinuxSumsAsset}, true},
+		{[]string{SetupAsset, SumsAsset, "prem-dl_0.2.0_amd64.deb", LinuxSumsAsset}, true},
+		{[]string{"prem-dl_0.2.0_arm64.deb", "prem-dl.deb"}, false},
+	} {
+		var assets []string
+		for _, a := range tc.assets {
+			assets = append(assets, fmt.Sprintf(`{"name":%q,"browser_download_url":"https://x.test/%s","size":1}`, a, a))
+		}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, `{"tag_name":"v0.2.0","assets":[%s]}`, strings.Join(assets, ","))
+		}))
+		old := apiBase
+		apiBase = srv.URL
+		r, err := Latest(context.Background(), srv.Client())
+		apiBase = old
+		srv.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.HasBuildFor("linux") != tc.linux || !r.HasBuildFor("windows") {
+			t.Errorf("%v: linux %v, windows %v", tc.assets, r.HasBuildFor("linux"), r.HasBuildFor("windows"))
+		}
+	}
+}
