@@ -18,33 +18,6 @@ import (
 // thread that created them, so they share one locked OS thread with a hidden window and its own
 // message loop. Other goroutines change the wanted state and post a message; the thread applies it.
 
-// ProgressState is what the taskbar button's progress bar shows.
-type ProgressState int
-
-const (
-	ProgressNone ProgressState = iota
-	ProgressIndeterminate
-	ProgressNormal
-	ProgressPaused // yellow
-	ProgressError  // red
-)
-
-// MenuItem is one line of the tray icon's menu. A zero ID makes a separator.
-type MenuItem struct {
-	ID       int
-	Label    string
-	Default  bool // shown in bold: what clicking the icon does
-	Disabled bool
-}
-
-// ShellOptions are the tray icon's callbacks. They run on a goroutine of their own, except Menu,
-// which runs on the shell thread while the menu opens and must return quickly.
-type ShellOptions struct {
-	OnOpen func()            // the icon was clicked, or selected with the keyboard
-	Menu   func() []MenuItem // the menu, built each time it opens
-	OnMenu func(id int)      // a menu item was chosen
-}
-
 // Shell owns the tray icon and the taskbar progress.
 type Shell struct {
 	opts ShellOptions
@@ -532,6 +505,9 @@ func isWindow(h windows.HWND) bool {
 	r, _, _ := procIsWindow.Call(uintptr(h))
 	return r != 0
 }
+
+// SetMainWindowFocused is for Linux: here MainWindowInFront asks Windows.
+func SetMainWindowFocused(bool) {}
 
 // MainWindowInFront reports whether the main window is the one the user is working in: shown, not
 // minimised, and in the foreground.
