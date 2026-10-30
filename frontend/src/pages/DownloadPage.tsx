@@ -202,6 +202,9 @@ export function DownloadPage() {
   const [rangeTo, setRangeTo] = useState('')
   const [adding, setAdding] = useState(false)
   const [bulkProgress, setBulkProgress] = useState<{done: number; total: number} | null>(null)
+  // A channel or playlist shows its first page at once; its other entries are read meanwhile.
+  const [reading, setReading] = useState(false)
+  const [readError, setReadError] = useState('')
   const [clip, setClip] = useState('')
   const [following, setFollowing] = useState(false)
   const [view, setView] = useState<View>(savedView)
@@ -324,6 +327,39 @@ export function DownloadPage() {
   }, [refreshClip])
 
   // ---- analysing ----
+  /**
+   * Reads the rest of a listing the probe answered with its first page, adding entries at the end
+   * as they come. A playlist opens with everything ticked, so its new entries are ticked too,
+   * unless the ticks were changed meanwhile; a channel's stay unticked.
+   */
+  const readRest = useCallback(async (listing: number, id: number, tickNew: boolean, loaded: number) => {
+    setReading(true)
+    setReadError('')
+    try {
+      for (;;) {
+        const part = await api.moreEntries(listing)
+        if (id !== requestId.current) return
+        if (part.entries.length > 0) {
+          setResult((r) => (r?.playlist ? {...r, playlist: {...r.playlist, entries: [...r.playlist.entries, ...part.entries]}} : r))
+          const fresh = part.entries.filter(selectable).map((e) => e.index)
+          if (tickNew && fresh.length > 0) {
+            const before = loaded
+            setSelected((prev) => (prev.size === before ? new Set([...prev, ...fresh]) : prev))
+          }
+          loaded += fresh.length
+        }
+        if (part.done) {
+          if (part.error) setReadError(part.error)
+          return
+        }
+      }
+    } catch (e) {
+      if (id === requestId.current) setReadError(errMessage(e))
+    } finally {
+      if (id === requestId.current) setReading(false)
+    }
+  }, [])
+
   const analyze = useCallback(
     async (raw: string, noPl = false) => {
       const link = raw.trim()
@@ -336,6 +372,8 @@ export function DownloadPage() {
       setPhase('analyzing')
       setError(null)
       setResult(null)
+      setReading(false)
+      setReadError('')
       setNoPlaylist(noPl)
       setProbedUrl(link)
       try {
@@ -360,10 +398,12 @@ export function DownloadPage() {
           // A playlist opens with everything ticked; a channel with nothing, or Download would take
           // all it ever posted.
           const pl = res.result.playlist
-          setSelected(pl.channel ? new Set() : new Set(pl.entries.filter(selectable).map((e) => e.index)))
+          const ticked = pl.channel ? [] : pl.entries.filter(selectable).map((e) => e.index)
+          setSelected(new Set(ticked))
           setFilter('')
           setRangeFrom('')
           setRangeTo('')
+          if (res.listing) void readRest(res.listing, id, !pl.channel, ticked.length)
         }
         setPhase('ready')
       } catch (e) {
@@ -372,7 +412,7 @@ export function DownloadPage() {
         setPhase('error')
       }
     },
-    [pickFor],
+    [pickFor, readRest],
   )
 
   const reset = useCallback(() => {
@@ -381,6 +421,8 @@ export function DownloadPage() {
     setPhase('idle')
     setResult(null)
     setError(null)
+    setReading(false)
+    setReadError('')
   }, [])
 
   // Adding a second link switches to the bulk form; drop the single-link review so the two
@@ -776,7 +818,18 @@ export function DownloadPage() {
           {playlist && (
             <Card
               title={playlist.title || 'Playlist'}
-              sub={`${plural(available.length, 'video')}${nestedCount ? ` · ${plural(nestedCount, 'playlist')} (open one to pick its videos)` : ''}${playlist.uploader ? ` · ${playlist.uploader}` : ''}${available.length + nestedCount < playlist.entries.length ? ` · ${playlist.entries.length - available.length - nestedCount} unavailable` : ''}`}
+              sub={
+                <>
+                  {`${plural(available.length, 'video')}${nestedCount ? ` · ${plural(nestedCount, 'playlist')} (open one to pick its videos)` : ''}${playlist.uploader ? ` · ${playlist.uploader}` : ''}${available.length + nestedCount < playlist.entries.length ? ` · ${playlist.entries.length - available.length - nestedCount} unavailable` : ''}`}
+                  {reading && (
+                    <span className="reading-more">
+                      {' · '}
+                      <Spinner /> reading more…
+                    </span>
+                  )}
+                  {readError && <span className="err-text">{` · couldn’t read the rest: ${readError}`}</span>}
+                </>
+              }
               actions={
                 available.length === 0 && nestedCount > 0 ? null : followed ? (
                   <Button size="sm" variant="ghost" icon="check" onClick={() => go('following')} title="Open the Following page">

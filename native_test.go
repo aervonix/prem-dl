@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/ytdlp"
@@ -69,4 +70,59 @@ func fallbackApp(t *testing.T) *App {
 	a.root, a.stopAll = context.WithCancel(context.Background())
 	t.Cleanup(a.stopAll)
 	return a
+}
+
+// Opt-in: a channel analysed on the Download page comes back after its first page, and the
+// rest, read in parts, is the whole channel.
+func TestIntegrationProbeListsAChannelInParts(t *testing.T) {
+	if os.Getenv("YTGUI_INTEGRATION") != "1" {
+		t.Skip("set YTGUI_INTEGRATION=1 to run")
+	}
+	store, err := settings.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := store.Get()
+	s.ForceIPv4 = os.Getenv("YTGUI_FORCE_IPV4") == "1"
+	if _, err := store.Set(s); err != nil {
+		t.Fatal(err)
+	}
+	a := &App{store: store, infos: ytdlp.NewInfoCache(), lister: ytweb.NewLister()}
+	a.root, a.stopAll = context.WithCancel(context.Background())
+	defer a.stopAll()
+
+	for _, link := range []string{"https://www.youtube.com/@MrBeast", "https://www.youtube.com/playlist?list=UUsXVk37bltHxD1rDPwtNM8Q"} {
+		start := time.Now()
+		res := a.Probe(link, false)
+		first := time.Since(start)
+		if res.Error != nil || res.Listing == 0 {
+			t.Fatalf("%s: %+v", link, res)
+		}
+		entries := res.Result.Playlist.Entries
+		for {
+			part := a.MoreEntries(res.Listing)
+			entries = append(entries, part.Entries...)
+			if part.Done {
+				if part.Error != "" {
+					t.Fatal(part.Error)
+				}
+				break
+			}
+		}
+		total := time.Since(start)
+		whole, err := a.lister.List(context.Background(), ytweb.Options{IPv4: s.ForceIPv4}, link, 0, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("%s: first %d entries after %d ms, all %d after %d ms (read whole: %d)", link,
+			len(res.Result.Playlist.Entries), first.Milliseconds(), len(entries), total.Milliseconds(), len(whole.Playlist.Entries))
+		if len(entries) != len(whole.Playlist.Entries) {
+			t.Errorf("%d entries in parts, %d read whole", len(entries), len(whole.Playlist.Entries))
+		}
+		for i, e := range entries {
+			if e.Index != i+1 {
+				t.Fatalf("entry %d numbered %d", i+1, e.Index)
+			}
+		}
+	}
 }

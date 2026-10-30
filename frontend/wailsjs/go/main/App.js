@@ -126,6 +126,10 @@ export function ListFeeds() {
   return window['go']['main']['App']['ListFeeds']();
 }
 
+export function MoreEntries(arg1) {
+  return window['go']['main']['App']['MoreEntries'](arg1);
+}
+
 export function MoveJobToTop(arg1) {
   return window['go']['main']['App']['MoveJobToTop'](arg1);
 }

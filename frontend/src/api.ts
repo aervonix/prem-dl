@@ -37,6 +37,7 @@ export type _Guards = [
   Expect<Guard<main.ToolStatus, T.ToolStatus>>,
   Expect<Guard<main.ProbeResponse, T.ProbeResponse>>,
   Expect<Guard<main.SearchResponse, T.SearchResponse>>,
+  Expect<Guard<main.ListingPart, T.ListingPart>>,
   Expect<Guard<main.EnqueueResponse, T.EnqueueResponse>>,
   Expect<Guard<main.BulkResponse, T.BulkResponse>>,
   Expect<Guard<main.LinkFailure, T.LinkFailure>>,
@@ -79,6 +80,8 @@ export const api = {
   refreshTools: () => cast<T.ToolStatus>(App.RefreshTools()),
 
   probe: (url: string, noPlaylist: boolean) => cast<T.ProbeResponse>(App.Probe(url, noPlaylist)),
+  /** The entries of a probe's listing read since the last call; waits for some when none are new. */
+  moreEntries: (listing: number) => cast<T.ListingPart>(App.MoreEntries(listing)),
   cancelProbe: () => App.CancelProbe(),
   enqueue: (items: T.NewJob[], opts: T.DownloadOptions) =>
     cast<T.EnqueueResponse>(App.Enqueue(items as unknown as queue.NewJob[], opts as unknown as settings.DownloadOptions)),

@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -124,27 +125,39 @@ func hasAnyPrefix(s string, prefixes ...string) bool {
 	return false
 }
 
+// Progress is told about a listing while it is read, in parts: the first holds the listing's
+// title and the like with its first page of entries (perhaps none), each later one the entries
+// that follow. Entries come in their final order, numbered from 1 across the parts; a channel's
+// Live and Shorts tabs come after its last video, as they do in the whole listing.
+type Progress func(part *ytdlp.ProbeResult)
+
 // List reads a channel tab, a channel's home page or a playlist: at most limit entries of each
 // tab (0 for all), as yt-dlp's --playlist-end does. Links Handles refuses, and pages laid out in
-// a way yt-dlp would handle differently, fail with an error; callers then ask yt-dlp.
-func (l *Lister) List(ctx context.Context, o Options, link string, limit int) (*ytdlp.ProbeResult, error) {
+// a way yt-dlp would handle differently, fail with an error; callers then ask yt-dlp. progress,
+// if not nil, gets the listing in parts as it is read; a channel takes a request (~0.25 s) per
+// 30 videos.
+func (l *Lister) List(ctx context.Context, o Options, link string, limit int, progress Progress) (*ytdlp.ProbeResult, error) {
 	t, ok := parseTarget(link)
 	if !ok {
 		return nil, errNotHere("not a channel tab or playlist link")
 	}
 	hc := l.clients.get(o)
+	out := &parts{progress: progress}
 	var pl map[string]any
 	var err error
 	switch {
 	case t.list != "":
-		pl, err = l.playlist(ctx, hc, t, limit)
+		pl, err = l.playlist(ctx, hc, t, limit, out.flat)
 	case t.tab != "":
 		var tp tabPage
 		if tp, err = l.page(ctx, hc, t.path+"/"+t.tab); err == nil {
-			pl, err = l.tab(ctx, hc, tp, t, t.tab, limit)
+			pl, err = l.tab(ctx, hc, tp, t, t.tab, limit, out.flat)
 		}
 	default:
-		pl, err = l.home(ctx, hc, t, limit)
+		pl, err = l.home(ctx, hc, t, limit, out)
+	}
+	if err == nil {
+		err = out.err
 	}
 	if err != nil {
 		return nil, err
@@ -344,6 +357,60 @@ func ucidFromURL(s string) string {
 	return ""
 }
 
+// parts hands a listing to a Progress as it is read.
+type parts struct {
+	progress Progress
+	top      map[string]any // the listing without its entries; nil until the first page
+	nested   bool           // a home page: entries go in tabs, named by their title
+	started  bool           // the first part went
+	sent     int            // entries sent
+	err      error
+}
+
+// flat sends a page of a single tab or playlist; header is the listing without its entries.
+func (p *parts) flat(header map[string]any, es []entry) {
+	if p.top == nil {
+		p.top = header
+	}
+	p.send("", es)
+}
+
+// send hands on entries, in the tab titled group when nested. The first part goes even empty:
+// it carries the title.
+func (p *parts) send(group string, es []entry) {
+	if p.progress == nil || p.err != nil || (p.started && len(es) == 0) {
+		return
+	}
+	wrap := maps.Clone(p.top)
+	if es == nil {
+		es = []entry{}
+	}
+	wrap["entries"] = es
+	if p.nested {
+		wrap["entries"] = []any{map[string]any{"_type": "playlist", "title": group, "entries": es}}
+	}
+	data, err := json.Marshal(wrap)
+	if err != nil {
+		p.err = err
+		return
+	}
+	res, err := ytdlp.ParseProbe(data)
+	if err != nil {
+		p.err = err
+		return
+	}
+	for i := range res.Playlist.Entries {
+		res.Playlist.Entries[i].Index = p.sent + i + 1
+	}
+	p.sent += len(res.Playlist.Entries)
+	p.started = true
+	p.progress(res)
+}
+
+// onPage is told about each page of a tab as it is read: the tab without its entries, and the
+// page's entries (already cut to the limit).
+type onPage func(header map[string]any, es []entry)
+
 // playlistJSON is a listing in yt-dlp's -J shape.
 func playlistJSON(m metadata, title, webpage string, entries any) map[string]any {
 	return map[string]any{
@@ -353,7 +420,7 @@ func playlistJSON(m metadata, title, webpage string, entries any) map[string]any
 }
 
 // tab lists the tab a page shows, which must be the one asked for (_extract_from_tabs).
-func (l *Lister) tab(ctx context.Context, hc *http.Client, p tabPage, t target, want string, limit int) (map[string]any, error) {
+func (l *Lister) tab(ctx context.Context, hc *http.Client, p tabPage, t target, want string, limit int, report onPage) (map[string]any, error) {
 	if err := check(p.data); err != nil {
 		return nil, err
 	}
@@ -374,6 +441,16 @@ func (l *Lister) tab(ctx context.Context, hc *http.Client, p tabPage, t target, 
 			title += " - " + s
 		}
 	}
+	webpage := t.url
+	if t.list == "" {
+		webpage = "https://www.youtube.com" + t.path + "/" + want
+	}
+	header := playlistJSON(m, title, webpage, nil)
+	page := func(es []entry) {
+		if report != nil {
+			report(header, es)
+		}
+	}
 	x := extractor{now: l.now(), dates: true}
 	var entries []entry
 	content := obj(sel, "content")
@@ -382,24 +459,25 @@ func (l *Lister) tab(ctx context.Context, hc *http.Client, p tabPage, t target, 
 		parent = obj(content, "richGridRenderer")
 	}
 	next := x.entries(parent, &entries)
+	if limit > 0 && len(entries) > limit {
+		entries = entries[:limit]
+	}
+	page(entries)
 	visitor := str(p.data, "responseContext", "visitorData")
 	if visitor == "" {
 		visitor = p.visitor
 	}
-	entries, err := l.follow(ctx, hc, x, entries, next, limit, p.version, visitor)
+	entries, err := l.follow(ctx, hc, x, entries, next, limit, p.version, visitor, page)
 	if err != nil {
 		return nil, err
 	}
-	webpage := t.url
-	if t.list == "" {
-		webpage = "https://www.youtube.com" + t.path + "/" + want
-	}
-	return playlistJSON(m, title, webpage, entries), nil
+	header["entries"] = entries
+	return header, nil
 }
 
 // follow follows continuation tokens until limit entries are read (0: all), or the tokens
 // run out or come round again (_entries).
-func (l *Lister) follow(ctx context.Context, hc *http.Client, x extractor, entries []entry, next string, limit int, version, visitor string) ([]entry, error) {
+func (l *Lister) follow(ctx context.Context, hc *http.Client, x extractor, entries []entry, next string, limit int, version, visitor string, page func([]entry)) ([]entry, error) {
 	seen := map[string]bool{}
 	for pages := 0; next != "" && (limit == 0 || len(entries) < limit) && !seen[next] && pages < maxContinuations; pages++ {
 		seen[next] = true
@@ -412,14 +490,16 @@ func (l *Lister) follow(ctx context.Context, hc *http.Client, x extractor, entri
 			return nil, err
 		}
 		p := parseContinuation(root, x)
-		entries = append(entries, p.entries...)
+		got := p.entries
+		if limit > 0 {
+			got = got[:min(len(got), limit-len(entries))]
+		}
+		entries = append(entries, got...)
+		page(got)
 		next = p.next
 		if p.visitor != "" {
 			visitor = p.visitor
 		}
-	}
-	if limit > 0 && len(entries) > limit {
-		entries = entries[:limit]
 	}
 	if entries == nil {
 		entries = []entry{}
@@ -429,7 +509,7 @@ func (l *Lister) follow(ctx context.Context, hc *http.Client, x extractor, entri
 
 // playlist lists a playlist, as the browse API answers yt-dlp's reload of it with unavailable
 // videos shown (_reload_with_unavailable_videos).
-func (l *Lister) playlist(ctx context.Context, hc *http.Client, t target, limit int) (map[string]any, error) {
+func (l *Lister) playlist(ctx context.Context, hc *http.Client, t target, limit int, report onPage) (map[string]any, error) {
 	raw, err := callAPI(ctx, hc, l.base+browseAPI, map[string]any{"browseId": "VL" + t.list, "params": "wgYCCAA="}, "", "")
 	if err != nil {
 		return nil, err
@@ -441,12 +521,13 @@ func (l *Lister) playlist(ctx context.Context, hc *http.Client, t target, limit 
 	if obj(data, "metadata", "playlistMetadataRenderer") == nil && obj(data, "header", "playlistHeaderRenderer") == nil {
 		return nil, errNotHere("not laid out as a playlist")
 	}
-	return l.tab(ctx, hc, tabPage{data: data}, t, tabID(selectedTab(tabRenderers(data))), limit)
+	return l.tab(ctx, hc, tabPage{data: data}, t, tabID(selectedTab(tabRenderers(data))), limit, report)
 }
 
 // home lists a channel's home page: its Videos tab and, as yt-dlp does, its Live and Shorts
-// tabs, each a nested list. A channel with only videos is its Videos tab alone.
-func (l *Lister) home(ctx context.Context, hc *http.Client, t target, limit int) (map[string]any, error) {
+// tabs, each a nested list. A channel with only videos is its Videos tab alone. The other tabs
+// are read alongside the Videos tab, and handed on after it.
+func (l *Lister) home(ctx context.Context, hc *http.Client, t target, limit int, out *parts) (map[string]any, error) {
 	videos, err := l.page(ctx, hc, t.path+"/videos")
 	if err != nil {
 		return nil, err
@@ -464,6 +545,14 @@ func (l *Lister) home(ctx context.Context, hc *http.Client, t target, limit int)
 			extra = append(extra, id)
 		}
 	}
+	m := metadataFrom(t.id, videos.data)
+	top := playlistJSON(m, m.title, t.url, nil)
+	top["id"] = t.id // the link's own ID, not the channel's (playlist_result's playlist_id)
+	report := out.flat
+	if len(extra) > 0 {
+		out.top, out.nested = top, true
+		report = func(header map[string]any, es []entry) { out.send(header["title"].(string), es) }
+	}
 	// The other tabs are read while the Videos tab's further pages are.
 	results := make([]map[string]any, 1+len(extra))
 	errs := make([]error, len(results))
@@ -474,12 +563,12 @@ func (l *Lister) home(ctx context.Context, hc *http.Client, t target, limit int)
 			defer wg.Done()
 			p, err := l.page(ctx, hc, t.path+"/"+id)
 			if err == nil {
-				results[i+1], err = l.tab(ctx, hc, p, t, id, limit)
+				results[i+1], err = l.tab(ctx, hc, p, t, id, limit, nil)
 			}
 			errs[i+1] = err
 		}()
 	}
-	results[0], errs[0] = l.tab(ctx, hc, videos, t, "videos", limit)
+	results[0], errs[0] = l.tab(ctx, hc, videos, t, "videos", limit, report)
 	wg.Wait()
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
@@ -487,8 +576,9 @@ func (l *Lister) home(ctx context.Context, hc *http.Client, t target, limit int)
 	if len(extra) == 0 {
 		return results[0], nil
 	}
-	m := metadataFrom(t.id, videos.data)
-	top := playlistJSON(m, m.title, t.url, results)
-	top["id"] = t.id // the link's own ID, not the channel's (playlist_result's playlist_id)
+	for _, r := range results[1:] {
+		out.send(r["title"].(string), r["entries"].([]entry))
+	}
+	top["entries"] = results
 	return top, nil
 }

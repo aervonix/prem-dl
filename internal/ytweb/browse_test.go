@@ -139,7 +139,7 @@ func TestListsLikeYtdlp(t *testing.T) {
 	for _, c := range browseCases {
 		t.Run(c.name, func(t *testing.T) {
 			f, l := newFakeChannels(t, c.name)
-			got, err := l.List(context.Background(), Options{}, c.link, c.limit)
+			got, err := l.List(context.Background(), Options{}, c.link, c.limit, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -221,7 +221,7 @@ func TestLeavesOddPagesToYtdlp(t *testing.T) {
 		"no contents": page(map[string]any{"header": map[string]any{}}),
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, html) }))
-		_, err := NewListerAt(srv.URL).List(context.Background(), Options{}, "https://www.youtube.com/@x/streams", 10)
+		_, err := NewListerAt(srv.URL).List(context.Background(), Options{}, "https://www.youtube.com/@x/streams", 10, nil)
 		srv.Close()
 		if err == nil {
 			t.Errorf("%s: listed", name)
@@ -231,7 +231,7 @@ func TestLeavesOddPagesToYtdlp(t *testing.T) {
 
 func TestHomeReadsOtherTabsAlongside(t *testing.T) {
 	f, l := newFakeChannels(t, "home")
-	if _, err := l.List(context.Background(), Options{}, "https://www.youtube.com/@LofiGirl", 40); err != nil {
+	if _, err := l.List(context.Background(), Options{}, "https://www.youtube.com/@LofiGirl", 40, nil); err != nil {
 		t.Fatal(err)
 	}
 	sort.Strings(f.gets)
@@ -252,7 +252,65 @@ func TestUnreadablePlaylistIsLeftToYtdlp(t *testing.T) {
 		_, _ = io.WriteString(w, `{"alerts":[{"alertRenderer":{"type":"ERROR","text":{"runs":[{"text":"The playlist does not exist."}]}}}],"contents":{}}`)
 	}))
 	defer srv.Close()
-	if _, err := NewListerAt(srv.URL).List(context.Background(), Options{}, "https://www.youtube.com/playlist?list=PLnothing000", 0); err == nil {
+	if _, err := NewListerAt(srv.URL).List(context.Background(), Options{}, "https://www.youtube.com/playlist?list=PLnothing000", 0, nil); err == nil {
 		t.Error("listed")
 	}
+}
+
+// Read in parts, a listing is the same as read whole; and the first part comes before the
+// second request to YouTube, so it can be shown while the rest is read.
+func TestListsInParts(t *testing.T) {
+	for _, c := range browseCases {
+		t.Run(c.name, func(t *testing.T) {
+			f, l := newFakeChannels(t, c.name)
+			var parts []*ytdlp.ProbeResult
+			requestsAtFirst := -1
+			whole, err := l.List(context.Background(), Options{}, c.link, c.limit, func(p *ytdlp.ProbeResult) {
+				if parts == nil {
+					f.mu.Lock()
+					requestsAtFirst = len(f.gets) + len(f.posts)
+					f.mu.Unlock()
+				}
+				parts = append(parts, p)
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var joined []ytdlp.PlaylistEntry
+			for i, p := range parts {
+				if i == 0 {
+					first := *p.Playlist
+					all := *whole.Playlist
+					first.Entries, all.Entries = nil, nil
+					if p.Kind != whole.Kind || !reflect.DeepEqual(first, all) {
+						t.Errorf("first part's listing:\n got %+v\nwant %+v", first, all)
+					}
+				} else if len(p.Playlist.Entries) == 0 {
+					t.Errorf("part %d is empty", i+1)
+				}
+				joined = append(joined, p.Playlist.Entries...)
+			}
+			if !reflect.DeepEqual(joined, whole.Playlist.Entries) {
+				t.Errorf("%d entries in %d parts, %d read whole; first difference at %d", len(joined), len(parts), len(whole.Playlist.Entries), firstDiff(joined, whole.Playlist.Entries))
+			}
+			// A playlist's first part comes with its first answer; a channel's with its page
+			// (a home page's other tabs may have been asked for alongside).
+			want := 1
+			if c.name == "home" {
+				want = 3
+			}
+			if requestsAtFirst < 1 || requestsAtFirst > want {
+				t.Errorf("first part after %d requests", requestsAtFirst)
+			}
+		})
+	}
+}
+
+func firstDiff(a, b []ytdlp.PlaylistEntry) int {
+	for i := range min(len(a), len(b)) {
+		if !reflect.DeepEqual(a[i], b[i]) {
+			return i + 1
+		}
+	}
+	return min(len(a), len(b)) + 1
 }

@@ -543,10 +543,45 @@ export namespace main {
 		}
 	}
 	
+	export class ListingPart {
+	    entries: ytdlp.PlaylistEntry[];
+	    done: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ListingPart(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entries = this.convertValues(source["entries"], ytdlp.PlaylistEntry);
+	        this.done = source["done"];
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ProbeResponse {
 	    result?: ytdlp.ProbeResult;
 	    error?: apperr.AppError;
 	    cancelled: boolean;
+	    listing: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ProbeResponse(source);
@@ -557,6 +592,7 @@ export namespace main {
 	        this.result = this.convertValues(source["result"], ytdlp.ProbeResult);
 	        this.error = this.convertValues(source["error"], apperr.AppError);
 	        this.cancelled = source["cancelled"];
+	        this.listing = source["listing"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

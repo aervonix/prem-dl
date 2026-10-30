@@ -121,7 +121,7 @@ func TestIntegrationListsMatchYtdlp(t *testing.T) {
 	} {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		start := time.Now()
-		mine, err := l.List(ctx, Options{IPv4: ipv4}, c.link, c.limit)
+		mine, err := l.List(ctx, Options{IPv4: ipv4}, c.link, c.limit, nil)
 		ours := time.Since(start)
 		if err != nil {
 			cancel()

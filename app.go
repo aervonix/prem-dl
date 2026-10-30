@@ -72,6 +72,11 @@ type App struct {
 	searcher     *ytweb.Searcher    // reads YouTube's results without yt-dlp; see search.go
 	lister       *ytweb.Lister      // lists channels and playlists without yt-dlp; see listNative
 
+	// The Download page's listing being read; see listing.go.
+	listingMu  sync.Mutex
+	listing    *listing
+	listingSeq int64
+
 	bulkMu     sync.Mutex
 	bulkCancel context.CancelFunc // set while EnqueueLinks runs
 
@@ -384,12 +389,15 @@ type ProbeResponse struct {
 	Result    *ytdlp.ProbeResult `json:"result"`
 	Error     *apperr.AppError   `json:"error"`
 	Cancelled bool               `json:"cancelled"`
+	// Listing is set while the playlist's further entries are still being read; MoreEntries
+	// gives them (see listing.go). 0 when Result is complete.
+	Listing int64 `json:"listing"`
 }
 
 // Probe reads a link's metadata (single video, or a playlist's entries) without downloading.
 // Starting a new probe cancels the previous one.
 func (a *App) Probe(link string, noPlaylist bool) ProbeResponse {
-	return a.probe(&a.probeCancel, link, noPlaylist)
+	return a.probe(&a.probeCancel, link, noPlaylist, true)
 }
 
 // ProbeJob reads a queued download's video (its formats, subtitles...) for changing its options.
@@ -399,11 +407,13 @@ func (a *App) ProbeJob(id string) ProbeResponse {
 	if !ok {
 		return ProbeResponse{Error: apperr.New("no_job", "Download not found", "That download is no longer in the queue.", "", apperr.ActionNone)}
 	}
-	return a.probe(&a.jobProbe, j.URL, true)
+	return a.probe(&a.jobProbe, j.URL, true, false)
 }
 
-// probe runs one analysis, cancelling the one before it in the same slot.
-func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist bool) ProbeResponse {
+// probe runs one analysis, cancelling the one before it in the same slot. With stream, a
+// channel or playlist comes back as soon as its first page is read; the rest is read on until
+// the slot's next analysis or CancelProbe.
+func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist, stream bool) ProbeResponse {
 	ctx, cancel := context.WithCancel(a.root)
 	a.probeMu.Lock()
 	if *slot != nil {
@@ -411,10 +421,17 @@ func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist bool) Prob
 	}
 	*slot = cancel
 	a.probeMu.Unlock()
-	defer cancel()
 
-	if res, ok := a.listNative(ctx, link, 0); ok {
-		return ProbeResponse{Result: res}
+	if stream {
+		if res, id, ok := a.startListing(ctx, cancel, link); ok {
+			return ProbeResponse{Result: res, Listing: id} // the listing cancels ctx when it ends
+		}
+	}
+	defer cancel()
+	if !stream {
+		if res, ok := a.listNative(ctx, link, 0); ok {
+			return ProbeResponse{Result: res}
+		}
 	}
 	env, cleanup, err := a.buildEnv(ctx)
 	if err != nil {
@@ -442,7 +459,7 @@ func (a *App) listNative(ctx context.Context, link string, limit int) (*ytdlp.Pr
 	if s.ExtraArgs != "" || !ytweb.Handles(link) {
 		return nil, false
 	}
-	res, err := a.lister.List(ctx, ytweb.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, link, limit)
+	res, err := a.lister.List(ctx, ytweb.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, link, limit, nil)
 	if err != nil {
 		if ctx.Err() == nil {
 			a.warn("listing without yt-dlp failed, so yt-dlp lists it instead: " + err.Error())

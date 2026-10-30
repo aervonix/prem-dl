@@ -61,7 +61,13 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
     its web page's `ytInitialData` plus `browse` continuations (with the page's client version
     and visitor ID); a playlist is only the `browse` reload with unavailable videos shown
     (`VL<id>`, `params: wgYCCAA=`), which is all yt-dlp keeps of it. A home page reads its
-    Live and Shorts tabs alongside the Videos tab. 2-4x faster than yt-dlp. Anything yt-dlp
+    Live and Shorts tabs alongside the Videos tab. 2-4x faster than yt-dlp. YouTube gives a
+    channel 30 videos per request, strictly one after another (MrBeast's 1,009: 5.2 s; Linus Tech
+    Tips' 7,963: 57 s), so the Download page streams: `Probe` answers with the first page
+    (`ProbeResponse.Listing`), the page pulls the rest with `MoreEntries` (`listing.go`; pulled,
+    not events, so nothing arrives before the page knows the listing). `ytweb.Progress` hands
+    parts on in final order (a home page's Live and Shorts after its last video), so entry
+    numbers and ticks never shift. Anything yt-dlp
     treats specially (an error alert, a regional redirect, a missing tab, YouTube's home page,
     mixes, Watch later) is left to it, so its errors (`no_tab`...) reach the follow checks.
 - `internal/settings` – `Settings` + `DownloadOptions`, validation, atomic writes. Data lives in `%APPDATA%\yt-dlp-gui`.

@@ -321,6 +321,16 @@ export interface ProbeResponse {
   result: ProbeResult | null
   error: AppError | null
   cancelled: boolean
+  /** Set while the playlist's further entries are still being read: ask moreEntries for them. */
+  listing: number
+}
+
+/** The next entries of a playlist being read. */
+export interface ListingPart {
+  entries: PlaylistEntry[]
+  done: boolean
+  /** Why the rest couldn't be read, when done. */
+  error: string
 }
 
 export interface SearchResponse {
