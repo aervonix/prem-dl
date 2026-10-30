@@ -111,7 +111,7 @@ type Settings struct {
 	SleepInterval       float64         `json:"sleepInterval"` // seconds to wait before each download starts
 	UseArchive          bool            `json:"useArchive"`    // skip videos already downloaded before
 	Cookies             Cookies         `json:"cookies"`
-	HelperBrowser       string          `json:"helperBrowser"` // the browser the Chrome helper runs in; "" = the default one
+	HelperBrowser       string          `json:"helperBrowser"`    // the browser the Chrome helper runs in; "" = the default one
 	CheckAppUpdates     bool            `json:"checkAppUpdates"`  // look for new Prem-dl releases
 	Theme               string          `json:"theme"`            // system | light | dark
 	NotifySound         bool            `json:"notifySound"`      // a click when a download finishes
