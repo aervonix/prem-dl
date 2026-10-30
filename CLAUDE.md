@@ -147,7 +147,7 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
   `/update /D=<dir>`: it skips its pages, waits for the app to close and starts it again.
   Try the flow in dev with `$env:PREMDL_UPDATE_API` pointing at a fake API (dev builds only).
 - Editing Go files while `wails dev` runs triggers rebuilds that drop the bridge; wait for port 34115.
-- No C compiler on this machine, so `go test -race` is unavailable. Keep lock ordering simple
+- No C compiler on the Windows machine, so run `go test -race` on Linux (see below). Keep lock ordering simple
   (`lineHandler.mu` -> `Manager.mu` and `Manager.saveMu` -> `Manager.mu`, never the reverse).
   queue.json is encoded and written outside `Manager.mu`; don't move disk work back under it.
 
@@ -157,7 +157,31 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 - `scrollIntoView` and the browser tool's ref-clicks can scroll `overflow:hidden` ancestors, so they
   hide scroll bugs. Verify scrolling with real wheel events.
 
-## Environment notes
+## Linux
+
+Being ported (Ubuntu, Wails on WebKitGTK). Until it's done, `internal/sys` uses the `_other.go`
+stubs: no tray, autostart or `prem-dl:` links, and the tools still have Windows names.
+
+```bash
+sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.17.0     # keep in step with go.mod
+wails dev -tags webkit2_41        # every wails command needs this tag (only webkit2gtk 4.1 exists)
+wails build -tags webkit2_41      # -> build/bin/Prem-dl
+go test ./...; go vet ./...; gofmt -l app.go main.go tools.go internal
+GORACE=atexit_sleep_ms=0 go test -race ./...
+cd frontend && npm ci && npx tsc --noEmit && npm test
+YTGUI_INTEGRATION=1 YTGUI_YTDLP=/path/to/yt-dlp go test ./internal/queue ./internal/ytdlp -run Integration -v
+```
+
+- `wails doctor` asks for `libwebkit2gtk-4.0-dev`, which Ubuntu 24.04+ doesn't have; 4.1 plus the tag is right.
+- `wails dev` logs `Dev server request rejected: Host "wails.localhost:34115"` once: Vite's HMR socket
+  tries the page's host first, then connects to :5173 directly. Live reload still works; ignore it.
+  `tray icon unavailable` is the `_other.go` stub.
+- `GORACE=atexit_sleep_ms=0`: the queue tests run the test binary itself as a fake yt-dlp, and a race
+  build sleeps 1 s on exit, so `TestPauseAfterYtdlpExitedStillCompletes` pauses before "yt-dlp" exits.
+- Data folder: `~/.config/yt-dlp-gui` (`os.UserConfigDir`).
+
+## Windows environment notes
 
 - Go 1.27 and the Wails CLI were installed during setup. New shells need PATH refreshed:
   `$env:Path = [Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User') + ';' + $env:USERPROFILE + '\go\bin'`
