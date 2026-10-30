@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"yt-dlp-gui/internal/cookiebridge"
@@ -24,10 +25,88 @@ type ChromeHelperInfo struct {
 	Path        string `json:"path"`
 	ExtensionID string `json:"extensionId"`
 	ChromeFound bool   `json:"chromeFound"`
+	Browser     string `json:"browser"` // the browser the helper runs in: "Chrome" on Windows
 	Error       string `json:"error"`
 }
 
-func (a *App) chromeHelperDir() string { return filepath.Join(a.dataDir, "chrome-helper") }
+// Browser is a browser installed here, as the Cookies tab offers it: one to read cookies from,
+// and maybe one to run the helper in.
+type Browser struct {
+	ID    string `json:"id"` // chrome, helium, flatpak:com.google.Chrome, …
+	Label string `json:"label"`
+	// Family is the name yt-dlp knows it by (--cookies-from-browser), which also picks the key
+	// that decrypts its cookies.
+	Family string `json:"family"`
+	// Root is its profiles' folder when yt-dlp can't find it by Family; profiles are then passed
+	// as paths. Empty for browsers yt-dlp finds itself.
+	Root     string           `json:"root"`
+	Profiles []BrowserProfile `json:"profiles"` // found under Root
+	Helper   bool             `json:"helper"`   // a Chromium browser the helper can run in
+	Default  bool             `json:"default"`  // the system's default browser
+
+	command   []string // what starts it, with a URL appended
+	sandboxed bool     // a snap or Flatpak: it can't open hidden folders
+}
+
+// BrowserProfile is one profile folder of a browser.
+type BrowserProfile struct {
+	Path string `json:"path"`
+	Name string `json:"name"`
+}
+
+// helperBrowser is the browser the helper runs in: the one chosen in Settings, else the
+// system's default if it is Chromium-based, else the first found.
+func (a *App) helperBrowser() (Browser, bool) {
+	var first *Browser
+	var def *Browser
+	want := a.store.Get().HelperBrowser
+	browsers := detectBrowsers()
+	for i := range browsers {
+		b := &browsers[i]
+		if !b.Helper {
+			continue
+		}
+		if b.ID == want {
+			return *b, true
+		}
+		if first == nil {
+			first = b
+		}
+		if b.Default && def == nil {
+			def = b
+		}
+	}
+	switch {
+	case def != nil:
+		return *def, true
+	case first != nil:
+		return *first, true
+	}
+	return Browser{Label: "Chrome"}, false
+}
+
+// open starts the browser on url.
+func (b Browser) open(url string) error {
+	return startBrowser(exec.Command(b.command[0], append(b.command[1:], url)...))
+}
+
+// GetBrowsers lists the browsers installed here.
+func (a *App) GetBrowsers() []Browser {
+	browsers := detectBrowsers()
+	if browsers == nil {
+		browsers = []Browser{}
+	}
+	return browsers
+}
+
+func (a *App) chromeHelperDir() string {
+	if b, ok := a.helperBrowser(); ok && b.sandboxed {
+		if dir := sandboxedHelperDir(); dir != "" {
+			return dir
+		}
+	}
+	return filepath.Join(a.dataDir, "chrome-helper")
+}
 
 // writeChromeHelper copies the embedded extension to the data folder, replacing an older copy.
 func (a *App) writeChromeHelper() (string, error) {
@@ -49,27 +128,11 @@ func (a *App) writeChromeHelper() (string, error) {
 	return dir, err
 }
 
-// findChrome returns chrome.exe from its usual install locations.
-func findChrome() string {
-	for _, base := range []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("LOCALAPPDATA")} {
-		if base == "" {
-			continue
-		}
-		p := filepath.Join(base, "Google", "Chrome", "Application", "chrome.exe")
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	if p, err := exec.LookPath("chrome"); err == nil {
-		return p
-	}
-	return ""
-}
-
 // ChromeHelperSetup writes the helper extension to the data folder and opens that folder, ready
 // for chrome://extensions → Developer mode → Load unpacked.
 func (a *App) ChromeHelperSetup() ChromeHelperInfo {
-	info := ChromeHelperInfo{ExtensionID: cookiebridge.ExtensionID, ChromeFound: findChrome() != ""}
+	b, found := a.helperBrowser()
+	info := ChromeHelperInfo{ExtensionID: cookiebridge.ExtensionID, ChromeFound: found, Browser: b.Label}
 	dir, err := a.writeChromeHelper()
 	info.Path = dir
 	if err != nil {
@@ -80,23 +143,24 @@ func (a *App) ChromeHelperSetup() ChromeHelperInfo {
 	return info
 }
 
-// OpenChromeExtensions opens chrome://extensions, which Windows can't open as a plain link.
+// OpenChromeExtensions opens chrome://extensions, which can't be opened as a plain link.
 func (a *App) OpenChromeExtensions() error {
-	chrome := findChrome()
-	if chrome == "" {
-		return errors.New("couldn't find Chrome on this computer")
+	b, ok := a.helperBrowser()
+	if !ok {
+		return errors.New(strings.ToLower(noChromeMessage[:1]) + noChromeMessage[1:])
 	}
-	return exec.Command(chrome, "chrome://extensions").Start()
+	return b.open("chrome://extensions")
 }
 
 // GetChromeCookies opens the helper in Chrome, waits for the user to approve, and saves the
 // YouTube cookies it sends as the app's cookies.txt. CancelChromeCookies stops the wait.
 func (a *App) GetChromeCookies() CookieResponse {
 	fail := func(msg string) CookieResponse { return CookieResponse{Settings: a.store.Get(), Error: msg} }
-	chrome := findChrome()
-	if chrome == "" {
-		return fail("Couldn't find Chrome on this computer. Export a cookies.txt file instead.")
+	chrome, ok := a.helperBrowser()
+	if !ok {
+		return fail(noChromeMessage + ". Export a cookies.txt file instead.")
 	}
+	name := chrome.Label
 	// Keep the helper on disk current, so an older loaded copy picks up changes on reload.
 	if _, err := a.writeChromeHelper(); err != nil {
 		return fail("Couldn't prepare the Chrome helper: " + err.Error())
@@ -107,7 +171,7 @@ func (a *App) GetChromeCookies() CookieResponse {
 	if a.chromeCancel != nil {
 		a.chromeMu.Unlock()
 		cancel()
-		return fail("Already waiting for Chrome.")
+		return fail("Already waiting for " + name + ".")
 	}
 	a.chromeCancel = cancel
 	a.chromeMu.Unlock()
@@ -120,19 +184,19 @@ func (a *App) GetChromeCookies() CookieResponse {
 
 	session, err := cookiebridge.Listen()
 	if err != nil {
-		return fail("Couldn't start listening for Chrome: " + err.Error())
+		return fail("Couldn't start listening for " + name + ": " + err.Error())
 	}
-	if err := exec.Command(chrome, session.HelperURL()).Start(); err != nil {
-		return fail("Couldn't open Chrome: " + err.Error())
+	if err := chrome.open(session.HelperURL()); err != nil {
+		return fail("Couldn't open " + name + ": " + err.Error())
 	}
 	cookies, err := session.Wait(ctx, 20*time.Second, 2*time.Minute)
 	switch {
 	case errors.Is(err, cookiebridge.ErrNotOpened):
-		return fail("Chrome didn't show the cookie helper. Set it up first (steps below), in the Chrome profile you use for YouTube.")
+		return fail(name + " didn't show the cookie helper. Set it up first (steps below), in the " + name + " profile you use for YouTube.")
 	case errors.Is(err, cookiebridge.ErrDeclined):
 		return fail("Nothing was shared.")
 	case errors.Is(err, cookiebridge.ErrTimedOut):
-		return fail("No answer from Chrome within 2 minutes.")
+		return fail("No answer from " + name + " within 2 minutes.")
 	case errors.Is(err, context.Canceled):
 		return fail("Cancelled.")
 	case err != nil:
@@ -140,7 +204,7 @@ func (a *App) GetChromeCookies() CookieResponse {
 	}
 	data, n := cookiebridge.Netscape(cookies)
 	if n == 0 {
-		return fail("Chrome had no YouTube cookies. Sign in to YouTube in Chrome, then try again.")
+		return fail(name + " had no YouTube cookies. Sign in to YouTube in " + name + ", then try again.")
 	}
 	return a.importCookies(data)
 }

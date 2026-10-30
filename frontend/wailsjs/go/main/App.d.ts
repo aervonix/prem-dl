@@ -46,6 +46,8 @@ export function FollowFeed(arg1:follow.NewFeed):Promise<main.FeedResponse>;
 
 export function GetArchiveInfo():Promise<main.ArchiveInfo>;
 
+export function GetBrowsers():Promise<Array<main.Browser>>;
+
 export function GetChromeCookies():Promise<main.CookieResponse>;
 
 export function GetJobLog(arg1:string):Promise<Array<string>>;

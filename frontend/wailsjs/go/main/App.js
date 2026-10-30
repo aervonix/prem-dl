@@ -82,6 +82,10 @@ export function GetArchiveInfo() {
   return window['go']['main']['App']['GetArchiveInfo']();
 }
 
+export function GetBrowsers() {
+  return window['go']['main']['App']['GetBrowsers']();
+}
+
 export function GetChromeCookies() {
   return window['go']['main']['App']['GetChromeCookies']();
 }

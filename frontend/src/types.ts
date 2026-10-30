@@ -93,6 +93,8 @@ export interface Settings {
   sleepInterval: number
   useArchive: boolean
   cookies: Cookies
+  /** The browser the Chrome helper runs in (a Browser id); "" = the default one. */
+  helperBrowser: string
   /** Look for new Prem-dl releases. */
   checkAppUpdates: boolean
   theme: 'system' | 'light' | 'dark'
@@ -373,7 +375,30 @@ export interface ChromeHelperInfo {
   path: string
   extensionId: string
   chromeFound: boolean
+  /** The browser the helper runs in: "Chrome" on Windows. */
+  browser: string
   error: string
+}
+
+export interface BrowserProfile {
+  path: string
+  name: string
+}
+
+/** A browser installed here (GetBrowsers): to read cookies from, and maybe to run the helper in. */
+export interface Browser {
+  /** chrome, helium, flatpak:com.google.Chrome, … */
+  id: string
+  label: string
+  /** The name yt-dlp knows it by; it also picks the key that decrypts the cookies. */
+  family: string
+  /** Its profiles' folder when yt-dlp can't find it by name: profiles are then passed as paths. */
+  root: string
+  profiles: BrowserProfile[]
+  /** A Chromium browser the helper can run in. */
+  helper: boolean
+  /** The system's default browser. */
+  default: boolean
 }
 
 export interface CookieTest {

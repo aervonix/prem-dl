@@ -43,6 +43,8 @@ export type _Guards = [
   Expect<Guard<main.SettingsResponse, T.SettingsResponse>>,
   Expect<Guard<main.CookieResponse, T.CookieResponse>>,
   Expect<Guard<main.ChromeHelperInfo, T.ChromeHelperInfo>>,
+  Expect<Guard<main.Browser, T.Browser>>,
+  Expect<Guard<main.BrowserProfile, T.BrowserProfile>>,
   Expect<Guard<main.UpdateResult, T.UpdateResult>>,
   Expect<Guard<main.AppUpdate, T.AppUpdate>>,
   Expect<Guard<main.ArchiveInfo, T.ArchiveInfo>>,
@@ -123,6 +125,7 @@ export const api = {
   testCookies: () => cast<T.CookieTest>(App.TestCookies()),
   chromeHelperSetup: () => cast<T.ChromeHelperInfo>(App.ChromeHelperSetup()),
   openChromeExtensions: App.OpenChromeExtensions,
+  getBrowsers: () => cast<T.Browser[]>(App.GetBrowsers()),
   getChromeCookies: () => cast<T.CookieResponse>(App.GetChromeCookies()),
   cancelChromeCookies: App.CancelChromeCookies,
 
