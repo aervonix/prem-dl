@@ -112,3 +112,42 @@ func TestDownloadArgsFromInfoFile(t *testing.T) {
 		t.Errorf("the URL is read from the file, not given: %v", args)
 	}
 }
+
+func TestInfoCacheHas(t *testing.T) {
+	c := NewInfoCache()
+	at := time.Now()
+	c.now = func() time.Time { return at }
+	if c.Has("https://www.youtube.com/watch?v=abc") {
+		t.Fatal("empty cache has it")
+	}
+	c.Put("youtu.be/abc", probed(t, "Youtube", nil))
+	if !c.Has("https://www.youtube.com/watch?v=abc") || !c.Has("youtu.be/abc") {
+		t.Error("kept analysis not found")
+	}
+	at = at.Add(InfoTTL + time.Second)
+	if c.Has("https://www.youtube.com/watch?v=abc") {
+		t.Error("an old analysis counts")
+	}
+}
+
+func TestIsYouTubeVideo(t *testing.T) {
+	for link, want := range map[string]bool{
+		"https://www.youtube.com/watch?v=dQw4w9WgXcQ":      true,
+		"youtube.com/watch?v=dQw4w9WgXcQ&list=PLx&index=2": true,
+		"https://m.youtube.com/watch?v=dQw4w9WgXcQ":        true,
+		"https://music.youtube.com/watch?v=dQw4w9WgXcQ":    true,
+		"https://youtu.be/dQw4w9WgXcQ?si=x":                true,
+		"https://www.youtube.com/shorts/abc123":            true,
+		"https://www.youtube.com/live/abc123":              true,
+		"https://www.youtube.com/watch?list=PLx":           false,
+		"https://www.youtube.com/playlist?list=PLx":        false,
+		"https://www.youtube.com/@kurzgesagt":              false,
+		"https://www.youtube.com/@kurzgesagt/videos":       false,
+		"https://vimeo.com/76979871":                       false,
+		"https://notyoutube.com/watch?v=dQw4w9WgXcQ":       false,
+	} {
+		if got := IsYouTubeVideo(link); got != want {
+			t.Errorf("IsYouTubeVideo(%q) = %v", link, got)
+		}
+	}
+}

@@ -62,8 +62,10 @@ type App struct {
 	probeCancel context.CancelFunc
 	// jobProbe is ProbeJob's, apart from probeCancel so the Download page's analysis carries on.
 	jobProbe context.CancelFunc
-	// infos keeps recent analyses, so their downloads don't read each video's page again.
+	// infos keeps recent analyses, so their downloads don't read each video's page again;
+	// ahead adds analyses of the YouTube videos next in the queue (prefetch.go).
 	infos *ytdlp.InfoCache
+	ahead *prefetcher
 
 	browseMu     sync.Mutex
 	browseCancel context.CancelFunc // set while BrowseFeed lists a channel
@@ -133,13 +135,17 @@ func NewApp(launch launchArgs) *App {
 	}
 	a.root, a.stopAll = context.WithCancel(context.Background())
 	a.q = queue.New(queue.Deps{
-		Settings:  store.Get,
-		Env:       a.buildEnv,
-		Info:      a.infos.Take,
-		Emit:      a.emit,
-		Observe:   func(changed []queue.Job, removed []string) { a.act.observe(changed, removed) },
+		Settings: store.Get,
+		Env:      a.buildEnv,
+		Info:     a.infos.Take,
+		Emit:     a.emit,
+		Observe: func(changed []queue.Job, removed []string) {
+			a.act.observe(changed, removed)
+			a.ahead.wake()
+		},
 		StatePath: filepath.Join(dir, "queue.json"),
 	})
+	a.ahead = newPrefetcher(a.q.List, func() int { return a.store.Get().MaxConcurrent }, a.infos.Has, a.analyseAhead)
 	a.feeds = a.newFeeds()
 	a.act = newActivity(a.q.List(), 1200*time.Millisecond, a.updateShell, a.notifyFinished)
 	a.hidden.Store(launch.Background)
@@ -177,6 +183,7 @@ func (a *App) startup(ctx context.Context) {
 		a.restorePlacement(p)
 	}
 	a.q.Start()
+	go a.ahead.run(a.root)
 	a.feeds.Start()
 	a.applyTheme(a.store.Get().Theme)
 	a.detectOnce.Do(func() { go a.detectTools() })

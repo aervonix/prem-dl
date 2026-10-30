@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -108,6 +110,39 @@ func (c *InfoCache) Take(link string) (path string, done func()) {
 		return "", func() {}
 	}
 	return name, done
+}
+
+// Has reports whether a fresh analysis of link is kept.
+func (c *InfoCache) Has(link string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.pruneLocked()
+	_, ok := c.items[infoKey(link)]
+	return ok
+}
+
+// IsYouTubeVideo reports whether link is a single YouTube video (a watch, youtu.be, Shorts or
+// live link), the kind of link whose analysis the cache keeps.
+func IsYouTubeVideo(link string) bool {
+	norm, err := NormalizeURL(link)
+	if err != nil {
+		return false
+	}
+	u, err := url.Parse(norm)
+	if err != nil {
+		return false
+	}
+	host := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(u.Hostname()), "www."), "m.")
+	segs := strings.FieldsFunc(u.Path, func(r rune) bool { return r == '/' })
+	switch {
+	case host == "youtu.be":
+		return len(segs) == 1
+	case host != "youtube.com" && host != "music.youtube.com":
+		return false
+	case u.Path == "/watch":
+		return u.Query().Get("v") != ""
+	}
+	return len(segs) == 2 && (segs[0] == "shorts" || segs[0] == "live")
 }
 
 // Clear forgets everything, for when settings that change what a page returns (cookies, proxy,

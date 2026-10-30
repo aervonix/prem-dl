@@ -6,9 +6,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"yt-dlp-gui/internal/queue"
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/ytdlp"
 	"yt-dlp-gui/internal/ytweb"
@@ -144,5 +146,63 @@ func TestIntegrationProbeUsesTheChallengeSolver(t *testing.T) {
 			t.Fatalf("analysis %d didn't go through the solver (server %v)", i, srv != nil)
 		}
 		t.Logf("analysis %d: %d ms, %d requests solved so far", i, time.Since(start).Milliseconds(), srv.Solved())
+	}
+}
+
+// Opt-in: with one download at a time, the video second in line is analysed while the first
+// downloads, and starts from that analysis without reading its page.
+func TestIntegrationQueuedVideoStartsFromAnAnalysisMadeAhead(t *testing.T) {
+	a := fallbackApp(t)
+	s := a.store.Get()
+	s.DownloadDir = t.TempDir()
+	s.MaxConcurrent = 1
+	s.RateLimit = "2M" // the first download lasts long enough for the second to be analysed
+	if _, err := a.store.Set(s); err != nil {
+		t.Fatal(err)
+	}
+	a.q = queue.New(queue.Deps{
+		Settings: a.store.Get, Env: a.buildEnv, Info: a.infos.Take, Emit: func(string, any) {},
+		Observe: func([]queue.Job, []string) { a.ahead.wake() },
+	})
+	a.ahead = newPrefetcher(a.q.List, func() int { return a.store.Get().MaxConcurrent }, a.infos.Has, a.analyseAhead)
+	a.q.Start()
+	defer a.q.Shutdown()
+	go a.ahead.run(a.root)
+
+	opts := s.Defaults
+	opts.Preset = "360"
+	jobs, _, err := a.q.Add([]queue.NewJob{
+		{URL: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
+		{URL: "https://www.youtube.com/watch?v=9bZkp7q19f0"},
+	}, opts)
+	if err != nil || len(jobs) != 2 {
+		t.Fatalf("%v %v", jobs, err)
+	}
+	deadline := time.Now().Add(4 * time.Minute)
+	for _, j := range jobs {
+		for {
+			got, _ := a.q.Get(j.ID)
+			if got.Status == queue.StatusCompleted {
+				break
+			}
+			if got.Status == queue.StatusFailed || time.Now().After(deadline) {
+				t.Fatalf("%s: %s %+v\n%s", j.URL, got.Status, got.Error, strings.Join(a.q.Log(j.ID), "\n"))
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+	readPage := func(id string) bool {
+		for _, l := range a.q.Log(id) {
+			if strings.Contains(l, "Downloading webpage") {
+				return true
+			}
+		}
+		return false
+	}
+	if !readPage(jobs[0].ID) {
+		t.Error("the first download didn't read its page; this test can't tell the two apart")
+	}
+	if readPage(jobs[1].ID) {
+		t.Errorf("the second download read its page instead of the analysis made ahead:\n%s", strings.Join(a.q.Log(jobs[1].ID), "\n"))
 	}
 }
