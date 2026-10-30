@@ -314,3 +314,86 @@ func firstDiff(a, b []ytdlp.PlaylistEntry) int {
 	}
 	return min(len(a), len(b)) + 1
 }
+
+// A home page's later tabs come page by page too: Kurzgesagt's home is its Videos and Shorts
+// tabs (each recorded with a second page), and the Shorts' second page is only served once
+// their first page has reached the app. Handing a tab on whole, at its end, would never get there.
+func TestHomeHandsOnLaterTabsPageByPage(t *testing.T) {
+	fixture := func(c, name string) []byte { return readGz(t, filepath.Join("testdata", "browse", c, name)) }
+	videosPage, shortsPage := fixture("tab_videos", "page-videos.json.gz"), fixture("tab_shorts", "page-shorts.json.gz")
+	videosMore, shortsMore := fixture("tab_videos", "api-2.json.gz"), fixture("tab_shorts", "api-2.json.gz")
+	firstShorts := make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/@kurzgesagt/videos":
+			writePage(t, w, videosPage)
+		case r.URL.Path == "/@kurzgesagt/shorts":
+			writePage(t, w, shortsPage)
+		case r.Method == http.MethodPost:
+			var body struct {
+				Continuation string `json:"continuation"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			switch {
+			case body.Continuation != "" && strings.Contains(string(videosPage), body.Continuation):
+				_, _ = w.Write(videosMore)
+			case body.Continuation != "" && strings.Contains(string(shortsPage), body.Continuation):
+				select {
+				case <-firstShorts:
+					_, _ = w.Write(shortsMore)
+				case <-time.After(3 * time.Second):
+					http.Error(w, "the first Shorts never reached the app", http.StatusTeapot)
+				}
+			default:
+				_, _ = io.WriteString(w, `{"onResponseReceivedActions":[{"appendContinuationItemsAction":{"continuationItems":[]}}]}`)
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	var joined []ytdlp.PlaylistEntry
+	shortsParts := 0
+	whole, err := NewListerAt(srv.URL).List(context.Background(), Options{}, "https://www.youtube.com/@kurzgesagt", 60, func(p *ytdlp.ProbeResult) {
+		joined = append(joined, p.Playlist.Entries...)
+		if es := p.Playlist.Entries; len(es) > 0 && strings.HasSuffix(es[0].Group, "- Shorts") {
+			shortsParts++
+			once.Do(func() { close(firstShorts) })
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shortsParts < 2 {
+		t.Errorf("Shorts came in %d part(s)", shortsParts)
+	}
+	if !reflect.DeepEqual(joined, whole.Playlist.Entries) {
+		t.Errorf("%d entries in parts, %d read whole; first difference at %d", len(joined), len(whole.Playlist.Entries), firstDiff(joined, whole.Playlist.Entries))
+	}
+	// All the videos, then all the Shorts: entries are only ever added at the end.
+	groups := []string{}
+	for _, e := range joined {
+		if len(groups) == 0 || groups[len(groups)-1] != e.Group {
+			groups = append(groups, e.Group)
+		}
+	}
+	if want := []string{"Kurzgesagt – In a Nutshell - Videos", "Kurzgesagt – In a Nutshell - Shorts"}; !reflect.DeepEqual(groups, want) || len(joined) != 120 {
+		t.Errorf("%d entries in groups %q", len(joined), groups)
+	}
+}
+
+// writePage serves a recorded page (its ytcfg and ytInitialData) as YouTube's HTML.
+func writePage(t *testing.T, w io.Writer, raw []byte) {
+	t.Helper()
+	var page struct {
+		Ytcfg map[string]string `json:"ytcfg"`
+		Data  json.RawMessage   `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &page); err != nil {
+		t.Error(err)
+	}
+	cfg, _ := json.Marshal(page.Ytcfg)
+	fmt.Fprintf(w, `<script>ytcfg.set(%s);</script><script>var ytInitialData = %s;</script>`, cfg, page.Data)
+}

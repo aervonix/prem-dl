@@ -66,8 +66,9 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
     Tips' 7,963: 57 s), so the Download page streams: `Probe` answers with the first page
     (`ProbeResponse.Listing`), the page pulls the rest with `MoreEntries` (`listing.go`; pulled,
     not events, so nothing arrives before the page knows the listing). `ytweb.Progress` hands
-    parts on in final order (a home page's Live and Shorts after its last video), so entry
-    numbers and ticks never shift. Anything yt-dlp
+    parts on in final order (a home page's Live and Shorts after its last video, page by page
+    from a `pageQueue` each, since they are read alongside it), so entry numbers and ticks
+    never shift. Anything yt-dlp
     treats specially (an error alert, a regional redirect, a missing tab, YouTube's home page,
     mixes, Watch later) is left to it, so its errors (`no_tab`...) reach the follow checks.
 - `internal/settings` – `Settings` + `DownloadOptions`, validation, atomic writes. Data lives in `%APPDATA%\yt-dlp-gui`.

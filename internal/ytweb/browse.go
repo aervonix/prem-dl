@@ -526,7 +526,8 @@ func (l *Lister) playlist(ctx context.Context, hc *http.Client, t target, limit 
 
 // home lists a channel's home page: its Videos tab and, as yt-dlp does, its Live and Shorts
 // tabs, each a nested list. A channel with only videos is its Videos tab alone. The other tabs
-// are read alongside the Videos tab, and handed on after it.
+// are read alongside the Videos tab; their pages are handed on after it, in order, each as soon
+// as the tabs before it are done and it has been read.
 func (l *Lister) home(ctx context.Context, hc *http.Client, t target, limit int, out *parts) (map[string]any, error) {
 	videos, err := l.page(ctx, hc, t.path+"/videos")
 	if err != nil {
@@ -553,22 +554,35 @@ func (l *Lister) home(ctx context.Context, hc *http.Client, t target, limit int,
 		out.top, out.nested = top, true
 		report = func(header map[string]any, es []entry) { out.send(header["title"].(string), es) }
 	}
-	// The other tabs are read while the Videos tab's further pages are.
+
+	// The other tabs are read while the Videos tab's further pages are, and stop if it fails.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	results := make([]map[string]any, 1+len(extra))
 	errs := make([]error, len(results))
+	queues := make([]*pageQueue, len(extra))
 	var wg sync.WaitGroup
 	for i, id := range extra {
+		q := newPageQueue()
+		queues[i] = q
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer q.close()
 			p, err := l.page(ctx, hc, t.path+"/"+id)
 			if err == nil {
-				results[i+1], err = l.tab(ctx, hc, p, t, id, limit, nil)
+				results[i+1], err = l.tab(ctx, hc, p, t, id, limit, q.push)
 			}
 			errs[i+1] = err
 		}()
 	}
 	results[0], errs[0] = l.tab(ctx, hc, videos, t, "videos", limit, report)
+	if errs[0] == nil {
+		for _, q := range queues {
+			q.drain(out.send)
+		}
+	}
+	cancel()
 	wg.Wait()
 	if err := errors.Join(errs...); err != nil {
 		return nil, err
@@ -576,9 +590,56 @@ func (l *Lister) home(ctx context.Context, hc *http.Client, t target, limit int,
 	if len(extra) == 0 {
 		return results[0], nil
 	}
-	for _, r := range results[1:] {
-		out.send(r["title"].(string), r["entries"].([]entry))
-	}
 	top["entries"] = results
 	return top, nil
+}
+
+// pageQueue keeps a tab's pages, read alongside the tabs before it, until they can be handed on.
+type pageQueue struct {
+	mu    sync.Mutex
+	pages [][]entry
+	title string
+	done  bool
+	wake  chan struct{} // closed, and replaced, when a page comes or the tab is done
+}
+
+func newPageQueue() *pageQueue { return &pageQueue{wake: make(chan struct{})} }
+
+// push is the tab's onPage.
+func (q *pageQueue) push(header map[string]any, es []entry) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.title, _ = header["title"].(string)
+	q.pages = append(q.pages, es)
+	q.signal()
+}
+
+// close says the tab is done (or failed).
+func (q *pageQueue) close() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.done = true
+	q.signal()
+}
+
+func (q *pageQueue) signal() {
+	close(q.wake)
+	q.wake = make(chan struct{})
+}
+
+// drain hands on the tab's pages as they come, until it is done.
+func (q *pageQueue) drain(send func(group string, es []entry)) {
+	for {
+		q.mu.Lock()
+		pages, title, done, wake := q.pages, q.title, q.done, q.wake
+		q.pages = nil
+		q.mu.Unlock()
+		for _, es := range pages {
+			send(title, es)
+		}
+		if done {
+			return
+		}
+		<-wake
+	}
 }
