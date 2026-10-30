@@ -159,8 +159,9 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 
 ## Linux
 
-Being ported (Ubuntu, Wails on WebKitGTK). Downloads work; `internal/sys` still uses the
-`_other.go` stubs for the rest: no tray, autostart or `prem-dl:` links.
+Being ported (Ubuntu, Wails on WebKitGTK). Done: downloads, tray, notifications, `prem-dl:`
+links, start at sign-in, window size. Still Windows-only: the Chrome helper's setup (`chrome.go`)
+and Prem-dl's own updates. Linux code is in `*_linux.go`; `_other.go` covers the rest (macOS).
 
 ```bash
 sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
@@ -178,7 +179,6 @@ YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test ./interna
 - `wails doctor` asks for `libwebkit2gtk-4.0-dev`, which Ubuntu 24.04+ doesn't have; 4.1 plus the tag is right.
 - `wails dev` logs `Dev server request rejected: Host "wails.localhost:34115"` once: Vite's HMR socket
   tries the page's host first, then connects to :5173 directly. Live reload still works; ignore it.
-  `tray icon unavailable` is the `_other.go` stub.
 - `GORACE=atexit_sleep_ms=0`: the queue tests run the test binary itself as a fake yt-dlp, and a race
   build sleeps 1 s on exit, so `TestPauseAfterYtdlpExitedStillCompletes` pauses before "yt-dlp" exits.
 - Data folder: `~/.config/yt-dlp-gui` (`os.UserConfigDir`).
@@ -194,6 +194,25 @@ YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test ./interna
   Browsers fall back to IPv4 at once; yt-dlp hangs on each IPv6 address, so every YouTube read hits
   the 5-minute timeout. Settings → Network → Use IPv4 only (`ForceIPv4`, `--force-ipv4`) is for
   that; turn it on in the app here, and set `YTGUI_FORCE_IPV4=1` for the integration tests.
+
+**Desktop integration (`internal/sys/*_linux.go`)**
+- Tray (`shell_linux.go`): a StatusNotifierItem + com.canonical.dbusmenu written on godbus, not a
+  library: hiding is the "Passive" status, and the menu is rebuilt on `AboutToShow` like the Windows
+  one. GNOME shows it only with the AppIndicator extension (on in Ubuntu); without a tray
+  `StartShell` fails after 5 s and the page turns off close-to-tray (`noTray`).
+- Notifications (`notify_linux.go`) go straight to org.freedesktop.Notifications. Wails' own used
+  the exe's file name and wrote `~/.config/<exe name>/notification-categories.json`.
+- Whether the window is in front comes from the page (`SetWindowFocused`); GTK on Wayland can't say.
+- Desktop entries replace the registry (`desktop_linux.go`): `~/.local/share/applications/prem-dl.desktop`
+  (links, plus the dock's name and icon through `ProgramName: "prem-dl"`), `~/.config/autostart/prem-dl.desktop`,
+  icons in `~/.local/share/icons/hicolor`. `xdg-mime` silently does nothing when `$XDG_CONFIG_HOME`
+  is missing, and its generic mode ignores a default whose entry isn't in `mimeinfo.cache`
+  (`update-desktop-database`). Tests point the XDG variables at a temp dir; D-Bus tests start a
+  private `dbus-daemon`.
+- Wayland doesn't let apps read or set their window's position: only size and maximised are kept.
+  `WindowShow` is `gtk_window_present`, which GNOME honours for a link handed over by a second launch.
+- This machine is registered with `build/bin/Prem-dl` (the user's choice); a bundled build run from
+  there unpacks its tools into `~/.config/yt-dlp-gui/bin`.
 
 ## Windows environment notes
 
