@@ -186,6 +186,10 @@ YTGUI_INTEGRATION=1 YTGUI_YTDLP=/path/to/yt-dlp go test ./internal/queue ./inter
   after switching OS. yt-dlp's Linux ffmpeg builds are static only (177 MB each for ffmpeg and
   ffprobe) and come as tar.xz; `DownloadFFmpeg` repacks the two plus the licence into the same
   `ffmpeg.zip` layout (140 MB), so the app unpacks one format and needs no xz at runtime.
+- yt-dlp_linux is a PyInstaller launcher that unpacks 85 MB into `/tmp/_MEI*` on every run, and
+  `/tmp` is tmpfs (RAM) on Ubuntu. SIGKILL leaves that copy behind, so `KillTree` sends SIGTERM to
+  the group first and SIGKILL after 5 s, and every `CommandContext` run of yt-dlp uses
+  `sys.EndTreeOnCancel` (exec's default kills only the launcher; its child kept the pipes open).
 - This machine's network has broken IPv6 (an address and a route, but nothing gets through).
   Browsers fall back to IPv4 at once; yt-dlp hangs on each IPv6 address, so every YouTube read hits
   the 5-minute timeout. Run integration tests through a wrapper that adds `--force-ipv4`.

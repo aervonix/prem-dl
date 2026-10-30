@@ -40,6 +40,7 @@ func TestBrowserCookies(ctx context.Context, env Env) CookieTest {
 		"--simulate", "--retries", "0", "--socket-timeout", "3",
 		"--", "http://127.0.0.1:1/")
 	sys.Quiet(cmd)
+	sys.EndTreeOnCancel(cmd)
 	cmd.Env = childEnv()
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out

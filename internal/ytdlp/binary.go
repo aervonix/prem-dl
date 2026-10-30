@@ -93,6 +93,7 @@ func run(ctx context.Context, timeout time.Duration, path string, args ...string
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, args...)
 	sys.Quiet(cmd)
+	sys.EndTreeOnCancel(cmd)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

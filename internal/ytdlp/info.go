@@ -524,6 +524,7 @@ func readInfo(ctx context.Context, env Env, rawURL string, extra []string) (*Pro
 
 	cmd := exec.CommandContext(ctx, env.Bin, args...)
 	sys.Quiet(cmd)
+	sys.EndTreeOnCancel(cmd)
 	cmd.Env = childEnv()
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr

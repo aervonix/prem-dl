@@ -19,6 +19,9 @@ func Quiet(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 }
 
+// EndTreeOnCancel is for other systems: Windows keeps exec's default, which kills the process.
+func EndTreeOnCancel(cmd *exec.Cmd) {}
+
 // KillTree terminates a process and everything it spawned (yt-dlp starts ffmpeg).
 func KillTree(pid int) {
 	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(pid))
