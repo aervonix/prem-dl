@@ -6,7 +6,7 @@ import (
 
 	"yt-dlp-gui/internal/apperr"
 	"yt-dlp-gui/internal/ytdlp"
-	"yt-dlp-gui/internal/ytsearch"
+	"yt-dlp-gui/internal/ytweb"
 )
 
 // SearchResponse is a page of search results.
@@ -42,7 +42,7 @@ func (a *App) Search(query string, filter ytdlp.SearchFilter, first, count int) 
 	count = min(max(count, 1), 100)
 	s := a.store.Get()
 	if s.ExtraArgs == "" {
-		res, more, err := a.searcher.Search(ctx, ytsearch.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, query, filter, first, count)
+		res, more, err := a.searcher.Search(ctx, ytweb.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, query, filter, first, count)
 		switch {
 		case err == nil:
 			return SearchResponse{Result: res, More: more}

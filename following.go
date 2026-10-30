@@ -19,6 +19,9 @@ import (
 func (a *App) newFeeds() *follow.Manager {
 	return follow.New(follow.Deps{
 		List: func(ctx context.Context, link string, limit int) (*ytdlp.ProbeResult, error) {
+			if res, ok := a.listNative(ctx, link, limit); ok {
+				return res, nil
+			}
 			env, cleanup, err := a.buildEnv(ctx)
 			if err != nil {
 				return nil, err
@@ -123,6 +126,9 @@ func (a *App) BrowseFeed(id, tab string, limit int) ProbeResponse {
 	a.browseMu.Unlock()
 	defer cancel()
 
+	if res, ok := a.listNative(ctx, link, max(limit, 0)); ok {
+		return ProbeResponse{Result: res}
+	}
 	env, cleanup, err := a.buildEnv(ctx)
 	if err != nil {
 		return ProbeResponse{Error: toAppError(err)}

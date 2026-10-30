@@ -22,7 +22,7 @@ import (
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
 	"yt-dlp-gui/internal/ytdlp"
-	"yt-dlp-gui/internal/ytsearch"
+	"yt-dlp-gui/internal/ytweb"
 )
 
 const appVersion = "0.1.2"
@@ -69,7 +69,8 @@ type App struct {
 
 	searchMu     sync.Mutex
 	searchCancel context.CancelFunc // set while Search runs
-	searcher     *ytsearch.Searcher // reads YouTube's results without yt-dlp; see search.go
+	searcher     *ytweb.Searcher    // reads YouTube's results without yt-dlp; see search.go
+	lister       *ytweb.Lister      // lists channels and playlists without yt-dlp; see listNative
 
 	bulkMu     sync.Mutex
 	bulkCancel context.CancelFunc // set while EnqueueLinks runs
@@ -115,7 +116,8 @@ func NewApp(launch launchArgs) *App {
 		toolsFirst: make(chan struct{}),
 		launch:     launch,
 		infos:      ytdlp.NewInfoCache(),
-		searcher:   ytsearch.New(),
+		searcher:   ytweb.New(),
+		lister:     ytweb.NewLister(),
 	}
 	a.root, a.stopAll = context.WithCancel(context.Background())
 	a.q = queue.New(queue.Deps{
@@ -411,6 +413,9 @@ func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist bool) Prob
 	a.probeMu.Unlock()
 	defer cancel()
 
+	if res, ok := a.listNative(ctx, link, 0); ok {
+		return ProbeResponse{Result: res}
+	}
 	env, cleanup, err := a.buildEnv(ctx)
 	if err != nil {
 		return ProbeResponse{Error: toAppError(err)}
@@ -426,6 +431,25 @@ func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist bool) Prob
 	}
 	a.infos.Put(link, res)
 	return ProbeResponse{Result: res}
+}
+
+// listNative lists a YouTube channel tab, channel or playlist without yt-dlp (internal/ytweb),
+// as yt-dlp's -J --flat-playlist with --playlist-end=limit would (0 for all). ok is false when
+// yt-dlp has to: another kind of link, a page it handles differently (a missing tab, an error
+// YouTube shows), or extra yt-dlp arguments that could change how it reads the page.
+func (a *App) listNative(ctx context.Context, link string, limit int) (*ytdlp.ProbeResult, bool) {
+	s := a.store.Get()
+	if s.ExtraArgs != "" || !ytweb.Handles(link) {
+		return nil, false
+	}
+	res, err := a.lister.List(ctx, ytweb.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, link, limit)
+	if err != nil {
+		if ctx.Err() == nil {
+			a.warn("listing without yt-dlp failed, so yt-dlp lists it instead: " + err.Error())
+		}
+		return nil, false
+	}
+	return res, true
 }
 
 // CancelProbe aborts the analysis in progress, if any.
@@ -612,16 +636,19 @@ func inOrder[T any](n, limit int, work func(i int) T, use func(i int, r T)) {
 // channel's Playlists tab) are analysed in turn, one level deep; those that fail are reported
 // in failed without stopping the rest.
 func (a *App) bulkItems(ctx context.Context, link string, nested bool) (items []queue.NewJob, failed []LinkFailure, err error) {
-	env, cleanup, err := a.buildEnv(ctx)
-	if err != nil {
-		return nil, nil, err
+	res, ok := a.listNative(ctx, link, 0)
+	if !ok {
+		env, cleanup, err := a.buildEnv(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		res, err = ytdlp.Probe(ctx, env, link, false)
+		cleanup()
+		if err != nil {
+			return nil, nil, err
+		}
+		a.infos.Put(link, res)
 	}
-	res, err := ytdlp.Probe(ctx, env, link, false)
-	cleanup()
-	if err != nil {
-		return nil, nil, err
-	}
-	a.infos.Put(link, res)
 	switch res.Kind {
 	case "video":
 		v := res.Video

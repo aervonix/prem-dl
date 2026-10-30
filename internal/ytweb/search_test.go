@@ -1,4 +1,4 @@
-package ytsearch
+package ytweb
 
 import (
 	"context"
@@ -33,12 +33,12 @@ func newFake(t *testing.T, name string) (*fakeYouTube, *Searcher) {
 	f := &fakeYouTube{t: t, tokens: map[string]int{}}
 	_, now := expected(t, name)
 	for i := 1; ; i++ {
-		path := filepath.Join("testdata", name, "page"+strconv.Itoa(i)+".json.gz")
+		path := filepath.Join("testdata", "search", name, "page"+strconv.Itoa(i)+".json.gz")
 		if !exists(path) {
 			break
 		}
 		data := readGz(t, path)
-		p, err := parsePage(data, now)
+		p, err := parseSearch(data, extractor{now: now, dates: true})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -153,7 +153,7 @@ func TestFirstPageComesBackOnItsOwnAndTheNextIsReadAhead(t *testing.T) {
 		t.Errorf("client context: %v", client)
 	}
 	h := f.header[1]
-	if h.Get("X-Goog-Visitor-Id") != "fake-visitor" || h.Get("Cookie") != "SOCS=CAI" || h.Get("X-YouTube-Client-Version") != clientVersion {
+	if h.Get("X-Goog-Visitor-Id") != "fake-visitor" || h.Get("Cookie") != cookies || h.Get("X-YouTube-Client-Version") != clientVersion {
 		t.Errorf("headers: %v", h)
 	}
 }
@@ -218,7 +218,7 @@ func TestEndOfResults(t *testing.T) {
 	want := 0
 	_, now := expected(t, "videos")
 	for _, data := range f.pages {
-		p, _ := parsePage(data, now)
+		p, _ := parseSearch(data, extractor{now: now, dates: true})
 		want += len(p.entries)
 	}
 	if total != want {

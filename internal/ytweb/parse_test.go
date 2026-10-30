@@ -1,4 +1,4 @@
-package ytsearch
+package ytweb
 
 import (
 	"compress/gzip"
@@ -44,7 +44,7 @@ func expected(t *testing.T, name string) (entries []json.RawMessage, now time.Ti
 		Epoch   int64             `json:"epoch"`
 		Entries []json.RawMessage `json:"entries"`
 	}
-	if err := json.Unmarshal(readGz(t, filepath.Join("testdata", name, "expected.json.gz")), &exp); err != nil {
+	if err := json.Unmarshal(readGz(t, filepath.Join("testdata", "search", name, "expected.json.gz")), &exp); err != nil {
 		t.Fatal(err)
 	}
 	return exp.Entries, time.Unix(exp.Epoch, 0)
@@ -55,11 +55,11 @@ func pages(t *testing.T, name string, now time.Time) []entry {
 	t.Helper()
 	var all []entry
 	for i := 1; ; i++ {
-		path := filepath.Join("testdata", name, "page"+strconv.Itoa(i)+".json.gz")
+		path := filepath.Join("testdata", "search", name, "page"+strconv.Itoa(i)+".json.gz")
 		if !exists(path) {
 			break
 		}
-		p, err := parsePage(readGz(t, path), now)
+		p, err := parseSearch(readGz(t, path), extractor{now: now, dates: true})
 		if err != nil {
 			t.Fatalf("%s page %d: %v", name, i, err)
 		}

@@ -1,23 +1,16 @@
-// Package ytsearch reads YouTube's search results from its web API itself, without starting
-// yt-dlp. yt-dlp takes ~2.2 s for a page of results: its own start, a page fetched for its
-// client settings, then every page up to the one asked for, again on each "Show more". Here the
-// first page is one request (~0.7 s, most of it YouTube's), the session keeps its continuation
-// token, and the next page is read in the background while the first is looked at.
-//
-// The results are the JSON yt-dlp would print for them (see parse.go), read by
-// ytdlp.ParseProbe like yt-dlp's own. When anything here fails, callers search with yt-dlp.
-package ytsearch
+// YouTube search. yt-dlp takes ~2.2 s for a page of results: its own start, a page fetched for
+// its client settings, then every page up to the one asked for, again on each "Show more". Here
+// the first page is one request (~0.7 s, most of it YouTube's), the session keeps its
+// continuation token, and the next page is read in the background while the first is looked at.
+
+package ytweb
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
 	"net/http"
-	"net/url"
 	"slices"
 	"sync"
 	"time"
@@ -25,32 +18,19 @@ import (
 	"yt-dlp-gui/internal/ytdlp"
 )
 
-// The web client as yt-dlp 2026.10.26 describes it (INNERTUBE_CLIENTS["web"]). YouTube takes
-// versions months old; if it ever stops, searches fall back to yt-dlp.
 const (
-	clientName    = "WEB"
-	clientID      = "1"
-	clientVersion = "2.20260708.00.00"
-	userAgent     = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
-	searchAPI     = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false"
+	searchAPI = "https://www.youtube.com/youtubei/v1/search?prettyPrint=false"
 
 	// maxPages bounds the pages one call reads to reach the position asked for.
 	maxPages = 10
-	maxBody  = 16 << 20
 )
-
-// Options are the network settings a search honours.
-type Options struct {
-	Proxy string // "" for the system's
-	IPv4  bool   // connect over IPv4 only (Settings → Network)
-}
 
 // Searcher runs searches. It keeps the newest search's pages, so "Show more" continues from
 // where it stopped instead of reading every page again.
 type Searcher struct {
 	mu      sync.Mutex
 	current *session
-	clients map[Options]*http.Client
+	clients clients
 
 	api string           // replaced in tests
 	now func() time.Time // dates "3 years ago"
@@ -61,7 +41,7 @@ func New() *Searcher { return NewAt(searchAPI) }
 
 // NewAt returns a Searcher that asks api instead of YouTube's search endpoint, for tests.
 func NewAt(api string) *Searcher {
-	return &Searcher{clients: map[Options]*http.Client{}, api: api, now: time.Now}
+	return &Searcher{api: api, now: time.Now}
 }
 
 type session struct {
@@ -128,7 +108,7 @@ func (s *Searcher) session(o Options, query, params string, restart bool) *sessi
 		s.current.cancel()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s.current = &session{key: key, query: query, params: params, client: s.client(o),
+	s.current = &session{key: key, query: query, params: params, client: s.clients.get(o),
 		ctx: ctx, cancel: cancel, lock: make(chan struct{}, 1)}
 	return s.current
 }
@@ -159,10 +139,7 @@ func (s *Searcher) prefetch(sess *session, n int) {
 // read fetches the session's next page (its first, to begin with) and adds its results.
 // Call with sess.lock held.
 func (s *Searcher) read(ctx context.Context, sess *session) error {
-	body := map[string]any{"context": map[string]any{"client": map[string]any{
-		"clientName": clientName, "clientVersion": clientVersion,
-		"hl": "en", "timeZone": "UTC", "utcOffsetMinutes": 0,
-	}}}
+	body := map[string]any{}
 	if sess.started {
 		body["continuation"] = sess.next
 	} else {
@@ -171,37 +148,11 @@ func (s *Searcher) read(ctx context.Context, sess *session) error {
 			body["params"] = sess.params
 		}
 	}
-	data, err := json.Marshal(body)
+	raw, err := callAPI(ctx, sess.client, s.api, body, "", sess.visitor)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.api, bytes.NewReader(data))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", userAgent)
-	req.Header.Set("Origin", "https://www.youtube.com")
-	req.Header.Set("X-YouTube-Client-Name", clientID)
-	req.Header.Set("X-YouTube-Client-Version", clientVersion)
-	// Accepts YouTube's terms up front, as yt-dlp does, so EU visitors aren't sent to a consent page.
-	req.Header.Set("Cookie", "SOCS=CAI")
-	if sess.visitor != "" {
-		req.Header.Set("X-Goog-Visitor-Id", sess.visitor)
-	}
-	resp, err := sess.client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("YouTube answered %s", resp.Status)
-	}
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
-	if err != nil {
-		return err
-	}
-	p, err := parsePage(raw, s.now())
+	p, err := parseSearch(raw, extractor{now: s.now(), dates: true})
 	if err != nil {
 		return err
 	}
@@ -212,28 +163,6 @@ func (s *Searcher) read(ctx context.Context, sess *session) error {
 	}
 	sess.started = true
 	return nil
-}
-
-// client is an HTTP client for o, kept so searches reuse their connection to YouTube.
-func (s *Searcher) client(o Options) *http.Client {
-	if c, ok := s.clients[o]; ok {
-		return c
-	}
-	tr := http.DefaultTransport.(*http.Transport).Clone()
-	if o.Proxy != "" {
-		if u, err := url.Parse(o.Proxy); err == nil {
-			tr.Proxy = http.ProxyURL(u)
-		}
-	}
-	if o.IPv4 {
-		d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
-		tr.DialContext = func(ctx context.Context, _, addr string) (net.Conn, error) {
-			return d.DialContext(ctx, "tcp4", addr)
-		}
-	}
-	c := &http.Client{Transport: tr, Timeout: 30 * time.Second}
-	s.clients[o] = c
-	return c
 }
 
 // result wraps entries as yt-dlp's playlist JSON for a search and reads it with ParseProbe, the

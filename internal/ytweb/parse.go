@@ -1,4 +1,4 @@
-package ytsearch
+package ytweb
 
 import (
 	"encoding/json"
@@ -40,8 +40,8 @@ type thumb struct {
 	Height int    `json:"height,omitempty"`
 }
 
-// page is one answer of the search API: its results, the token for the next page ("" at the
-// end) and the visitor ID YouTube gave this session.
+// page is one answer of the search or browse API: its results, the token for the next page
+// ("" at the end) and the visitor ID YouTube gave this session.
 type page struct {
 	entries []entry
 	next    string
@@ -50,8 +50,8 @@ type page struct {
 
 var errLayout = errors.New("YouTube's answer isn't laid out as expected")
 
-// parsePage reads a search API answer. now dates "3 years ago".
-func parsePage(data []byte, now time.Time) (page, error) {
+// parseSearch reads a search API answer (_search_results).
+func parseSearch(data []byte, x extractor) (page, error) {
 	var root map[string]any
 	if err := json.Unmarshal(data, &root); err != nil {
 		return page{}, err
@@ -68,50 +68,140 @@ func parsePage(data []byte, now time.Time) (page, error) {
 		}
 		return page{}, errLayout
 	}
-	x := extractor{now: now}
-	for _, s := range sections {
-		isr := obj(s, "itemSectionRenderer")
-		if isr == nil {
-			continue
-		}
-		for _, c := range list(isr, "contents") {
-			item, ok := c.(map[string]any)
-			if !ok {
-				continue
-			}
-			x.item(item, &p.entries)
-		}
-	}
-	p.next = continuation(sections)
+	p.next = x.entries(map[string]any{"contents": sections}, &p.entries)
 	return p, nil
 }
 
-// continuation finds the next page's token among a page's sections (_extract_continuation).
-func continuation(sections []any) string {
-	for _, s := range sections {
-		ep := obj(s, "continuationItemRenderer", "continuationEndpoint")
-		if ep == nil {
-			ep = obj(s, "continuationItemRenderer", "button", "buttonRenderer", "command")
-		}
-		if ep == nil {
-			continue
-		}
-		for _, c := range list(ep, "commandExecutorCommand", "commands") {
-			if t := str(c, "continuationCommand", "token"); t != "" {
-				return t
+// parseContinuation reads a browse API answer to a continuation token (the loop in _entries):
+// the first item's kind says how the items are laid out.
+func parseContinuation(root map[string]any, x extractor) page {
+	p := page{visitor: str(root, "responseContext", "visitorData")}
+	var items []any
+	for _, key := range []string{"onResponseReceivedActions", "onResponseReceivedEndpoints"} {
+		for _, a := range list(root, key) {
+			if items = list(a, "appendContinuationItemsAction", "continuationItems"); items != nil {
+				break
 			}
 		}
-		if t := str(ep, "continuationCommand", "token"); t != "" {
-			return t
+		if items != nil {
+			break
+		}
+	}
+	first, _ := get(items, 0).(map[string]any)
+	for _, key := range sortedKeys(first) {
+		var parent map[string]any
+		switch key {
+		case "videoRenderer", "gridPlaylistRenderer", "gridVideoRenderer", "gridChannelRenderer", "lockupViewModel":
+			parent = map[string]any{"items": items}
+			x.grid(items, &p.entries)
+		case "playlistVideoRenderer":
+			parent = map[string]any{"contents": items}
+			x.playlistVideos(items, &p.entries)
+		case "itemSectionRenderer", "richItemRenderer":
+			parent = map[string]any{"contents": items}
+			p.next = x.entries(parent, &p.entries)
+		default:
+			continue
+		}
+		if p.next == "" {
+			p.next = continuationOf(parent)
+		}
+	}
+	if p.next == "" {
+		// Only a continuation came back: follow it.
+		p.next = continuationOf(map[string]any{"contents": []any{first}})
+	}
+	return p
+}
+
+// continuationOf finds the next page's token under a renderer (_extract_continuation).
+func continuationOf(r map[string]any) string {
+	if t := str(r, "continuations", 0, "nextContinuationData", "continuation"); t != "" {
+		return t
+	}
+	if t := str(r, "continuation", "reloadContinuationData", "continuation"); t != "" {
+		return t
+	}
+	for _, key := range []string{"contents", "items", "rows", "subThreads"} {
+		for _, c := range list(r, key) {
+			for _, ep := range []map[string]any{
+				obj(c, "continuationItemRenderer", "continuationEndpoint"),
+				obj(c, "continuationItemRenderer", "button", "buttonRenderer", "command"),
+				obj(c, "continuationItemViewModel", "continuationCommand", "innertubeCommand"),
+			} {
+				if ep == nil {
+					continue
+				}
+				for _, cmd := range list(ep, "commandExecutorCommand", "commands") {
+					if t := str(cmd, "continuationCommand", "token"); t != "" {
+						return t
+					}
+				}
+				if t := str(ep, "continuationCommand", "token"); t != "" {
+					return t
+				}
+			}
 		}
 	}
 	return ""
 }
 
-type extractor struct{ now time.Time }
+// extractor turns renderers into entries.
+type extractor struct {
+	now time.Time
+	// dates turns "3 years ago" into a timestamp, as yt-dlp's youtubetab:approximate_date does.
+	// Searches ask for it; listings, like the app's yt-dlp listings, don't.
+	dates bool
+}
 
-// item reads one entry of an itemSectionRenderer: the first renderer yt-dlp knows wins.
-func (x extractor) item(item map[string]any, out *[]entry) {
+func (x extractor) timestamp(text string) int64 {
+	if !x.dates {
+		return 0
+	}
+	return parseTimeText(text, x.now)
+}
+
+// entries reads the results under a parent renderer's contents and returns the next page's
+// token (_extract_entries).
+func (x extractor) entries(parent map[string]any, out *[]entry) (next string) {
+	for _, c := range list(parent, "contents") {
+		content, ok := c.(map[string]any)
+		if !ok {
+			continue
+		}
+		section := obj(content, "itemSectionRenderer")
+		if section == nil {
+			if rich := obj(content, "richItemRenderer"); rich != nil {
+				x.rich(rich, out)
+				next = continuationOf(parent)
+			}
+			continue
+		}
+		for _, sc := range list(section, "contents") {
+			item, ok := sc.(map[string]any)
+			if !ok {
+				continue
+			}
+			if r, n, ok := x.item(item, out); ok {
+				next = n
+				if n == "" {
+					next = continuationOf(r)
+				}
+			}
+		}
+		if next == "" {
+			next = continuationOf(section)
+		}
+	}
+	if next == "" {
+		next = continuationOf(parent)
+	}
+	return next
+}
+
+// item reads one entry of an itemSectionRenderer: the first renderer yt-dlp knows wins. It
+// returns that renderer, and the token a nested grid found.
+func (x extractor) item(item map[string]any, out *[]entry) (renderer map[string]any, next string, ok bool) {
 	for _, key := range sortedKeys(item) {
 		r, _ := item[key].(map[string]any)
 		if r == nil {
@@ -128,6 +218,10 @@ func (x extractor) item(item map[string]any, out *[]entry) {
 			x.grid(list(r, "items"), out)
 		case "shelfRenderer":
 			x.shelf(r, out)
+		case "playlistVideoListRenderer":
+			x.playlistVideos(list(r, "contents"), out)
+		case "richGridRenderer":
+			next = x.entries(r, out)
 		case "lockupViewModel":
 			if e, ok := x.lockup(r); ok {
 				*out = append(*out, e)
@@ -139,7 +233,72 @@ func (x extractor) item(item map[string]any, out *[]entry) {
 		default:
 			continue
 		}
+		return r, next, true
+	}
+	return nil, "", false
+}
+
+// rich reads a richItemRenderer, which channel tabs lay their videos out in (_rich_entries).
+func (x extractor) rich(r map[string]any, out *[]entry) {
+	if lvm := obj(r, "content", "lockupViewModel"); lvm != nil {
+		if e, ok := x.lockup(lvm); ok {
+			*out = append(*out, e)
+		}
 		return
+	}
+	var inner map[string]any
+	for _, key := range []string{"videoRenderer", "reelItemRenderer", "playlistRenderer", "shortsLockupViewModel"} {
+		if inner = obj(r, "content", key); inner != nil {
+			break
+		}
+	}
+	switch {
+	case inner == nil:
+	case str(inner, "videoId") != "":
+		*out = append(*out, x.video(inner))
+	case str(inner, "playlistId") != "":
+		id := str(inner, "playlistId")
+		*out = append(*out, entry{Type: "url", IEKey: "YoutubeTab", ID: id,
+			URL: "https://www.youtube.com/playlist?list=" + id, Title: text(inner["title"])})
+	case str(inner, "entityId") != "":
+		if e, ok := short(inner); ok {
+			*out = append(*out, e)
+		}
+	}
+}
+
+var shortTitleRe = regexp.MustCompile(`^(.+), (?:[\d,.]+(?:[KM]| million)?|No) views? - play Short$`)
+
+// short reads a shortsLockupViewModel, a Short on a channel's Shorts tab.
+func short(vm map[string]any) (entry, bool) {
+	id := str(vm, "onTap", "innertubeCommand", "reelWatchEndpoint", "videoId")
+	if id == "" {
+		return entry{}, false
+	}
+	e := entry{Type: "url", IEKey: "Youtube", ID: id, URL: "https://www.youtube.com/shorts/" + id,
+		Thumbnails: thumbnails(list(vm, "thumbnailViewModel", "thumbnailViewModel", "image", "sources"))}
+	e.Title = str(vm, "overlayMetadata", "primaryText", "content")
+	if e.Title == "" {
+		if m := shortTitleRe.FindStringSubmatch(str(vm, "accessibilityText")); m != nil {
+			e.Title = m[1]
+		}
+	}
+	if n, ok := parseCount(str(vm, "overlayMetadata", "secondaryText", "content")); ok {
+		e.ViewCount = &n
+	}
+	return e, true
+}
+
+// playlistVideos reads a playlist's videos (_playlist_entries).
+func (x extractor) playlistVideos(items []any, out *[]entry) {
+	for _, it := range items {
+		r := obj(it, "playlistVideoRenderer")
+		if r == nil {
+			r = obj(it, "playlistPanelVideoRenderer")
+		}
+		if r != nil && str(r, "videoId") != "" {
+			*out = append(*out, x.video(r))
+		}
 	}
 }
 
@@ -311,7 +470,7 @@ func (x extractor) video(r map[string]any) entry {
 	e := entry{
 		Type: "url", IEKey: "Youtube", ID: id, URL: link, Title: title, Duration: duration,
 		Thumbnails: thumbnails(list(r, "thumbnail", "thumbnails")),
-		Timestamp:  parseTimeText(timeText, x.now),
+		Timestamp:  x.timestamp(timeText),
 		LiveStatus: live,
 	}
 	e.Uploader = firstText(r, "ownerText", "shortBylineText")
@@ -450,7 +609,7 @@ func (x extractor) lockup(vm map[string]any) (entry, bool) {
 			e.ViewCount = &n
 		}
 	}
-	e.Timestamp = parseTimeText(relative, x.now)
+	e.Timestamp = x.timestamp(relative)
 	switch {
 	case durationText == "upcoming":
 		e.LiveStatus = "is_upcoming"

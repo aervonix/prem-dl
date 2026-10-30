@@ -1,8 +1,9 @@
-package ytsearch
+package ytweb
 
 import (
 	"context"
 	"os"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -83,11 +84,71 @@ func TestIntegrationMatchesYtdlp(t *testing.T) {
 	}
 }
 
-// thumbBase is a thumbnail link without its signed query, and without the A/B variant
-// (hq720_custom_1.jpg and hq720_custom_2.jpg are one picture slot).
+// thumbBase is a thumbnail link without its signed query, and without the variant YouTube
+// rotates between requests (hq720_custom_1.jpg and _custom_2 are one picture slot, as are a
+// Short's oar1.jpg and oar2.jpg).
 func thumbBase(u string) string {
 	u, _, _ = strings.Cut(u, "?")
-	return customThumbRe.ReplaceAllString(u, "")
+	return variantThumbRe.ReplaceAllString(u, "$1")
 }
 
-var customThumbRe = regexp.MustCompile(`_custom_\d+`)
+var variantThumbRe = regexp.MustCompile(`(_custom_|/oar)\d+`)
+
+// Opt-in: channel tabs, channels and playlists listed here and by yt-dlp, as the app lists them.
+func TestIntegrationListsMatchYtdlp(t *testing.T) {
+	bin := os.Getenv("YTGUI_YTDLP")
+	if os.Getenv("YTGUI_INTEGRATION") != "1" || bin == "" {
+		t.Skip("set YTGUI_INTEGRATION=1 and YTGUI_YTDLP=<path to yt-dlp> to run")
+	}
+	ipv4 := os.Getenv("YTGUI_FORCE_IPV4") == "1"
+	st := settings.Default()
+	st.ForceIPv4 = ipv4
+	env := ytdlp.Env{Bin: bin, Settings: st, JSRuntimes: ytdlp.DetectJSRuntimes(context.Background())}
+	l := NewLister()
+	for _, c := range []struct {
+		link  string
+		limit int
+	}{
+		{"https://www.youtube.com/@kurzgesagt/videos", 60},
+		{"https://www.youtube.com/@kurzgesagt/shorts", 60},
+		{"https://www.youtube.com/@LofiGirl/streams", 30},
+		{"https://www.youtube.com/@kurzgesagt/playlists", 0},
+		{"https://www.youtube.com/@LofiGirl", 30},
+		{"https://www.youtube.com/channel/UCsXVk37bltHxD1rDPwtNM8Q", 30},
+		{"https://www.youtube.com/playlist?list=UUsXVk37bltHxD1rDPwtNM8Q", 150},
+		{"https://www.youtube.com/playlist?list=PLFs4vir_WsTyXrrpFstD64Qj95vpy-yo1", 0},
+	} {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		start := time.Now()
+		mine, err := l.List(ctx, Options{IPv4: ipv4}, c.link, c.limit)
+		ours := time.Since(start)
+		if err != nil {
+			cancel()
+			t.Errorf("%s: %v", c.link, err)
+			continue
+		}
+		start = time.Now()
+		theirs, err := ytdlp.List(ctx, env, c.link, c.limit)
+		cancel()
+		if err != nil {
+			t.Fatalf("%s with yt-dlp: %v", c.link, err)
+		}
+		t.Logf("%-62s ours %4d ms, yt-dlp %4d ms, %d entries", c.link, ours.Milliseconds(), time.Since(start).Milliseconds(), len(mine.Playlist.Entries))
+		g, w := *mine.Playlist, *theirs.Playlist
+		if len(g.Entries) != len(w.Entries) {
+			t.Errorf("%s: %d entries, yt-dlp %d", c.link, len(g.Entries), len(w.Entries))
+		}
+		for i := range min(len(g.Entries), len(w.Entries)) {
+			ge, we := g.Entries[i], w.Entries[i]
+			ge.ViewCount, we.ViewCount = 0, 0 // counts move between the two requests
+			ge.Thumbnail, we.Thumbnail = thumbBase(ge.Thumbnail), thumbBase(we.Thumbnail)
+			if ge != we {
+				t.Errorf("%s, entry %d:\n ours   %+v\n yt-dlp %+v", c.link, i+1, ge, we)
+			}
+		}
+		g.Entries, w.Entries = nil, nil
+		if mine.Kind != theirs.Kind || !reflect.DeepEqual(g, w) {
+			t.Errorf("%s:\n ours   %+v\n yt-dlp %+v", c.link, g, w)
+		}
+	}
+}

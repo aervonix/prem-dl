@@ -22,7 +22,7 @@ cd frontend; npx tsc --noEmit; npm test             # vitest: format.ts, store.t
 wails generate module     # REQUIRED after changing any Go struct that crosses to the UI
 # opt-in tests against real yt-dlp + internet:
 $env:YTGUI_INTEGRATION="1"; $env:YTGUI_YTDLP="C:\Code\yt-dlp-gui\yt-dlp.exe"
-go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytsearch -run Integration -v
+go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -run Integration -v
 ```
 
 ## Layout
@@ -46,15 +46,24 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytsearc
   replaces it, newer or older. `RepairTools` unpacks again. The main UI doesn't name yt-dlp (one
   version line in Settings → Updates is for bug reports); errors say "Prem-dl" and `ActionUpdate`
   means "check for a new Prem-dl".
-- `search.go` + `internal/ytsearch` – YouTube search without yt-dlp: POSTs to the web client's
-  `youtubei/v1/search` API (no API key or config page needed), one page per request (~0.7 s,
-  against ~2.2 s through yt-dlp), keeps the continuation token per search and reads the next
-  page ahead. `parse.go` mirrors yt-dlp's search extractor and emits yt-dlp's flat-entry JSON,
-  read by `ytdlp.ParseProbe`. Any failure falls back to `internal/ytdlp/search.go` (a
-  `youtube.com/results` link read like a playlist, `--playlist-items=N:M`), as do users with
-  extra yt-dlp arguments. A call can return fewer than asked (it stops at 3/4 of `count`);
-  `SearchResponse.More` says whether there are more. Results are `PlaylistEntry`s shown by
-  `pages/SearchPage.tsx` in the shared `VideoGrid`.
+- `internal/ytweb` – YouTube read without yt-dlp, for what doesn't need it. `parse.go` mirrors
+  yt-dlp's YouTube extractors (`_tab.py`) and emits yt-dlp's flat-entry JSON, read by
+  `ytdlp.ParseProbe`; any failure falls back to yt-dlp, as do users with extra yt-dlp arguments.
+  - Search (`search.go` + `ytweb/search.go`): POSTs to the web client's `youtubei/v1/search` API
+    (no API key or config page needed), one page per request (~0.7 s, against ~2.2 s through
+    yt-dlp), keeps the continuation token per search and reads the next page ahead. A call can
+    return fewer than asked (it stops at 3/4 of `count`); `SearchResponse.More` says whether
+    there are more. Fallback: `internal/ytdlp/search.go` (a `youtube.com/results` link read like
+    a playlist, `--playlist-items=N:M`). Shown by `pages/SearchPage.tsx` in the shared `VideoGrid`.
+  - Listings (`ytweb/browse.go`, `App.listNative`): channel tabs (videos, shorts, streams,
+    playlists), channel home pages and `PL`/`UU`/`OL`/`FL` playlists, for the channel view,
+    follow checks, the Download page and bulk adds (`ytweb.Handles` says which links). A tab is
+    its web page's `ytInitialData` plus `browse` continuations (with the page's client version
+    and visitor ID); a playlist is only the `browse` reload with unavailable videos shown
+    (`VL<id>`, `params: wgYCCAA=`), which is all yt-dlp keeps of it. A home page reads its
+    Live and Shorts tabs alongside the Videos tab. 2-4x faster than yt-dlp. Anything yt-dlp
+    treats specially (an error alert, a regional redirect, a missing tab, YouTube's home page,
+    mixes, Watch later) is left to it, so its errors (`no_tab`...) reach the follow checks.
 - `internal/settings` – `Settings` + `DownloadOptions`, validation, atomic writes. Data lives in `%APPDATA%\yt-dlp-gui`.
 - `internal/sys` – hidden consoles, process-tree kill (`taskkill /T`), open/reveal in Explorer, the tray
   icon + taskbar progress (`shell_windows.go`, raw Win32/COM on its own thread), per-user registry entries.
@@ -118,11 +127,13 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytsearc
 - A missing tab is `This channel does not have a shorts tab` (`no_tab`, skipped when other tabs are
   checked). A wrong/deleted channel says `Playlists that require authentication may not extract
   correctly...`, not 404 (`page_unreadable`, matched before the generic sign-in rule).
-- `internal/ytsearch/testdata` holds real pages (yt-dlp `--write-pages`, trimmed to what a parser
-  reads) next to yt-dlp's `-J` output for them; `TestParsesLikeYtdlp` requires identical
-  `PlaylistEntry`s. When YouTube changes its layout, capture new ones the same way. Two
-  identical searches share as few as 4 of 20 results, and titles/thumbnails are A/B tested,
-  so live comparisons check only what both return. The first page of an anonymous search
+- `internal/ytweb/testdata` holds real pages (yt-dlp `--write-pages`, trimmed to what a parser
+  reads) next to yt-dlp's `-J` output for them: `search/` for searches, `browse/` for listings
+  (each page's `ytInitialData` and `ytcfg`, the API answers in order; a fake YouTube replays
+  them). `TestParsesLikeYtdlp`/`TestListsLikeYtdlp` require identical `PlaylistEntry`s. When
+  YouTube changes its layout, capture new ones the same way. Two identical searches share as
+  few as 4 of 20 results; titles and thumbnails are A/B tested (`_custom_N`, a Short's
+  `oarN.jpg`), so live comparisons check only what both return. The first page of an anonymous search
   carries `visitorData`, sent back as `X-Goog-Visitor-Id`; `clientVersion` is yt-dlp's.
 - Search filters go in the results link's `sp` parameter (and the API's `params`), a protobuf
   `{2: {1: date, 2: type, 3: length}}` (`ytdlp.SearchParams`). YouTube still honours those, but ignores its sort orders (date, views) since
@@ -194,7 +205,7 @@ unzip -qo bundle/yt-dlp.zip -d yt-dlp.d && ln -sf yt-dlp.d/yt-dlp_linux yt-dlp  
 go test ./...; go vet ./...; gofmt -l app.go main.go tools.go internal
 GORACE=atexit_sleep_ms=0 go test -race ./...
 cd frontend && npm ci && npx tsc --noEmit && npm test
-YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytsearch -run Integration -v
+YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -run Integration -v
 scripts/release.sh [--skip-fetch]  # build/release: prem-dl_<v>_amd64.deb, Prem-dl-x86_64.AppImage, SHA256SUMS-linux.txt
 ```
 
