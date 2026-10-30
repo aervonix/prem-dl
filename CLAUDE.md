@@ -159,9 +159,9 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
 
 ## Linux
 
-Being ported (Ubuntu, Wails on WebKitGTK). Done: downloads, tray, notifications, `prem-dl:`
-links, start at sign-in, window size, cookies and the Chrome helper. Still Windows-only:
-Prem-dl's own updates and the release scripts. Linux code is in `*_linux.go`; `_other.go` covers the rest (macOS).
+Ported (Ubuntu, Wails on WebKitGTK): downloads, tray, notifications, `prem-dl:` links, start
+at sign-in, window size, cookies and the Chrome helper, packages. Linux copies don't update
+themselves: the check counts only releases with a Linux file and opens the release page. Linux code is in `*_linux.go`; `_other.go` covers the rest (macOS).
 
 ```bash
 sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
@@ -174,6 +174,7 @@ go test ./...; go vet ./...; gofmt -l app.go main.go tools.go internal
 GORACE=atexit_sleep_ms=0 go test -race ./...
 cd frontend && npm ci && npx tsc --noEmit && npm test
 YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test ./internal/queue ./internal/ytdlp -run Integration -v
+scripts/release.sh [--skip-fetch]  # build/release: prem-dl_<v>_amd64.deb, Prem-dl-x86_64.AppImage, SHA256SUMS-linux.txt
 ```
 
 - `wails doctor` asks for `libwebkit2gtk-4.0-dev`, which Ubuntu 24.04+ doesn't have; 4.1 plus the tag is right.
@@ -224,6 +225,16 @@ YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test ./interna
 - The helper runs in `helperBrowser` (Settings), else the default browser if Chromium-based, else
   the first found; it is started in its own session (`startBrowser`). Snap/Flatpak browsers get the
   helper in `~/Prem-dl helper`, since they can't open hidden folders (untested: none here).
+**Packages (`scripts/release.sh`)**
+- Both use the system's WebKitGTK 4.1 (bundling WebKit is large and fragile); the binary needs
+  glibc 2.34, so a build here runs on Ubuntu 22.04+ and Debian 12+. Releases carry
+  `SHA256SUMS-linux.txt` beside Windows' `SHA256SUMS.txt`, which the Windows updater reads.
+- The .deb installs `/usr/bin/prem-dl` as a real file and its entry's Exec is exactly
+  `/usr/bin/prem-dl %u`: the app compares it with `sys.SchemeCommand(os.Executable())` and writes
+  a user entry when they differ. It skips its own icons when a package installed them (`SystemIcon`).
+- The AppImage registers `$APPIMAGE` (its mount moves every start). `appimagetool` is downloaded
+  to `build/tools` and run with `APPIMAGE_EXTRACT_AND_RUN=1`. The script sets `umask 022`; this
+  machine's 002 made package files group-writable.
 - Tested with Helium (ungoogled-chromium based): Load unpacked, Get cookies, right-click
   Download with Prem-dl, with the app running and not.
 - This machine is registered with `build/bin/Prem-dl` (the user's choice); a bundled build run from

@@ -1,6 +1,6 @@
 # Prem-dl
 
-Prem-dl is a Windows desktop app for downloading video and audio with
+Prem-dl is a desktop app for Windows and Linux for downloading video and audio with
 [yt-dlp](https://github.com/yt-dlp/yt-dlp). Paste a link, check what you're about to get, pick a
 quality and hit Download. It handles the parts of yt-dlp that are fiddly on the command line:
 playlists, queues, cookies and subtitles. yt-dlp and ffmpeg are built in, and each release of
@@ -66,7 +66,19 @@ yt-dlp and ffmpeg built in, so there's nothing else to get.
 - **`Prem-dl.exe`** (about 118 MB) is the app on its own, with nothing to install. Put it in a
   folder of its own and start it. To update it, download the new one from the release page.
 
-Neither is code-signed, so Windows SmartScreen may say it's from an unknown publisher the first
+On Linux (Ubuntu 22.04 or newer, Debian 12 or newer, and others with WebKitGTK 4.1), the
+release has two more:
+
+- **`prem-dl_<version>_amd64.deb`** installs Prem-dl for Debian and Ubuntu:
+  `sudo apt install ./prem-dl_<version>_amd64.deb`. It brings in what it needs.
+- **`Prem-dl-x86_64.AppImage`** is the app on its own. Make it executable (`chmod +x`) and start
+  it; it needs the system's WebKitGTK (`sudo apt install libwebkit2gtk-4.1-0` on Ubuntu). On its
+  first start it adds itself to the app menu and to `prem-dl:` links.
+
+The Linux files are listed in `SHA256SUMS-linux.txt`. Linux copies don't update themselves: when
+a new version is out, Prem-dl says so and opens its release page.
+
+Neither Windows file is code-signed, so Windows SmartScreen may say it's from an unknown publisher the first
 time. Click **More info**, then **Run anyway**. The release notes list each file's SHA-256 if you
 want to check it first. (Or build it yourself, see below.)
 
@@ -75,6 +87,9 @@ or QuickJS installed, the app finds it and uses it.
 
 Your downloads go to your Downloads folder unless you change it in Settings. Each download can
 also go somewhere else via the "Save to" field under More options.
+
+On Linux, the tray icon needs a desktop with a tray. Ubuntu has one; on plain GNOME, turn on the
+AppIndicator extension. Without one, closing the window quits Prem-dl.
 
 ## YouTube Premium and cookies
 
@@ -111,6 +126,12 @@ A few things worth knowing:
 If you'd rather not use the extension, you can export a `cookies.txt` file with any "cookies.txt"
 browser extension and import it, or read cookies straight from Firefox, which still works.
 
+On Linux, Prem-dl reads cookies straight from Chrome and other Chrome-based browsers as well
+(Settings → Cookies → From a browser), so the helper is optional there. It lists the browsers it
+finds, including ones yt-dlp doesn't know by name, such as Helium or a Flatpak Chrome. The helper
+still adds **Download with Prem-dl** to the browser, and works in whichever Chrome-based browser
+you pick.
+
 When Best is going to download a Premium stream, the quality picker shows a small "Premium" label
 above it. YouTube sometimes serves Premium streams without signing in too, so you may see the
 label even with cookies turned off.
@@ -133,8 +154,8 @@ from the new place updates that.
 
 ## Where things are kept
 
-Settings, the queue, imported cookies and the unpacked tools live in `%APPDATA%\yt-dlp-gui` (the
-folder kept its old name so existing setups carry over). Settings → Advanced has a button that
+Settings, the queue, imported cookies and the unpacked tools live in `%APPDATA%\yt-dlp-gui`
+(`~/.config/yt-dlp-gui` on Linux; the folder kept its old name so existing setups carry over). Settings → Advanced has a button that
 opens it.
 
 Windows can't run a program from inside another, so on start Prem-dl unpacks its built-in yt-dlp
@@ -184,6 +205,16 @@ It fetches the newest yt-dlp and ffmpeg first (`-SkipFetch` reuses `bundle\`), c
 built-in tools unpack, then builds both files with them inside. That fetch is the only time
 yt-dlp's version changes. The installer is `build\windows\installer\project.nsi`.
 
+On Linux (Ubuntu 24.04 or newer) you'll also need
+`sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`, and every
+`wails` command takes `-tags webkit2_41`:
+
+```bash
+wails dev -tags webkit2_41
+go run ./cmd/bundle && wails build -tags "webkit2_41 bundled" -trimpath
+scripts/release.sh    # build/release: the .deb, the AppImage and SHA256SUMS-linux.txt
+```
+
 Run the tests with:
 
 ```powershell
@@ -217,13 +248,14 @@ internal/ytdlp              finding and fetching yt-dlp, analysing links,
 internal/queue              scheduling, process control, saving the queue, UI events
 internal/apperr             turning yt-dlp output into errors with a suggested fix
 internal/settings           settings and per-download options, validation, safe saves
-internal/sys                Windows process handling, opening files and folders
+internal/sys                processes, files and folders, tray, notifications, sign-in start,
+                            link registration (Windows registry, Linux desktop entries)
 frontend/src                the interface (api.ts is the only file that talks to Go)
 ```
 
 ## Limitations
 
-- Windows only. That's what it's built and tested on.
+- Windows and Linux (x86-64) only. Linux is tested on Ubuntu with GNOME.
 - Premium streams depend on what YouTube offers for a given video and account, which can change.
 - It's only as good as yt-dlp. If a site changes and downloads break, the fix arrives with the next
   Prem-dl release that carries a newer yt-dlp.
