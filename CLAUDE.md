@@ -237,8 +237,9 @@ scripts/release.sh [--skip-fetch]  # build/release: prem-dl_<v>_amd64.deb, Prem-
   machine's 002 made package files group-writable.
 - Tested with Helium (ungoogled-chromium based): Load unpacked, Get cookies, right-click
   Download with Prem-dl, with the app running and not.
-- This machine is registered with `build/bin/Prem-dl` (the user's choice); a bundled build run from
-  there unpacks its tools into `~/.config/yt-dlp-gui/bin`.
+- This machine has a test `.deb` installed (`/usr/bin/prem-dl`), whose entry handles `prem-dl:`.
+  Starting `build/bin/Prem-dl` writes a user entry that overrides it until removed. GNOME Shell
+  doesn't notice a package entry that a removed user entry was hiding until the user signs in again.
 
 ## Windows environment notes
 
