@@ -183,16 +183,25 @@ func DetectJSRuntimes(ctx context.Context) []JSRuntime {
 	}
 	var found []JSRuntime
 	for _, c := range candidates {
-		p, err := exec.LookPath(c.exe)
-		if err != nil {
-			continue
+		for _, p := range runtimePaths(c.exe) {
+			if c.name == "node" && !nodeNewEnough(ctx, p) {
+				continue
+			}
+			found = append(found, JSRuntime{Name: c.name, Path: p})
+			break
 		}
-		if c.name == "node" && !nodeNewEnough(ctx, p) {
-			continue
-		}
-		found = append(found, JSRuntime{Name: c.name, Path: p})
 	}
 	return found
+}
+
+// runtimePaths is where a runtime may be, best first: on PATH, then where per-user installers
+// put it (userRuntimePaths).
+func runtimePaths(exe string) []string {
+	var paths []string
+	if p, err := exec.LookPath(exe); err == nil {
+		paths = append(paths, p)
+	}
+	return append(paths, userRuntimePaths(exe)...)
 }
 
 func nodeNewEnough(ctx context.Context, path string) bool {
