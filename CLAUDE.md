@@ -118,6 +118,11 @@ go test ./internal/queue ./internal/ytdlp -run Integration -v
   the filename template (`videoFolder`). Saved settings keep whatever template they had.
 - Quality sizes in the UI are estimates from the probe's `filesize`/`filesize_approx`: `quality.ts`
   picks streams like `bv*[height<=h]+ba` under `QualitySort`. Change one, change the other.
+- A YouTube video analysed in the last hour downloads from the probe's JSON (`ytdlp.InfoCache`,
+  `--load-info-json`), skipping the webpage, player API and JS challenge (~2.5 s). Its stream links
+  last 6 h and are tied to the IP. `-J` keeps private keys (`_format_sort_fields`), so the format
+  choice matches a fresh read. Each analysis is used once; a failed run from one runs again at
+  once from the page (`pageOnly`). Not for other sites, live or upcoming streams.
 
 **Wails / Go**
 - Wails runtime helpers (`ClipboardGetText`, dialogs, ...) call `log.Fatal` on a nil/bad context, killing

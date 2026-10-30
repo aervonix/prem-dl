@@ -60,7 +60,10 @@ func TestIntegrationProbeAndDownload(t *testing.T) {
 		}
 	}
 
-	m := New(Deps{Settings: func() settings.Settings { return s }, Env: envFn, StatePath: filepath.Join(s.DownloadDir, "q.json")})
+	// The first download uses the analysis above; the second has to read the page.
+	infos := ytdlp.NewInfoCache()
+	infos.Put(rickURL, res)
+	m := New(Deps{Settings: func() settings.Settings { return s }, Env: envFn, Info: infos.Take, StatePath: filepath.Join(s.DownloadDir, "q.json")})
 	m.Start()
 	defer m.Shutdown()
 
@@ -102,6 +105,11 @@ func TestIntegrationProbeAndDownload(t *testing.T) {
 		t.Fatalf("output file %q: %v", j.OutputFile, err)
 	}
 	t.Logf("done: %s (%s)", filepath.Base(j.OutputFile), j.Title)
+	for _, l := range m.Log(id) {
+		if strings.Contains(l, "Downloading webpage") {
+			t.Errorf("read the page again despite the saved analysis: %q", l)
+		}
+	}
 
 	// Both mode keeps a sidecar subtitle next to the video.
 	srts, _ := filepath.Glob(filepath.Join(filepath.Dir(j.OutputFile), "*.srt"))

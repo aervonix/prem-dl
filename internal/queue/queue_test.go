@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +29,12 @@ func TestMain(m *testing.M) {
 
 func fakeYtdlp(url string) {
 	p := func(s string) { fmt.Println(s) }
+	// A saved analysis (--load-info-json) here holds the URL whose behaviour to copy.
+	if file, ok := strings.CutPrefix(url, "--load-info-json="); ok {
+		data, _ := os.ReadFile(file)
+		fakeYtdlp(strings.TrimSpace(string(data)))
+		return
+	}
 	switch {
 	case strings.HasSuffix(url, "/ok"):
 		p(`YTGUI_PLAN {"id":"abc","title":"Fake Title","uploader":"Fake Chan","duration":10,"filesize_approx":2000}`)
@@ -336,6 +343,48 @@ func TestRemoveRunningJob(t *testing.T) {
 	}
 	if h.m.ActiveCount() != 0 {
 		t.Fatal("the process should have been stopped")
+	}
+}
+
+// withInfo makes the harness's queue download path from a saved analysis that behaves like
+// the fake URL as, and counts how often one was handed out.
+func (h *harness) withInfo(t *testing.T, path, as string) *atomic.Int32 {
+	var taken atomic.Int32
+	h.m.deps.Info = func(url string) (string, func()) {
+		if url != "https://fake.test"+path {
+			return "", func() {}
+		}
+		taken.Add(1)
+		f := filepath.Join(t.TempDir(), "info.json")
+		if err := os.WriteFile(f, []byte("https://fake.test"+as), 0o600); err != nil {
+			t.Error(err)
+		}
+		return f, func() { os.Remove(f) }
+	}
+	return &taken
+}
+
+func TestDownloadsFromASavedAnalysis(t *testing.T) {
+	h := newHarness(t, 1)
+	taken := h.withInfo(t, "/fail403", "/ok")
+	j := h.add(t, "/fail403")
+	waitFor(t, "completion", func() bool { return h.status(j.ID) == StatusCompleted })
+	if taken.Load() != 1 {
+		t.Errorf("analysis used %d times", taken.Load())
+	}
+}
+
+func TestFailedSavedAnalysisFallsBackToThePage(t *testing.T) {
+	h := newHarness(t, 1) // automatic retries are off: only the fallback can save it
+	taken := h.withInfo(t, "/ok", "/fail403")
+	j := h.add(t, "/ok")
+	waitFor(t, "completion", func() bool { s := h.status(j.ID); return s == StatusCompleted || s == StatusFailed })
+	got, _ := h.m.Get(j.ID)
+	if got.Status != StatusCompleted || got.Error != nil || got.AutoRetries != 0 {
+		t.Errorf("status %s, error %v, auto retries %d", got.Status, got.Error, got.AutoRetries)
+	}
+	if taken.Load() != 1 {
+		t.Errorf("analysis asked for %d times", taken.Load())
 	}
 }
 

@@ -78,6 +78,9 @@ type Target struct {
 	PlaylistTitle string
 	PlaylistIndex int
 	PlaylistCount int
+	// InfoFile is a recent analysis of URL (InfoCache.Take). When set, yt-dlp downloads from it
+	// instead of reading the page again.
+	InfoFile string
 }
 
 // WaitInterval is --wait-for-video's minimum, in seconds: how often a stream that is past its
@@ -211,6 +214,9 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 		"--print=after_move:"+MarkFile+"%(filepath)s",
 	)
 	a = append(a, e.UserArgs()...)
+	if t.InfoFile != "" {
+		return append(a, "--load-info-json="+t.InfoFile)
+	}
 	a = append(a, "--", t.URL)
 	return a
 }

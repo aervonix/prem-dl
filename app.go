@@ -60,6 +60,8 @@ type App struct {
 	probeCancel context.CancelFunc
 	// jobProbe is ProbeJob's, apart from probeCancel so the Download page's analysis carries on.
 	jobProbe context.CancelFunc
+	// infos keeps recent analyses, so their downloads don't read each video's page again.
+	infos *ytdlp.InfoCache
 
 	browseMu     sync.Mutex
 	browseCancel context.CancelFunc // set while BrowseFeed lists a channel
@@ -110,11 +112,13 @@ func NewApp(launch launchArgs) *App {
 		versions:   map[versionKey]string{},
 		toolsFirst: make(chan struct{}),
 		launch:     launch,
+		infos:      ytdlp.NewInfoCache(),
 	}
 	a.root, a.stopAll = context.WithCancel(context.Background())
 	a.q = queue.New(queue.Deps{
 		Settings:  store.Get,
 		Env:       a.buildEnv,
+		Info:      a.infos.Take,
 		Emit:      a.emit,
 		Observe:   func(changed []queue.Job, removed []string) { a.act.observe(changed, removed) },
 		StatePath: filepath.Join(dir, "queue.json"),
@@ -354,6 +358,9 @@ func (a *App) SaveSettings(s settings.Settings) SettingsResponse {
 	if saved.FollowEvery != prev.FollowEvery {
 		a.feeds.Kick()
 	}
+	if saved.Cookies != prev.Cookies || saved.Proxy != prev.Proxy || saved.ForceIPv4 != prev.ForceIPv4 || saved.ExtraArgs != prev.ExtraArgs {
+		a.infos.Clear() // analyses made under the old settings
+	}
 	a.applyTheme(saved.Theme)
 	a.q.Kick() // a changed concurrency limit takes effect immediately
 	return SettingsResponse{Settings: saved}
@@ -414,6 +421,7 @@ func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist bool) Prob
 		}
 		return ProbeResponse{Error: toAppError(err)}
 	}
+	a.infos.Put(link, res)
 	return ProbeResponse{Result: res}
 }
 
@@ -610,6 +618,7 @@ func (a *App) bulkItems(ctx context.Context, link string, nested bool) (items []
 	if err != nil {
 		return nil, nil, err
 	}
+	a.infos.Put(link, res)
 	switch res.Kind {
 	case "video":
 		v := res.Video

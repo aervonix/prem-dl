@@ -131,6 +131,8 @@ type ProbeResult struct {
 	Kind     string        `json:"kind"` // video | playlist
 	Video    *VideoInfo    `json:"video"`
 	Playlist *PlaylistInfo `json:"playlist"`
+	// info is yt-dlp's JSON for a video, kept for InfoCache.
+	info []byte
 }
 
 // NormalizeURL trims the input, adds a scheme when it was left off, and rejects anything yt-dlp
@@ -553,6 +555,7 @@ func readInfo(ctx context.Context, env Env, rawURL string, extra []string) (*Pro
 	}
 	if res.Video != nil {
 		res.Video.FileName = name
+		res.info = data
 	}
 	return res, nil
 }

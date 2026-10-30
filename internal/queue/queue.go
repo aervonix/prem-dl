@@ -108,6 +108,9 @@ type Deps struct {
 	Settings func() settings.Settings
 	// Env prepares the environment for one run. The cleanup func releases per-run resources.
 	Env func(ctx context.Context) (ytdlp.Env, func(), error)
+	// Info, if set, returns a file holding a recent analysis of url to download from
+	// (ytdlp.InfoCache.Take), or "". done removes it.
+	Info func(url string) (path string, done func())
 	// Emit delivers an event to the UI.
 	Emit func(event string, payload any)
 	// Observe, if set, gets the same changes as the UI: jobs that changed and IDs removed. It is
@@ -152,6 +155,9 @@ type entry struct {
 	// remove is set when the job was removed while running; finish deletes the entry once the
 	// process has exited, so until then it still counts against the limit and blocks its URL.
 	remove bool
+	// fromInfo is set while the run downloads from a saved analysis (Deps.Info) rather than
+	// the page. If that fails, the job runs again at once, and pageOnly makes that run read the page.
+	fromInfo, pageOnly bool
 }
 
 // Manager owns every job.
@@ -736,10 +742,24 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, e *entry) 
 	}
 	defer cleanup()
 
-	args := env.DownloadArgs(job.Options, ytdlp.Target{
+	target := ytdlp.Target{
 		URL: job.URL, PlaylistTitle: job.PlaylistTitle,
 		PlaylistIndex: job.PlaylistIndex, PlaylistCount: job.PlaylistCount,
-	})
+	}
+	m.mu.Lock()
+	pageOnly := e.pageOnly
+	e.pageOnly = false
+	m.mu.Unlock()
+	// A stream being waited for, or recorded from its start, is read when it goes live.
+	if m.deps.Info != nil && !pageOnly && !job.Options.WaitForVideo && !job.Options.LiveFromStart {
+		path, done := m.deps.Info(job.URL)
+		defer done()
+		target.InfoFile = path
+	}
+	m.mu.Lock()
+	e.fromInfo = target.InfoFile != ""
+	m.mu.Unlock()
+	args := env.DownloadArgs(job.Options, target)
 
 	cmd := exec.CommandContext(ctx, env.Bin, args...)
 	sys.Quiet(cmd)
@@ -810,6 +830,8 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 
 	stop := e.stop
 	e.cancel = nil
+	fromInfo := e.fromInfo
+	e.fromInfo = false
 	// Every branch below saves the job (setLocked), which carries this along.
 	waited := !e.job.WaitUntil.IsZero()
 	e.job.WaitUntil = time.Time{}
@@ -859,6 +881,10 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 				j.Note = "Already downloaded"
 			}
 		})
+	case fromInfo:
+		// The saved analysis didn't work (the network changed, say): run again at once from the page.
+		e.pageOnly = true
+		m.setLocked(e, func(j *Job) { j.Status = StatusQueued; j.Stage = "Starting"; j.Speed = 0; j.ETA = -1 })
 	default:
 		var lines []string
 		if h != nil {
