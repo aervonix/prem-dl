@@ -265,6 +265,27 @@ func TestTrackerTwoStreamsWithUnknownSizesNeverGoesBack(t *testing.T) {
 	}
 }
 
+func TestTrackerGrowingEstimateNeverGoesBack(t *testing.T) {
+	// Captured shape: an HLS video stream with no size in the plan (format 230) next to a sized
+	// audio stream. yt-dlp's estimate grows as fragments arrive, so downloaded/estimate fell from
+	// 4.8% to 3.8% of the bar.
+	var tr Tracker
+	tr.SetStreams([]Stream{{Kind: "video"}, {Kind: "audio", Size: 3433755}})
+	var prev float64
+	for _, p := range []Progress{
+		{Status: "downloading", Downloaded: 126976, TotalEstimate: 4202496, Filename: "v.f230.mp4"},
+		{Status: "downloading", Downloaded: 400000, TotalEstimate: 4202496, Filename: "v.f230.mp4"},
+		{Status: "downloading", Downloaded: 420000, TotalEstimate: 5600000, Filename: "v.f230.mp4"},
+		{Status: "downloading", Downloaded: 2000000, TotalEstimate: 5600000, Filename: "v.f230.mp4"},
+	} {
+		snap, _ := tr.Update(p)
+		if snap.Percent < prev {
+			t.Fatalf("bar went back from %.1f to %.1f at %+v", prev, snap.Percent, p)
+		}
+		prev = snap.Percent
+	}
+}
+
 func TestTrackerLowEstimateDoesNotShowFullBarEarly(t *testing.T) {
 	var tr Tracker
 	tr.SetStreams([]Stream{{Size: 1000, Kind: "video"}, {Size: 100, Kind: "audio"}})

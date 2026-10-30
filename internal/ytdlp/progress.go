@@ -244,6 +244,7 @@ type Tracker struct {
 	doneBytes int64 // bytes of streams that finished
 	sawStream bool
 	allDone   bool
+	shown     float64 // the highest percentage reported
 }
 
 // AllDone reports whether every media stream has finished downloading. Post-processors can run
@@ -365,6 +366,11 @@ func (t *Tracker) Update(p Progress) (Snapshot, bool) {
 		snap.Percent = 99.9
 	}
 	snap.Percent = min(snap.Percent, 100)
+	if snap.Percent >= 0 {
+		// Estimates grow (an HLS stream's, as its fragments arrive); the bar doesn't go back.
+		snap.Percent = max(snap.Percent, t.shown)
+		t.shown = snap.Percent
+	}
 	if len(t.streams) > 1 && snap.Total > 0 && p.Speed > 0 && !t.Cut {
 		// The per-stream ETA only covers the stream in flight; recompute from the overall remainder.
 		snap.ETA = max(int(float64(snap.Total-snap.Downloaded)/p.Speed), 0)
