@@ -76,11 +76,7 @@ func Search(ctx context.Context, env Env, query string, f SearchFilter, first, c
 		return nil, err
 	}
 	first, count = max(first, 1), max(count, 1)
-	args := []string{
-		"--playlist-items=" + strconv.Itoa(first) + ":" + strconv.Itoa(first+count-1),
-		// Results only say "3 years ago"; this turns that into a timestamp.
-		"--extractor-args=youtubetab:approximate_date",
-	}
+	args := []string{"--playlist-items=" + strconv.Itoa(first) + ":" + strconv.Itoa(first+count-1)}
 	res, err := readInfo(ctx, env, SearchURL(query, f), args)
 	if err != nil {
 		return nil, err

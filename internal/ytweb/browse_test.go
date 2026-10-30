@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"yt-dlp-gui/internal/ytdlp"
 )
@@ -20,7 +21,8 @@ import (
 // Each folder in testdata/browse holds what yt-dlp 2026.10.26 read for one listing
 // (--write-pages: the embedded data of each web page, its client settings, the API's answers in
 // order, trimmed to what a parser reads) and what it printed for them with the app's arguments
-// (--dump-single-json --flat-playlist --playlist-end=N).
+// (--dump-single-json --flat-playlist --extractor-args=youtubetab:approximate_date
+// --playlist-end=N).
 var browseCases = []struct {
 	name, link string
 	limit      int
@@ -56,7 +58,16 @@ func newFakeChannels(t *testing.T, name string) (*fakeChannels, *Lister) {
 	}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	return f, NewListerAt(srv.URL)
+	// "3 years ago" is dated from when yt-dlp read the pages.
+	var exp struct {
+		Epoch int64 `json:"epoch"`
+	}
+	if err := json.Unmarshal(readGz(t, filepath.Join(f.dir, "expected.json.gz")), &exp); err != nil || exp.Epoch == 0 {
+		t.Fatalf("expected.json's epoch: %v", err)
+	}
+	l := NewListerAt(srv.URL)
+	l.now = func() time.Time { return time.Unix(exp.Epoch, 0) }
+	return f, l
 }
 
 func (f *fakeChannels) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -86,9 +86,10 @@ func TestIntegrationMatchesYtdlp(t *testing.T) {
 
 // thumbBase is a thumbnail link without its signed query, and without the variant YouTube
 // rotates between requests (hq720_custom_1.jpg and _custom_2 are one picture slot, as are a
-// Short's oar1.jpg and oar2.jpg).
+// Short's oar1.jpg and oar2.jpg, and /eb/vi/ID/oar.jpg and /vi/ID/oar.jpg).
 func thumbBase(u string) string {
 	u, _, _ = strings.Cut(u, "?")
+	u = strings.Replace(u, "/eb/vi/", "/vi/", 1)
 	return variantThumbRe.ReplaceAllString(u, "$1")
 }
 
@@ -142,6 +143,11 @@ func TestIntegrationListsMatchYtdlp(t *testing.T) {
 			ge, we := g.Entries[i], w.Entries[i]
 			ge.ViewCount, we.ViewCount = 0, 0 // counts move between the two requests
 			ge.Thumbnail, we.Thumbnail = thumbBase(ge.Thumbnail), thumbBase(we.Thumbnail)
+			// Read a moment apart, "2 hours ago" can round either side of an hour (a day for
+			// days and longer).
+			if d := ge.Timestamp - we.Timestamp; d >= -86400 && d <= 86400 && (ge.Timestamp == 0) == (we.Timestamp == 0) {
+				ge.Timestamp, we.Timestamp = 0, 0
+			}
 			if ge != we {
 				t.Errorf("%s, entry %d:\n ours   %+v\n yt-dlp %+v", c.link, i+1, ge, we)
 			}

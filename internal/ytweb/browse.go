@@ -374,7 +374,7 @@ func (l *Lister) tab(ctx context.Context, hc *http.Client, p tabPage, t target, 
 			title += " - " + s
 		}
 	}
-	x := extractor{now: l.now()}
+	x := extractor{now: l.now(), dates: true}
 	var entries []entry
 	content := obj(sel, "content")
 	parent := obj(content, "sectionListRenderer")

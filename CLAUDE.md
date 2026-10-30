@@ -137,8 +137,10 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
   carries `visitorData`, sent back as `X-Goog-Visitor-Id`; `clientVersion` is yt-dlp's.
 - Search filters go in the results link's `sp` parameter (and the API's `params`), a protobuf
   `{2: {1: date, 2: type, 3: length}}` (`ytdlp.SearchParams`). YouTube still honours those, but ignores its sort orders (date, views) since
-  its 2025 filter redesign, so there is no sort. Results say only "3 years ago";
-  `--extractor-args=youtubetab:approximate_date` turns that into `timestamp`. Channel avatars come
+  its 2025 filter redesign, so there is no sort. Results and listings say only "3 years ago";
+  `--extractor-args=youtubetab:approximate_date` (on every `readInfo`) and `ytweb`'s
+  `extractor.dates` turn that into `timestamp`, rounded like yt-dlp's (to the day for days
+  and longer). Shorts and running streams have no date. Channel avatars come
   as `//yt3.ggpht.com/...` (`pickThumb` adds `https:`).
 - The default file name is just the title (user's choice; was `Title [id]`). Two videos with one
   title get one name, and yt-dlp skips the second as "already downloaded". Chapter folders follow

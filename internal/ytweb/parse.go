@@ -149,8 +149,8 @@ func continuationOf(r map[string]any) string {
 // extractor turns renderers into entries.
 type extractor struct {
 	now time.Time
-	// dates turns "3 years ago" into a timestamp, as yt-dlp's youtubetab:approximate_date does.
-	// Searches ask for it; listings, like the app's yt-dlp listings, don't.
+	// dates turns "3 years ago" into a timestamp, as yt-dlp's youtubetab:approximate_date
+	// does; the app asks for it everywhere.
 	dates bool
 }
 

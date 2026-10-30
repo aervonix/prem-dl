@@ -519,7 +519,9 @@ func readInfo(ctx context.Context, env Env, rawURL string, extra []string) (*Pro
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	args := append([]string{"--dump-single-json", "--flat-playlist", "--no-warnings"}, env.CommonArgs()...)
+	// Listings say only "3 years ago"; approximate_date turns that into a timestamp.
+	args := append([]string{"--dump-single-json", "--flat-playlist", "--no-warnings",
+		"--extractor-args=youtubetab:approximate_date"}, env.CommonArgs()...)
 	args = append(args, extra...)
 	args = append(args, env.UserArgs()...)
 	args = append(args, "--", link)
