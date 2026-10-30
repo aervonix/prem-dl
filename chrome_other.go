@@ -14,7 +14,7 @@ const noChromeMessage = "Couldn't find Chrome on this computer"
 // yt-dlp's browsers itself.
 func detectBrowsers() []Browser {
 	if p := findChrome(); p != "" {
-		return []Browser{{ID: "chrome", Label: "Chrome", Family: "chrome", Helper: true, command: []string{p}}}
+		return []Browser{{ID: "chrome", Label: "Chrome", Family: "chrome", Installed: true, Helper: true, command: []string{p}}}
 	}
 	return nil
 }

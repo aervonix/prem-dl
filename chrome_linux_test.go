@@ -53,6 +53,11 @@ func TestDetectBrowsers(t *testing.T) {
 	if got := strings.Join(order[:4], " "); got != "firefox chrome helium flatpak:com.google.Chrome" {
 		t.Fatalf("order = %v", order)
 	}
+	for i, b := range browsers {
+		if b.Installed != (i < 4) {
+			t.Fatalf("%s installed = %v", b.ID, b.Installed)
+		}
+	}
 	if _, ok := byID["brave"]; !ok {
 		t.Fatal("browsers that aren't installed should still be offered (yt-dlp may find them)")
 	}

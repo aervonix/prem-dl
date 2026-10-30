@@ -5,7 +5,8 @@ import {Button, Card, Field, Modal} from '../../components/ui'
 import {plural} from '../../format'
 import {Icon} from '../../icons'
 import {useApp} from '../../store'
-import type {CookieInfo, CookieTest, Settings} from '../../types'
+import {OTHER, browserChoice, helperOf} from '../../browsers'
+import type {Browser, CookieInfo, Cookies, CookieTest, Settings} from '../../types'
 import type {TabProps} from './tab'
 
 const BROWSERS = [
@@ -66,6 +67,19 @@ export function CookiesTab({draft, saved, upd}: TabProps) {
   const [pasteText, setPasteText] = useState('')
   const [chromeBusy, setChromeBusy] = useState(false)
   const [helperPath, setHelperPath] = useState('')
+  // Linux reads Chromium browsers' cookies itself and names the browsers it found here; Windows
+  // keeps yt-dlp's list and runs the helper in Chrome.
+  const linux = state.platform !== 'windows'
+  const [browsers, setBrowsers] = useState<Browser[]>([])
+  const [otherPicked, setOtherPicked] = useState(false)
+  useEffect(() => {
+    if (linux) api.getBrowsers().then(setBrowsers).catch(() => {})
+  }, [linux])
+  const helpers = browsers.filter((b) => b.helper)
+  const helper = linux ? helperOf(browsers, draft.helperBrowser) : undefined
+  const helperName = helper?.label ?? 'Chrome'
+  // The helper runs in the saved choice, so a changed one has to be saved first.
+  const helperDirty = draft.helperBrowser !== saved.helperBrowser
 
   useEffect(() => {
     if (!state.droppedCookies) return
@@ -115,7 +129,7 @@ export function CookiesTab({draft, saved, upd}: TabProps) {
     setChromeBusy(true)
     const res = await attempt(api.getChromeCookies())
     setChromeBusy(false)
-    if (res && applyCookieResponse(res)) toast('success', `Got ${plural(res.info.count, 'YouTube cookie')} from Chrome`)
+    if (res && applyCookieResponse(res)) toast('success', `Got ${plural(res.info.count, 'YouTube cookie')} from ${helperName}`)
   }
 
   const prepareHelper = async () => {
@@ -135,6 +149,85 @@ export function CookiesTab({draft, saved, upd}: TabProps) {
   }
 
   const browser = BROWSERS.find((b) => b.id === draft.cookies.browser)
+  const choice = browserChoice(browsers, draft.cookies, otherPicked)
+  const chosen = browsers.find((b) => b.id === choice)
+  const setCookies = (c: Partial<Cookies>) => upd({cookies: {...draft.cookies, ...c}})
+  const pickBrowser = (id: string) => {
+    setOtherPicked(id === OTHER)
+    if (id === OTHER) return setCookies({browser: 'chromium', profile: ''})
+    const b = browsers.find((x) => x.id === id)
+    if (b) setCookies({browser: b.family, profile: b.root ? (b.profiles[0]?.path ?? b.root) : ''})
+  }
+  const browseProfile = async () => {
+    const dir = await api.pickDirectory('Choose the browser profile folder', draft.cookies.profile)
+    if (dir) setCookies({profile: dir})
+  }
+
+  const helperBlock = (
+    <div className="stack" style={{marginTop: 16}}>
+      <div>
+        <div style={{fontWeight: 600}}>{linux ? `Or use the Prem-dl helper in ${helperName}` : 'Use your YouTube account from Chrome'}</div>
+        <div className="hint">
+          {linux ? 'For when reading the browser directly doesn\'t work.' : 'For YouTube Premium quality and videos that need you signed in.'} {helperName} asks you to approve, then the
+          app saves your YouTube cookies as its cookies.txt file. Do it again if downloads start asking you to sign in.
+        </div>
+      </div>
+      {linux && helpers.length === 0 && browsers.length > 0 && <p className="muted">No Chrome-based browser found. Read cookies from Firefox above, or import a cookies.txt file.</p>}
+      {linux && helpers.length > 1 && (
+        <Field label="Browser with the helper">
+          <select value={helper?.id ?? ''} onChange={(e) => upd({helperBrowser: e.target.value})}>
+            {helpers.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}
+                {b.default ? ' (default browser)' : ''}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
+      <div className="row wrap">
+        <Button variant="primary" loading={chromeBusy} disabled={helperDirty || (linux && !helper)} onClick={() => void getChromeCookies()}>
+          Get cookies from {helperName}
+        </Button>
+        {helperDirty && <span className="hint">Save your changes to use {helperName}.</span>}
+        {chromeBusy && (
+          <>
+            <span className="hint">Waiting for you to allow it in {helperName}…</span>
+            <Button variant="ghost" onClick={() => void api.cancelChromeCookies()}>
+              Cancel
+            </Button>
+          </>
+        )}
+      </div>
+      <details>
+        <summary style={{cursor: 'pointer', fontWeight: 580}}>Set up once: add the helper to {helperName}</summary>
+        <ol className="muted" style={{margin: '8px 0 0', paddingLeft: 20, lineHeight: 1.8}}>
+          <li>
+            <Button size="sm" disabled={helperDirty} onClick={() => void prepareHelper()}>
+              Show the helper folder
+            </Button>{' '}
+            {helperPath && <code>{helperPath}</code>}
+          </li>
+          <li>
+            <Button size="sm" disabled={helperDirty} onClick={() => void attempt(api.openChromeExtensions())}>
+              Open chrome://extensions
+            </Button>{' '}
+            in the {helperName} profile you use for YouTube.
+          </li>
+          <li>Turn on Developer mode (top right), click Load unpacked, and choose the helper folder.</li>
+          <li>Come back here and click Get cookies from {helperName}.</li>
+        </ol>
+        <p className="hint" style={{marginTop: 8}}>
+          The helper also adds Download with Prem-dl to {helperName}'s toolbar and to the menu you get when you right-click a page or a link. Already added it? After Prem-dl
+          updates, click the reload arrow on the helper in chrome://extensions to get its new features.
+        </p>
+        <p className="hint" style={{marginTop: 8}}>
+          The helper only reads youtube.com cookies, only after you click Allow and approve {helperName}'s prompt, and only sends them to this app on this computer. {helperName}'s access is
+          removed again straight after. Anyone with these cookies can use your signed-in YouTube session, so the app keeps them in its own folder.
+        </p>
+      </details>
+    </div>
+  )
 
   return (
     <>
@@ -157,73 +250,69 @@ export function CookiesTab({draft, saved, upd}: TabProps) {
           ))}
         </div>
 
-        <div className="stack" style={{marginTop: 16}}>
-          <div>
-            <div style={{fontWeight: 600}}>Use your YouTube account from Chrome</div>
-            <div className="hint">
-              For YouTube Premium quality and videos that need you signed in. Chrome asks you to approve, then the app saves your YouTube cookies as its cookies.txt file. Do it again if
-              downloads start asking you to sign in.
-            </div>
-          </div>
-          <div className="row wrap">
-            <Button variant="primary" loading={chromeBusy} onClick={() => void getChromeCookies()}>
-              Get cookies from Chrome
-            </Button>
-            {chromeBusy && (
-              <>
-                <span className="hint">Waiting for you to allow it in Chrome…</span>
-                <Button variant="ghost" onClick={() => void api.cancelChromeCookies()}>
-                  Cancel
-                </Button>
-              </>
-            )}
-          </div>
-          <details>
-            <summary style={{cursor: 'pointer', fontWeight: 580}}>Set up once: add the helper to Chrome</summary>
-            <ol className="muted" style={{margin: '8px 0 0', paddingLeft: 20, lineHeight: 1.8}}>
-              <li>
-                <Button size="sm" onClick={() => void prepareHelper()}>
-                  Show the helper folder
-                </Button>{' '}
-                {helperPath && <code>{helperPath}</code>}
-              </li>
-              <li>
-                <Button size="sm" onClick={() => void attempt(api.openChromeExtensions())}>
-                  Open chrome://extensions
-                </Button>{' '}
-                in the Chrome profile you use for YouTube.
-              </li>
-              <li>Turn on Developer mode (top right), click Load unpacked, and choose the helper folder.</li>
-              <li>Come back here and click Get cookies from Chrome.</li>
-            </ol>
-            <p className="hint" style={{marginTop: 8}}>
-              The helper also adds Download with Prem-dl to Chrome's toolbar and to the menu you get when you right-click a page or a link. Already added it? After Prem-dl
-              updates, click the reload arrow on the helper in chrome://extensions to get its new features.
-            </p>
-            <p className="hint" style={{marginTop: 8}}>
-              The helper only reads youtube.com cookies, only after you click Allow and approve Chrome's prompt, and only sends them to this app on this computer. Chrome's access is
-              removed again straight after. Anyone with these cookies can use your signed-in YouTube session, so the app keeps them in its own folder.
-            </p>
-          </details>
-        </div>
+        {!linux && helperBlock}
 
         {draft.cookies.mode === 'browser' && (
           <div className="stack" style={{marginTop: 16}}>
-            <div className="grid2">
-              <Field label="Browser">
-                <select value={draft.cookies.browser} onChange={(e) => upd({cookies: {...draft.cookies, browser: e.target.value}})}>
-                  {BROWSERS.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.label}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Profile (optional)" hint="Leave empty for the default profile.">
-                <input type="text" value={draft.cookies.profile} placeholder="Default" onChange={(e) => upd({cookies: {...draft.cookies, profile: e.target.value}})} />
-              </Field>
-            </div>
-            {browser?.chromium && (
+            {linux && browsers.length > 0 ? (
+              <div className="grid2">
+                <Field label="Browser">
+                  <select value={choice} onChange={(e) => pickBrowser(e.target.value)}>
+                    {browsers.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.label}
+                        {b.installed ? '' : ' (not found)'}
+                      </option>
+                    ))}
+                    <option value={OTHER}>Other Chromium-based browser…</option>
+                  </select>
+                </Field>
+                {chosen?.root ? (
+                  chosen.profiles.length > 0 ? (
+                    <Field label="Profile">
+                      <select value={draft.cookies.profile} onChange={(e) => setCookies({profile: e.target.value})}>
+                        {chosen.profiles.map((p) => (
+                          <option key={p.path} value={p.path}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  ) : (
+                    <p className="hint">No profile with cookies found in {chosen.root}. Open {chosen.label} once and sign in to YouTube.</p>
+                  )
+                ) : choice === OTHER ? (
+                  <Field label="Profile folder" hint="The folder of the browser profile, holding its Cookies file, like ~/.config/browser/Default.">
+                    <div className="row">
+                      <input type="text" className="mono" value={draft.cookies.profile} placeholder="/home/…/Default" onChange={(e) => setCookies({profile: e.target.value})} spellCheck={false} />
+                      <Button size="sm" onClick={() => void browseProfile()}>
+                        Browse…
+                      </Button>
+                    </div>
+                  </Field>
+                ) : (
+                  <Field label="Profile (optional)" hint="Leave empty for the default profile.">
+                    <input type="text" value={draft.cookies.profile} placeholder="Default" onChange={(e) => setCookies({profile: e.target.value})} />
+                  </Field>
+                )}
+              </div>
+            ) : (
+              <div className="grid2">
+                <Field label="Browser">
+                  <select value={draft.cookies.browser} onChange={(e) => upd({cookies: {...draft.cookies, browser: e.target.value}})}>
+                    {BROWSERS.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Profile (optional)" hint="Leave empty for the default profile.">
+                  <input type="text" value={draft.cookies.profile} placeholder="Default" onChange={(e) => upd({cookies: {...draft.cookies, profile: e.target.value}})} />
+                </Field>
+              </div>
+            )}
+            {!linux && browser?.chromium && (
               <div className="banner warn">
                 <span className="ic">
                   <Icon name="warning" size={18} />
@@ -337,6 +426,8 @@ export function CookiesTab({draft, saved, upd}: TabProps) {
             )}
           </div>
         )}
+
+        {linux && helperBlock}
       </Card>
 
       {pasteOpen && (

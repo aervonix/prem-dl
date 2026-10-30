@@ -39,10 +39,11 @@ type Browser struct {
 	Family string `json:"family"`
 	// Root is its profiles' folder when yt-dlp can't find it by Family; profiles are then passed
 	// as paths. Empty for browsers yt-dlp finds itself.
-	Root     string           `json:"root"`
-	Profiles []BrowserProfile `json:"profiles"` // found under Root
-	Helper   bool             `json:"helper"`   // a Chromium browser the helper can run in
-	Default  bool             `json:"default"`  // the system's default browser
+	Root      string           `json:"root"`
+	Profiles  []BrowserProfile `json:"profiles"`  // found under Root
+	Installed bool             `json:"installed"` // found here; yt-dlp may still find one that isn't
+	Helper    bool             `json:"helper"`    // a Chromium browser the helper can run in
+	Default   bool             `json:"default"`   // the system's default browser
 
 	command   []string // what starts it, with a URL appended
 	sandboxed bool     // a snap or Flatpak: it can't open hidden folders

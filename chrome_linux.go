@@ -81,6 +81,7 @@ func detectBrowsers() []Browser {
 			b.sandboxed = strings.HasPrefix(cmd, "/snap/")
 		}
 		if found {
+			b.Installed = true
 			installed = append(installed, b)
 		} else {
 			others = append(others, b)
@@ -92,7 +93,7 @@ func detectBrowsers() []Browser {
 			continue
 		}
 		b := Browser{ID: k.id, Label: k.label, Family: k.family, Root: root, Profiles: chromiumProfiles(root),
-			Default: slices.Contains(k.desktop, def)}
+			Installed: true, Default: slices.Contains(k.desktop, def)}
 		if cmd := lookCommand(k.commands); cmd != "" {
 			b.Helper, b.command = true, []string{cmd}
 		}
@@ -106,7 +107,7 @@ func detectBrowsers() []Browser {
 			continue
 		}
 		b := Browser{ID: "flatpak:" + f.app, Label: f.label, Family: f.family, Root: root, Profiles: chromiumProfiles(root),
-			Default: def == f.app+".desktop"}
+			Installed: true, Default: def == f.app+".desktop"}
 		if flatpak, err := exec.LookPath("flatpak"); err == nil && exported {
 			b.Helper, b.command, b.sandboxed = true, []string{flatpak, "run", f.app}, true
 		}

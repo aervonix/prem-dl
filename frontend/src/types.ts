@@ -395,6 +395,8 @@ export interface Browser {
   /** Its profiles' folder when yt-dlp can't find it by name: profiles are then passed as paths. */
   root: string
   profiles: BrowserProfile[]
+  /** Found here; yt-dlp may still find one that isn't. */
+  installed: boolean
   /** A Chromium browser the helper can run in. */
   helper: boolean
   /** The system's default browser. */

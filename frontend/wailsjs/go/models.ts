@@ -299,6 +299,7 @@ export namespace main {
 	    family: string;
 	    root: string;
 	    profiles: BrowserProfile[];
+	    installed: boolean;
 	    helper: boolean;
 	    default: boolean;
 	
@@ -313,6 +314,7 @@ export namespace main {
 	        this.family = source["family"];
 	        this.root = source["root"];
 	        this.profiles = this.convertValues(source["profiles"], BrowserProfile);
+	        this.installed = source["installed"];
 	        this.helper = source["helper"];
 	        this.default = source["default"];
 	    }
