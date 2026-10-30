@@ -47,6 +47,8 @@ func (a *App) startBackground(ctx context.Context) {
 	sh, err := sys.StartShell(sys.ShellOptions{OnOpen: a.showWindow, Menu: a.trayMenu, OnMenu: a.onTrayMenu, Icon: appIcon})
 	if err != nil {
 		wr.LogWarning(ctx, "tray icon unavailable: "+err.Error())
+		a.noTray.Store(true)
+		a.emit("app:no-tray", true)
 		if a.hidden.Load() {
 			a.showWindow() // started in the tray, but there is none: nothing could show the window
 		}

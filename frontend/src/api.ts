@@ -167,6 +167,8 @@ export interface BackendEvents {
   'app:navigate': string
   /** Something the user asked for outside the window failed (a notification's button). */
   'app:error': string
+  /** The desktop turned out to have no tray. */
+  'app:no-tray': boolean
 }
 
 /** Why closing needs confirming (main.CloseRequest; only sent as an event, so not generated). */

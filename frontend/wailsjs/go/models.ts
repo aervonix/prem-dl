@@ -222,6 +222,8 @@ export namespace main {
 	    tools: ToolStatus;
 	    dataDir: string;
 	    openLink: string;
+	    platform: string;
+	    noTray: boolean;
 	    appUpdate?: AppUpdate;
 	
 	    static createFrom(source: any = {}) {
@@ -237,6 +239,8 @@ export namespace main {
 	        this.tools = this.convertValues(source["tools"], ToolStatus);
 	        this.dataDir = source["dataDir"];
 	        this.openLink = source["openLink"];
+	        this.platform = source["platform"];
+	        this.noTray = source["noTray"];
 	        this.appUpdate = this.convertValues(source["appUpdate"], AppUpdate);
 	    }
 	

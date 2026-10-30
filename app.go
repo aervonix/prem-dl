@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -87,6 +88,7 @@ type App struct {
 	hidden   atomic.Bool               // the window is hidden, with the tray icon to bring it back
 	quitting atomic.Bool               // Quit from the tray: closing quits instead of hiding
 	toasts   atomic.Bool               // Windows notifications are set up
+	noTray   atomic.Bool               // the desktop has no tray (Linux without one), so nothing can hide there
 }
 
 // NewApp loads settings and the saved queue. If the normal config folder can't be used it falls
@@ -297,6 +299,8 @@ type AppState struct {
 	Tools    ToolStatus        `json:"tools"`
 	DataDir  string            `json:"dataDir"`
 	OpenLink string            `json:"openLink"` // a link the app was started with, for the Download page
+	Platform string            `json:"platform"` // runtime.GOOS: the UI names the system's parts after it
+	NoTray   bool              `json:"noTray"`   // the desktop has no tray, so closing can't keep the app running
 	// AppUpdate is the last successful check for a new Prem-dl, nil until one has run.
 	AppUpdate *AppUpdate `json:"appUpdate"`
 }
@@ -311,6 +315,8 @@ func (a *App) GetState() AppState {
 		Tools:    a.currentTools(),
 		DataDir:  a.dataDir,
 		OpenLink: a.launch.Link,
+		Platform: runtime.GOOS,
+		NoTray:   a.noTray.Load(),
 		// The check runs after launch, so a page reloaded later still learns what it found.
 		AppUpdate: a.appUpdate.Load(),
 	}

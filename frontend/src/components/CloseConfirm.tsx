@@ -2,6 +2,8 @@ import {useEffect, useState} from 'react'
 import {api, on} from '../api'
 import type {CloseRequest} from '../api'
 import {plural} from '../format'
+import {systemWords} from '../platform'
+import {useApp} from '../store'
 import {Button, Modal} from './ui'
 
 /**
@@ -9,6 +11,7 @@ import {Button, Modal} from './ui'
  * keeps the window open and asks here; Quit closes it for real, anything else keeps it open.
  */
 export function CloseConfirm() {
+  const {state} = useApp()
   const [ask, setAsk] = useState<CloseRequest | null>(null)
 
   useEffect(
@@ -51,7 +54,7 @@ export function CloseConfirm() {
         {plural(ask.downloads, 'download')} {ask.downloads === 1 ? 'is' : 'are'} still running. Quit Prem-dl anyway?
       </p>
       <p className="muted">{ask.downloads === 1 ? 'It will be paused' : 'They will be paused'}; partial files are kept, so you can resume next time.</p>
-      {ask.background && <p className="muted">Or close the window and let them finish: Prem-dl stays in the notification area until you quit it there.</p>}
+      {ask.background && <p className="muted">Or close the window and let them finish: Prem-dl stays {systemWords(state.platform).inTray} until you quit it there.</p>}
     </Modal>
   )
 }

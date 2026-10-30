@@ -6,6 +6,7 @@ import {ChannelView} from './ChannelView'
 import {Button, Card, Empty, IconButton, Modal, Spinner} from '../components/ui'
 import {basename, goTime, hostOf, plural, span} from '../format'
 import {Icon} from '../icons'
+import {systemWords} from '../platform'
 import {useApp} from '../store'
 import type {DownloadOptions, Feed} from '../types'
 
@@ -223,7 +224,7 @@ export function FollowingPage() {
 
       {feeds.length === 0 ? (
         <Empty title="You aren't following anything yet">
-          Follow a YouTube channel or a playlist and its new videos download by themselves. Turn on “Start with Windows” and “Keep running when the window is closed” in
+          Follow a YouTube channel or a playlist and its new videos download by themselves. Turn on “{systemWords(state.platform).startAtSignIn}” and “Keep running when the window is closed” in
           Settings to catch them while the window is closed.
         </Empty>
       ) : (

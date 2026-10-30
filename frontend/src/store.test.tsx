@@ -65,6 +65,13 @@ describe('reducer', () => {
     expect(s.incoming).toEqual({links: ['https://youtu.be/x'], n: 1})
   })
 
+  it('learns the platform and whether there is a tray', () => {
+    let s = run([{type: 'init', state: appState({platform: 'linux', noTray: false})}])
+    expect(s).toMatchObject({platform: 'linux', noTray: false})
+    s = run([{type: 'noTray'}], s)
+    expect(s.noTray).toBe(true)
+  })
+
   it('marks a failed load as ready with the error', () => {
     const s = run([{type: 'initFailed', error: 'boom'}])
     expect(s).toMatchObject({ready: true, loadError: 'boom'})

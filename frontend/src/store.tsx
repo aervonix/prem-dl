@@ -20,6 +20,10 @@ export interface State {
   loadError: string
   version: string
   dataDir: string
+  /** What the backend runs on (runtime.GOOS); see systemWords. Windows until loaded. */
+  platform: string
+  /** The desktop has no tray, so closing can't keep the app running. */
+  noTray: boolean
   settings: Settings | null
   /** Followed channels and playlists. */
   feeds: Feed[]
@@ -57,6 +61,8 @@ export const initial: State = {
   loadError: '',
   version: '',
   dataDir: '',
+  platform: 'windows',
+  noTray: false,
   settings: null,
   feeds: [],
   tools: emptyTools,
@@ -80,6 +86,7 @@ export type Action =
   | {type: 'tools'; tools: ToolStatus}
   | {type: 'repairing'; on: boolean}
   | {type: 'settings'; settings: Settings}
+  | {type: 'noTray'}
   | {type: 'feeds'; feeds: Feed[]}
   | {type: 'appUpdate'; info: AppUpdate}
   | {type: 'appUpdateProgress'; p: State['appUpdateProgress']}
@@ -123,6 +130,8 @@ export function reducer(s: State, a: Action): State {
         ready: true,
         version: a.state.version,
         dataDir: a.state.dataDir,
+        platform: a.state.platform,
+        noTray: a.state.noTray,
         settings: a.state.settings,
         feeds: a.state.feeds,
         tools: a.state.tools,
@@ -140,6 +149,8 @@ export function reducer(s: State, a: Action): State {
       return {...s, repairing: a.on}
     case 'settings':
       return {...s, settings: a.settings}
+    case 'noTray':
+      return {...s, noTray: true}
     case 'feeds':
       return {...s, feeds: a.feeds}
     case 'appUpdate':
@@ -246,6 +257,7 @@ export function AppProvider({children}: {children: ReactNode}) {
         if ((PAGES as string[]).includes(page)) dispatch({type: 'page', page: page as Page})
       }),
       on('app:error', (msg) => toast('error', msg)),
+      on('app:no-tray', () => dispatch({type: 'noTray'})),
     ]
     return () => {
       cancelled = true

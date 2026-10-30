@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import {api, errMessage} from '../../api'
 import {Button, Card, Field, Switch} from '../../components/ui'
 import {plural} from '../../format'
+import {systemWords} from '../../platform'
 import {useApp} from '../../store'
 import type {ArchiveInfo, Settings} from '../../types'
 import type {TabProps} from './tab'
@@ -64,7 +65,8 @@ function ArchiveRow() {
 
 /** Download folder, file names, theme, notifications and running in the background. */
 export function GeneralTab({draft, upd}: TabProps) {
-  const {attempt} = useApp()
+  const {attempt, state} = useApp()
+  const words = systemWords(state.platform)
   // "Custom template…" was picked but the template still matches a preset (not edited yet).
   // Discarding changes remounts this tab, which clears it.
   const [customPicked, setCustomPicked] = useState(false)
@@ -127,7 +129,7 @@ export function GeneralTab({draft, upd}: TabProps) {
           <div className="grid2">
             <Field label="Theme">
               <select value={draft.theme} onChange={(e) => upd({theme: e.target.value as Settings['theme']})}>
-                <option value="system">Match Windows</option>
+                <option value="system">{words.matchTheme}</option>
                 <option value="light">Light</option>
                 <option value="dark">Dark</option>
               </select>
@@ -156,7 +158,7 @@ export function GeneralTab({draft, upd}: TabProps) {
             <Switch
               checked={draft.notifySystem}
               onChange={(v) => upd({notifySystem: v})}
-              label="Windows notifications"
+              label={words.notifications}
               description="When a download finishes while you're in another app, with Open and Show in folder buttons."
             />
           </div>
@@ -166,16 +168,21 @@ export function GeneralTab({draft, upd}: TabProps) {
         <div className="stack">
           <div className="grid2">
             <Switch
-              checked={draft.closeToTray}
+              checked={draft.closeToTray && !state.noTray}
               onChange={(v) => upd({closeToTray: v})}
+              disabled={state.noTray}
               label="Keep running when the window is closed"
-              description="Downloads carry on and Prem-dl waits in the notification area for links from Chrome. Right-click its icon to quit."
+              description={
+                state.noTray
+                  ? 'Needs a tray icon, and this desktop has no tray. On GNOME, turn on the AppIndicator extension (Ubuntu has it on by default), then start Prem-dl again.'
+                  : `Downloads carry on and Prem-dl waits ${words.inTray} for links from Chrome. Right-click its icon to quit.`
+              }
             />
             <Switch
               checked={draft.startWithWindows}
               onChange={(v) => upd({startWithWindows: v})}
-              label="Start with Windows"
-              description="Starts in the notification area when you sign in, without opening the window."
+              label={words.startAtSignIn}
+              description={state.noTray ? 'Opens Prem-dl when you sign in.' : `Starts ${words.inTray} when you sign in, without opening the window.`}
             />
           </div>
         </div>
