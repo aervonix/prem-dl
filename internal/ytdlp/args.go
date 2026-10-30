@@ -39,6 +39,11 @@ func (e Env) CommonArgs() []string {
 	if s.Proxy != "" {
 		a = append(a, "--proxy="+s.Proxy)
 	}
+	if s.ForceIPv4 {
+		// Browsers fall back to IPv4 at once when IPv6 doesn't connect; yt-dlp waits out its
+		// socket timeout on every address, and every request crawls.
+		a = append(a, "--force-ipv4")
+	}
 	switch s.Cookies.Mode {
 	case "browser":
 		spec := s.Cookies.Browser

@@ -896,6 +896,7 @@ export namespace settings {
 	    concurrentFragments: number;
 	    rateLimit: string;
 	    proxy: string;
+	    forceIPv4: boolean;
 	    retries: number;
 	    autoRetry: boolean;
 	    sleepRequests: number;
@@ -926,6 +927,7 @@ export namespace settings {
 	        this.concurrentFragments = source["concurrentFragments"];
 	        this.rateLimit = source["rateLimit"];
 	        this.proxy = source["proxy"];
+	        this.forceIPv4 = source["forceIPv4"];
 	        this.retries = source["retries"];
 	        this.autoRetry = source["autoRetry"];
 	        this.sleepRequests = source["sleepRequests"];

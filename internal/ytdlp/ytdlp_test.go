@@ -609,6 +609,20 @@ func TestCookieArgs(t *testing.T) {
 	}
 }
 
+func TestForceIPv4(t *testing.T) {
+	e := testEnv()
+	if has(e.CommonArgs(), "--force-ipv4") {
+		t.Error("IPv4 is forced by default")
+	}
+	e.Settings.ForceIPv4 = true
+	if !has(e.CommonArgs(), "--force-ipv4") {
+		t.Errorf("not forced when set: %v", e.CommonArgs())
+	}
+	if !has(e.DownloadArgs(e.Settings.Defaults, Target{URL: "https://x.test/"}), "--force-ipv4") {
+		t.Error("downloads don't force IPv4")
+	}
+}
+
 func TestExtraArgsComeLast(t *testing.T) {
 	e := testEnv()
 	e.Settings.ExtraArgs = `--extractor-args "youtube:player_client=web" --no-mtime`

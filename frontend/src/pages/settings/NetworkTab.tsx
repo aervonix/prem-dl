@@ -1,7 +1,7 @@
 import {Card, Field, Switch} from '../../components/ui'
 import type {TabProps} from './tab'
 
-/** Speed limit, proxy, retries and pauses. */
+/** Speed limit, proxy, IPv4, retries and pauses. */
 export function NetworkTab({draft, upd}: TabProps) {
   return (
     <Card id="network" title="Network">
@@ -19,6 +19,12 @@ export function NetworkTab({draft, upd}: TabProps) {
           <input type="number" min={0} max={50} value={draft.retries} onChange={(e) => upd({retries: Number(e.target.value)})} />
         </Field>
       </div>
+      <Switch
+        checked={draft.forceIPv4}
+        onChange={(v) => upd({forceIPv4: v})}
+        label="Use IPv4 only"
+        description="Turn this on if analysing links or downloads hang or time out while websites open fine in your browser. Some networks hand out IPv6 addresses that don't work; browsers quietly fall back, the download tools wait each one out."
+      />
       <Switch
         checked={draft.autoRetry}
         onChange={(v) => upd({autoRetry: v})}

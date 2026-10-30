@@ -82,6 +82,8 @@ export interface Settings {
   concurrentFragments: number
   rateLimit: string
   proxy: string
+  /** Pass --force-ipv4: for networks whose IPv6 addresses don't connect. */
+  forceIPv4: boolean
   retries: number
   /** Retry downloads that failed with a passing problem (network, 403, rate limiting). */
   autoRetry: boolean

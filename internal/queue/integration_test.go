@@ -31,6 +31,7 @@ func integrationEnv(t *testing.T) (settings.Settings, func(context.Context) (ytd
 	s := settings.Default()
 	s.DownloadDir = t.TempDir()
 	s.Retries = 3
+	s.ForceIPv4 = os.Getenv("YTGUI_FORCE_IPV4") == "1" // for a network whose IPv6 doesn't work
 	rts := ytdlp.DetectJSRuntimes(context.Background())
 	ff := ytdlp.FindFFmpeg(context.Background(), "", bin, "")
 	return s, func(context.Context) (ytdlp.Env, func(), error) {

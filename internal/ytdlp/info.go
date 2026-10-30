@@ -537,7 +537,9 @@ func readInfo(ctx context.Context, env Env, rawURL string, extra []string) (*Pro
 	if ctx.Err() != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return nil, apperr.New("timeout", "Analysis timed out",
-				"yt-dlp took longer than 5 minutes to read this link.", "Check your connection and retry.", apperr.ActionNone)
+				"yt-dlp took longer than 5 minutes to read this link.",
+				"Check your connection and retry. If websites open fine in your browser, try Settings → Network → Use IPv4 only.",
+				apperr.ActionSettings)
 		}
 		return nil, context.Canceled
 	}

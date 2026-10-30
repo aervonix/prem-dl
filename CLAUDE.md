@@ -172,7 +172,7 @@ cp bundle/yt-dlp .                # dev builds then use it, not the old one apt 
 go test ./...; go vet ./...; gofmt -l app.go main.go tools.go internal
 GORACE=atexit_sleep_ms=0 go test -race ./...
 cd frontend && npm ci && npx tsc --noEmit && npm test
-YTGUI_INTEGRATION=1 YTGUI_YTDLP=/path/to/yt-dlp go test ./internal/queue ./internal/ytdlp -run Integration -v
+YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test ./internal/queue ./internal/ytdlp -run Integration -v
 ```
 
 - `wails doctor` asks for `libwebkit2gtk-4.0-dev`, which Ubuntu 24.04+ doesn't have; 4.1 plus the tag is right.
@@ -192,7 +192,8 @@ YTGUI_INTEGRATION=1 YTGUI_YTDLP=/path/to/yt-dlp go test ./internal/queue ./inter
   `sys.EndTreeOnCancel` (exec's default kills only the launcher; its child kept the pipes open).
 - This machine's network has broken IPv6 (an address and a route, but nothing gets through).
   Browsers fall back to IPv4 at once; yt-dlp hangs on each IPv6 address, so every YouTube read hits
-  the 5-minute timeout. Run integration tests through a wrapper that adds `--force-ipv4`.
+  the 5-minute timeout. Settings → Network → Use IPv4 only (`ForceIPv4`, `--force-ipv4`) is for
+  that; turn it on in the app here, and set `YTGUI_FORCE_IPV4=1` for the integration tests.
 
 ## Windows environment notes
 

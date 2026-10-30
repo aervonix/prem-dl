@@ -159,7 +159,7 @@ var rules = []rule{
 			Code:      "network",
 			Title:     "Network problem",
 			Message:   "Prem-dl couldn't reach the server (offline, DNS failure, timeout or blocked connection).",
-			Hint:      "Check your internet connection, VPN or proxy settings, then retry.",
+			Hint:      "Check your internet connection, VPN or proxy settings, then retry. If websites open fine in your browser, try Settings → Network → Use IPv4 only.",
 			Action:    ActionSettings,
 			Retryable: true,
 		}

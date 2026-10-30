@@ -89,6 +89,7 @@ func TestIntegrationSearch(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	env := Env{Bin: bin, Settings: settings.Default(), JSRuntimes: DetectJSRuntimes(ctx)}
+	env.Settings.ForceIPv4 = os.Getenv("YTGUI_FORCE_IPV4") == "1"
 
 	res, err := Search(ctx, env, "rick astley never gonna give you up", SearchFilter{Type: "video"}, 21, 10)
 	if err != nil {

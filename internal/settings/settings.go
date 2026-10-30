@@ -104,6 +104,7 @@ type Settings struct {
 	ConcurrentFragments int             `json:"concurrentFragments"`
 	RateLimit           string          `json:"rateLimit"` // e.g. 2M, 500K; empty = unlimited
 	Proxy               string          `json:"proxy"`
+	ForceIPv4           bool            `json:"forceIPv4"` // for networks that hand out IPv6 addresses that don't work
 	Retries             int             `json:"retries"`
 	AutoRetry           bool            `json:"autoRetry"`     // retry downloads that failed with a passing problem
 	SleepRequests       float64         `json:"sleepRequests"` // seconds between requests while a download reads the site
