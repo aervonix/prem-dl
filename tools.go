@@ -180,6 +180,7 @@ func (a *App) buildEnv(ctx context.Context) (ytdlp.Env, func(), error) {
 		return ytdlp.Env{}, func() {}, errToolsMissing
 	}
 	env := ytdlp.Env{Bin: bin.Path, Settings: s, JSRuntimes: tools.JSRuntimes}
+	env.PluginDir, env.Vars = a.challengeSolver(bin.Path, tools.JSRuntimes)
 	if tools.FFmpeg != nil {
 		env.FFmpeg = tools.FFmpeg.Path
 	}

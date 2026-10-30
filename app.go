@@ -18,6 +18,7 @@ import (
 
 	"yt-dlp-gui/internal/apperr"
 	"yt-dlp-gui/internal/follow"
+	"yt-dlp-gui/internal/jsc"
 	"yt-dlp-gui/internal/queue"
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
@@ -71,6 +72,12 @@ type App struct {
 	searchCancel context.CancelFunc // set while Search runs
 	searcher     *ytweb.Searcher    // reads YouTube's results without yt-dlp; see search.go
 	lister       *ytweb.Lister      // lists channels and playlists without yt-dlp; see listNative
+
+	// The challenge solver yt-dlp runs share; see solver.go.
+	jscMu  sync.Mutex
+	jscSrv *jsc.Server
+	jscKey string // the node and solver scripts it runs
+	jscDir string // the plugin folder
 
 	// The Download page's listing being read; see listing.go.
 	listingMu  sync.Mutex
@@ -269,6 +276,7 @@ func (a *App) shutdown(ctx context.Context) {
 	a.cancelProbe()
 	a.feeds.Shutdown() // before the queue, so a check can't add to it while it shuts down
 	a.q.Shutdown()
+	a.stopChallengeSolver()
 }
 
 // onSecondInstance gets the command line of a second launch: the user starting the app again, a

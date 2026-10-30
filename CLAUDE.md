@@ -71,6 +71,17 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
     never shift. Anything yt-dlp
     treats specially (an error alert, a regional redirect, a missing tab, YouTube's home page,
     mixes, Watch later) is left to it, so its errors (`no_tab`...) reach the follow checks.
+- `internal/jsc` + `solver.go` – YouTube's n/sig challenges solved for yt-dlp by a `node` that
+  Prem-dl keeps running. yt-dlp starts a fresh runtime and parses the 3 MB player script on every
+  run (its preprocessed-player cache is off in the code): 0.66 s; kept running, once per player
+  version (~weekly), then milliseconds. Analysing a video: 3.2 s -> 2.3 s. The solver is yt-dlp's
+  own (`_internal/yt_dlp_ejs/yt/solver/{lib,core}.min.js` of the unpacked yt-dlp, so it changes
+  with it), in `worker.js`, sandboxed with `--permission` like yt-dlp's. yt-dlp reaches it through
+  a plugin (`jsc/plugin/premdl_jsc.py`, a `JsChallengeProvider`: yt-dlp's public API) written to
+  `<data>/jsc-plugin` and loaded with `--plugin-dirs` (added to the default folders, so users'
+  own plugins still load); it finds the loopback server through `PREMDL_JSC_URL`/`_TOKEN` in the
+  environment (`Env.Vars`, not argv, which other users can read). Any failure declines the
+  request and yt-dlp solves it itself. Needs node and an unpacked yt-dlp; otherwise off.
 - `internal/settings` – `Settings` + `DownloadOptions`, validation, atomic writes. Data lives in `%APPDATA%\yt-dlp-gui`.
 - `internal/sys` – hidden consoles, process-tree kill (`taskkill /T`), open/reveal in Explorer, the tray
   icon + taskbar progress (`shell_windows.go`, raw Win32/COM on its own thread), per-user registry entries.
@@ -154,6 +165,9 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
   the filename template (`videoFolder`). Saved settings keep whatever template they had.
 - Quality sizes in the UI are estimates from the probe's `filesize`/`filesize_approx`: `quality.ts`
   picks streams like `bv*[height<=h]+ba` under `QualitySort`. Change one, change the other.
+- `--plugin-dirs=DIR` wants `DIR/<package>/yt_dlp_plugins/extractor/x.py`; one level less and
+  `-v` says `Plugin directories: none`. A loaded JSC provider shows in `-v`'s `JS Challenge
+  Providers: ..., premdl-1.0.0 (external)`; an exception from it makes yt-dlp try the next one.
 - A YouTube video analysed in the last hour downloads from the probe's JSON (`ytdlp.InfoCache`,
   `--load-info-json`), skipping the webpage, player API and JS challenge (~2.5 s). Its stream links
   last 6 h and are tied to the IP. `-J` keeps private keys (`_format_sort_fields`), so the format

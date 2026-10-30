@@ -763,7 +763,7 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, e *entry) 
 
 	cmd := exec.CommandContext(ctx, env.Bin, args...)
 	sys.Quiet(cmd)
-	cmd.Env = append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
+	cmd.Env = env.Environ()
 	cmd.Cancel = func() error {
 		if cmd.Process != nil {
 			sys.KillTree(cmd.Process.Pid)

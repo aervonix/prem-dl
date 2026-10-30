@@ -19,6 +19,11 @@ type Env struct {
 	JSRuntimes  []JSRuntime
 	CookieFile  string // a private copy of the cookies file for this run ("" = none)
 	ArchiveFile string // download archive path, used when Settings.UseArchive is on
+	// PluginDir is a yt-dlp plugin folder to load besides the default ones, and Vars are
+	// environment variables for the run (Prem-dl's challenge solver, internal/jsc); both empty
+	// when it isn't used.
+	PluginDir string
+	Vars      []string
 }
 
 // Markers that prefix the lines the GUI asks yt-dlp to print, so they can't be confused
@@ -61,6 +66,9 @@ func (e Env) CommonArgs() []string {
 	}
 	if e.FFmpeg != "" {
 		a = append(a, "--ffmpeg-location="+e.FFmpeg)
+	}
+	if e.PluginDir != "" {
+		a = append(a, "--plugin-dirs="+e.PluginDir) // added to the default folders, not instead
 	}
 	return a
 }
@@ -410,6 +418,11 @@ func sanitizeSegment(s string) string {
 // childEnv forces UTF-8 output from Python so non-Latin titles survive the pipe.
 func childEnv() []string {
 	return append(os.Environ(), "PYTHONUTF8=1", "PYTHONIOENCODING=utf-8")
+}
+
+// Environ is the environment a yt-dlp run gets.
+func (e Env) Environ() []string {
+	return append(childEnv(), e.Vars...)
 }
 
 // SplitArgs splits an "extra arguments" string the way a shell would, honouring single and

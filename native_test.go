@@ -126,3 +126,23 @@ func TestIntegrationProbeListsAChannelInParts(t *testing.T) {
 		}
 	}
 }
+
+// Opt-in: analysing a video starts Prem-dl's challenge solver and yt-dlp uses it; the second
+// analysis has the player parsed already.
+func TestIntegrationProbeUsesTheChallengeSolver(t *testing.T) {
+	a := fallbackApp(t) // its own search and listing fail; analysing a video is yt-dlp's
+	for i := 1; i <= 2; i++ {
+		start := time.Now()
+		res := a.Probe("https://www.youtube.com/watch?v=dQw4w9WgXcQ", true)
+		if res.Error != nil || res.Result == nil || res.Result.Video == nil || len(res.Result.Video.Formats) == 0 {
+			t.Fatalf("analysis %d: %+v", i, res)
+		}
+		a.jscMu.Lock()
+		srv := a.jscSrv
+		a.jscMu.Unlock()
+		if srv == nil || srv.Solved() < int64(i) {
+			t.Fatalf("analysis %d didn't go through the solver (server %v)", i, srv != nil)
+		}
+		t.Logf("analysis %d: %d ms, %d requests solved so far", i, time.Since(start).Milliseconds(), srv.Solved())
+	}
+}
