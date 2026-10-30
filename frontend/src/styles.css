@@ -1279,6 +1279,23 @@ input[type='checkbox'] {
 .vcard:hover {
   background: var(--panel-2);
 }
+/* Search results fade in one after another, top to bottom. Only before and during the fade
+   does the animation apply ("backwards"), so it never holds a card's own styles afterwards. */
+.vcard.reveal {
+  animation: vcard-in 320ms cubic-bezier(0.2, 0.7, 0.3, 1) backwards;
+  animation-delay: calc(var(--reveal) * 28ms);
+}
+@keyframes vcard-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vcard.reveal {
+    animation: none;
+  }
+}
 .vcard.on {
   background: var(--panel-2);
   border-color: var(--border-strong);

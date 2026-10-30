@@ -218,7 +218,7 @@ export function SearchPage() {
       ) : entries.length === 0 ? (
         <Empty title={`No results for “${shown.query}”`}>{filter.type || filter.uploaded || filter.length ? 'Try fewer filters.' : 'Try other words.'}</Empty>
       ) : (
-        <VideoGrid entries={entries} selected={selected} setSelected={setSelected} uploader status={status} onOpen={(url) => openLinks([url])} />
+        <VideoGrid entries={entries} selected={selected} setSelected={setSelected} uploader reveal status={status} onOpen={(url) => openLinks([url])} />
       )}
 
       {shown && entries.length > 0 && (

@@ -1,5 +1,5 @@
 import {memo, useCallback, useMemo, useRef, useState} from 'react'
-import type {Dispatch, MouseEvent, SetStateAction} from 'react'
+import type {CSSProperties, Dispatch, MouseEvent, SetStateAction} from 'react'
 import {ago, compactCount, duration} from '../format'
 import {Icon} from '../icons'
 import {useJobs} from '../store'
@@ -45,6 +45,9 @@ function metaLine(e: PlaylistEntry, uploader: boolean): string {
   return [uploader ? e.uploader : '', e.viewCount ? `${compactCount(e.viewCount)} views` : '', ago(e.timestamp)].filter(Boolean).join(' · ')
 }
 
+// Cards past this many in a batch fade in with the last of these; they are below the fold.
+const REVEAL_MAX = 15
+
 const Card = memo(function Card({
   entry,
   checked,
@@ -52,6 +55,7 @@ const Card = memo(function Card({
   uploader,
   onPick,
   onOpen,
+  reveal,
 }: {
   entry: PlaylistEntry
   checked: boolean
@@ -59,6 +63,8 @@ const Card = memo(function Card({
   uploader: boolean
   onPick: (index: number, range: boolean) => void
   onOpen?: (url: string) => void
+  /** Its place in the batch that brought it, which delays its fade-in; -1 shows it at once. */
+  reveal: number
 }) {
   const [failedSrc, setFailedSrc] = useState('')
   const e = entry
@@ -71,7 +77,11 @@ const Card = memo(function Card({
   const title = e.title || e.id
 
   return (
-    <div className={`vcard${checked ? ' on' : ''}${!can && !playlist ? ' off' : ''}`} onClick={pick} title={title}>
+    <div
+      className={`vcard${checked ? ' on' : ''}${!can && !playlist ? ' off' : ''}${reveal >= 0 ? ' reveal' : ''}`}
+      style={reveal >= 0 ? ({'--reveal': Math.min(reveal, REVEAL_MAX)} as CSSProperties) : undefined}
+      onClick={pick}
+      title={title}>
       <div className="vthumb">
         {e.thumbnail && failedSrc !== e.thumbnail ? (
           <img src={e.thumbnail} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedSrc(e.thumbnail)} />
@@ -129,6 +139,7 @@ export function VideoGrid({
   tall,
   uploader,
   status,
+  reveal,
 }: {
   entries: PlaylistEntry[]
   selected: Set<number>
@@ -141,8 +152,18 @@ export function VideoGrid({
   uploader?: boolean
   /** A word about each video, such as "Downloaded", or ''. */
   status?: (e: PlaylistEntry) => string
+  /** Fade each batch of new entries in from the top, rather than showing them at once. */
+  reveal?: boolean
 }) {
   const anchor = useRef<number | null>(null)
+  // Each entry's place in the batch it came in, set when it first shows, so a card already on
+  // screen keeps its number while "Show more" adds the next batch from 0.
+  const order = useRef(new Map<number, number>())
+  if (reveal) {
+    if (entries.length < order.current.size) order.current = new Map() // another list
+    let n = 0
+    for (const e of entries) if (!order.current.has(e.index)) order.current.set(e.index, n++)
+  }
   const list = useRef(entries)
   list.current = entries
 
@@ -182,7 +203,18 @@ export function VideoGrid({
           </div>
         ) : null
         lastGroup = e.group
-        const card = <Card key={e.index} entry={e} checked={selected.has(e.index)} status={status?.(e) ?? ''} uploader={!!uploader} onPick={onPick} onOpen={onOpen} />
+        const card = (
+          <Card
+            key={e.index}
+            entry={e}
+            checked={selected.has(e.index)}
+            status={status?.(e) ?? ''}
+            uploader={!!uploader}
+            onPick={onPick}
+            onOpen={onOpen}
+            reveal={reveal ? (order.current.get(e.index) ?? -1) : -1}
+          />
+        )
         return header ? [header, card] : card
       })}
     </div>
