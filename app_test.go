@@ -1,10 +1,15 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"yt-dlp-gui/internal/follow"
+	"yt-dlp-gui/internal/settings"
 )
 
 func TestInOrderRunsInParallelAndKeepsOrder(t *testing.T) {
@@ -66,4 +71,30 @@ func TestInOrderRunsInParallelAndKeepsOrder(t *testing.T) {
 
 func TestInOrderWithNothingToDo(t *testing.T) {
 	inOrder(0, 4, func(int) int { t.Fatal("work called"); return 0 }, func(int, int) { t.Fatal("use called") })
+}
+
+func TestImportFeedsFromTakeout(t *testing.T) {
+	store, err := settings.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &App{store: store, feeds: follow.New(follow.Deps{})}
+	path := filepath.Join(t.TempDir(), "subscriptions.csv")
+	csv := "Channel Id,Channel Url,Channel Title\n" +
+		"UCsXVk37bltHxD1rDPwtNM8Q,http://www.youtube.com/channel/UCsXVk37bltHxD1rDPwtNM8Q,Kurzgesagt\n" +
+		"UCHnyfMqiRRG1u-2MsSQLbXA,http://www.youtube.com/channel/UCHnyfMqiRRG1u-2MsSQLbXA,Veritasium\n"
+	if err := os.WriteFile(path, []byte(csv), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res := a.importFeedsFrom(path)
+	if res.Error != "" || res.Added != 2 || len(res.Failed) != 0 {
+		t.Fatalf("%+v", res)
+	}
+	feeds := a.feeds.List()
+	if len(feeds) != 2 || feeds[0].Title != "Kurzgesagt" || feeds[0].Options.Preset == "" || len(feeds[0].Tabs) != 1 {
+		t.Fatalf("%+v", feeds)
+	}
+	if again := a.importFeedsFrom(path); again.Added != 0 || again.Already != 2 {
+		t.Errorf("again: %+v", again)
+	}
 }

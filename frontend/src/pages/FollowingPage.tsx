@@ -185,6 +185,32 @@ export function FollowingPage() {
 
   const active = feeds.filter((f) => !f.paused).length
 
+  const [importing, setImporting] = useState(false)
+  const importFeeds = async () => {
+    setImporting(true)
+    try {
+      const res = await api.importFeeds()
+      if (res.cancelled) return
+      if (res.error) return toast('error', res.error)
+      const parts = [`Following ${plural(res.added, 'more channel')}`]
+      if (res.already) parts.push(`${res.already} already followed`)
+      if (res.failed.length) parts.push(`${res.failed.length} couldn't be followed (${res.failed[0]})`)
+      toast(res.failed.length ? 'error' : 'success', `${parts.join(', ')}.${res.added ? ' Each notes what’s there now; only new uploads download.' : ''}`)
+    } catch (e) {
+      toast('error', errMessage(e))
+    } finally {
+      setImporting(false)
+    }
+  }
+  const exportFeeds = async () => {
+    try {
+      const path = await api.exportFeeds()
+      if (path) toast('success', `Saved ${plural(feeds.length, 'follow')} to ${path}`)
+    } catch (e) {
+      toast('error', errMessage(e))
+    }
+  }
+
   // An unfollowed feed's page closes with it.
   if (open) return <ChannelView key={open.id} feed={open} onBack={() => setOpenId('')} />
 
@@ -205,6 +231,12 @@ export function FollowingPage() {
         </label>
         <Button icon="refresh" disabled={active === 0} onClick={() => void attempt(api.checkFeed(''))}>
           Check all now
+        </Button>
+        <Button variant="ghost" loading={importing} title="Follow what a file lists: a Prem-dl export, or YouTube's subscriptions.csv from Google Takeout" onClick={() => void importFeeds()}>
+          Import…
+        </Button>
+        <Button variant="ghost" disabled={feeds.length === 0} title="Save your follows to a file, for another computer" onClick={() => void exportFeeds()}>
+          Export…
         </Button>
       </div>
 

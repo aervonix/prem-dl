@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"yt-dlp-gui/internal/follow"
 	"yt-dlp-gui/internal/queue"
@@ -224,3 +228,92 @@ func (a *App) stopBrowseLocked() {
 
 // CheckFeed checks a feed for new uploads now, or with id "" every feed that isn't paused.
 func (a *App) CheckFeed(id string) error { return a.feeds.CheckNow(id) }
+
+// ImportResult says what ImportFeeds did.
+type ImportResult struct {
+	Added     int      `json:"added"`
+	Already   int      `json:"already"`   // followed before
+	Failed    []string `json:"failed"`    // "link: why", for the ones that couldn't be followed
+	Cancelled bool     `json:"cancelled"` // no file was chosen
+	Error     string   `json:"error"`     // the file couldn't be read at all
+}
+
+// ImportFeeds follows what a file lists: a Prem-dl export (with its options), YouTube's
+// subscriptions.csv from Google Takeout, or an OPML list of channel feeds (both with the
+// default options). Each new feed first notes the videos already there, one after another.
+func (a *App) ImportFeeds() ImportResult {
+	path := a.PickFile("Import follows", "Follows (*.json, *.csv, *.opml)", "*.json;*.csv;*.opml;*.xml")
+	if path == "" {
+		return ImportResult{Cancelled: true, Failed: []string{}}
+	}
+	return a.importFeedsFrom(path)
+}
+
+func (a *App) importFeedsFrom(path string) ImportResult {
+	out := ImportResult{Failed: []string{}}
+	f, err := os.Open(path)
+	if err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, 8<<20))
+	if err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	items, err := follow.ParseImport(data)
+	if err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	defaults := a.store.Get().Defaults
+	defaults.OutputDir = ""
+	if defaults.Preset == "custom" {
+		defaults.Preset, defaults.FormatID = "best", ""
+	}
+	for _, it := range items {
+		nf := it.NewFeed
+		if !it.HasOptions {
+			nf.Options = defaults
+		}
+		if t, err := a.feeds.Inspect(nf.URL); err == nil && t.Followed != "" {
+			out.Already++
+			continue
+		}
+		feed, err := a.feeds.Follow(nf)
+		if err != nil {
+			out.Failed = append(out.Failed, nf.URL+": "+err.Error())
+			continue
+		}
+		if it.Paused {
+			_ = a.feeds.SetPaused(feed.ID, true)
+		}
+		out.Added++
+	}
+	return out
+}
+
+// ExportFeeds saves every followed feed to a file of the user's choosing, for ImportFeeds on
+// another computer. It returns the file written, or "" when none was chosen.
+func (a *App) ExportFeeds() (string, error) {
+	if !a.ready() {
+		return "", errors.New("the window isn't ready")
+	}
+	data, err := follow.Export(a.feeds.List())
+	if err != nil {
+		return "", err
+	}
+	path, err := wr.SaveFileDialog(a.rt(), wr.SaveDialogOptions{
+		Title:           "Export follows",
+		DefaultFilename: "Prem-dl follows.json",
+		Filters:         []wr.FileFilter{{DisplayName: "Prem-dl follows (*.json)", Pattern: "*.json"}},
+	})
+	if err != nil || path == "" {
+		return "", err
+	}
+	if filepath.Ext(path) == "" {
+		path += ".json"
+	}
+	return path, settings.WriteFileAtomic(path, data, 0o600)
+}

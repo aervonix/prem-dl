@@ -567,6 +567,26 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ImportResult {
+	    added: number;
+	    already: number;
+	    failed: string[];
+	    cancelled: boolean;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.added = source["added"];
+	        this.already = source["already"];
+	        this.failed = source["failed"];
+	        this.cancelled = source["cancelled"];
+	        this.error = source["error"];
+	    }
+	}
 	
 	export class ListingPart {
 	    entries: ytdlp.PlaylistEntry[];

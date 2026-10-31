@@ -42,6 +42,8 @@ export function Enqueue(arg1:Array<queue.NewJob>,arg2:settings.DownloadOptions):
 
 export function EnqueueLinks(arg1:Array<main.BulkLink>):Promise<main.BulkResponse>;
 
+export function ExportFeeds():Promise<string>;
+
 export function FollowFeed(arg1:follow.NewFeed):Promise<main.FeedResponse>;
 
 export function GetArchiveInfo():Promise<main.ArchiveInfo>;
@@ -59,6 +61,8 @@ export function HideWindow():Promise<void>;
 export function ImportCookieFile(arg1:string):Promise<main.CookieResponse>;
 
 export function ImportCookieText(arg1:string):Promise<main.CookieResponse>;
+
+export function ImportFeeds():Promise<main.ImportResult>;
 
 export function InspectCookieFile(arg1:string):Promise<ytdlp.CookieInfo>;
 

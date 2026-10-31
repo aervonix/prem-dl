@@ -74,6 +74,10 @@ export function EnqueueLinks(arg1) {
   return window['go']['main']['App']['EnqueueLinks'](arg1);
 }
 
+export function ExportFeeds() {
+  return window['go']['main']['App']['ExportFeeds']();
+}
+
 export function FollowFeed(arg1) {
   return window['go']['main']['App']['FollowFeed'](arg1);
 }
@@ -108,6 +112,10 @@ export function ImportCookieFile(arg1) {
 
 export function ImportCookieText(arg1) {
   return window['go']['main']['App']['ImportCookieText'](arg1);
+}
+
+export function ImportFeeds() {
+  return window['go']['main']['App']['ImportFeeds']();
 }
 
 export function InspectCookieFile(arg1) {

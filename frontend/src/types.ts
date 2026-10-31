@@ -522,6 +522,19 @@ export interface FeedFilter {
   exclude: string[]
 }
 
+/** What importing follows did. */
+export interface ImportResult {
+  added: number
+  /** Followed already. */
+  already: number
+  /** "link: why", for the ones that couldn't be followed. */
+  failed: string[]
+  /** No file was chosen. */
+  cancelled: boolean
+  /** The file couldn't be read at all. */
+  error: string
+}
+
 export interface NewFeed {
   url: string
   title: string

@@ -66,6 +66,7 @@ export type _Guards = [
   Expect<Guard<follow.Feed, T.Feed>>,
   Expect<Guard<follow.NewFeed, T.NewFeed>>,
   Expect<Guard<follow.Filter, T.FeedFilter>>,
+  Expect<Guard<main.ImportResult, T.ImportResult>>,
   Expect<Guard<follow.Target, T.FeedTarget>>,
   Expect<Guard<main.FeedResponse, T.FeedResponse>>,
   Expect<Guard<main.TargetResponse, T.TargetResponse>>,
@@ -146,6 +147,10 @@ export const api = {
   editFeed: (id: string, tabs: T.ChannelTab[], opts: T.DownloadOptions, filter: T.FeedFilter) =>
     cast<T.FeedResponse>(App.EditFeed(id, tabs, opts as unknown as settings.DownloadOptions, filter)),
   unfollowFeed: App.UnfollowFeed,
+  /** Follow what a file lists (a Prem-dl export, Takeout's subscriptions.csv, OPML), chosen in a dialog. */
+  importFeeds: () => cast<T.ImportResult>(App.ImportFeeds()),
+  /** Save every follow to a file chosen in a dialog; '' when none was chosen. */
+  exportFeeds: App.ExportFeeds,
   pauseFeed: App.PauseFeed,
   /** List a followed feed's videos: a channel tab ('' = the first followed one), up to limit (0 = all). */
   browseFeed: (id: string, tab: T.ChannelTab | '', limit: number) => cast<T.ProbeResponse>(App.BrowseFeed(id, tab, limit)),
