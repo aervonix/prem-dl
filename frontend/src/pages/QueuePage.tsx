@@ -1,6 +1,8 @@
 import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {api, errMessage} from '../api'
 import {ErrorPanel} from '../components/ErrorPanel'
+import {editable} from '../components/DropLinks'
+import {useSteps} from '../components/VideoGrid'
 import {RetryDialog} from '../components/RetryDialog'
 import {Thumb} from '../components/Thumb'
 import {Button, Empty, IconButton, Modal, Progress, Segmented, useConfirm} from '../components/ui'
@@ -80,7 +82,22 @@ function progressState(j: Job): 'busy' | 'done' | 'paused' | 'failed' | 'active'
   return 'active'
 }
 
-const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onLog: (j: Job) => void; onEdit: (j: Job) => void; notify: (msg: string) => void}) {
+const JobRow = memo(function JobRow({
+  job,
+  onLog,
+  onEdit,
+  notify,
+  selected,
+  onSelect,
+}: {
+  job: Job
+  onLog: (j: Job) => void
+  onEdit: (j: Job) => void
+  notify: (msg: string) => void
+  selected: boolean
+  /** Tick or untick it; range ticks everything since the last one clicked (Shift+click). */
+  onSelect: (id: string, range: boolean) => void
+}) {
   const run = async (fn: () => Promise<unknown>) => {
     try {
       await fn()
@@ -96,7 +113,15 @@ const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onL
   const sub = [job.uploader, job.playlistTitle ? `${job.playlistTitle} · ${job.playlistIndex}/${job.playlistCount}` : ''].filter(Boolean).join(' · ')
 
   return (
-    <div className="job">
+    <div className={`job${selected ? ' on' : ''}`}>
+      <input
+        type="checkbox"
+        className="jsel"
+        checked={selected}
+        aria-label={`Select ${job.title}`}
+        onClick={(e) => onSelect(job.id, e.shiftKey)}
+        onChange={() => {}}
+      />
       <Thumb src={job.thumbnail} seconds={job.duration} className="jthumb thumb" />
       <div style={{minWidth: 0}}>
         <div className="jtitle truncate" title={job.title}>
@@ -308,6 +333,78 @@ export function QueuePage() {
   // Keep the log's job fresh (title/URL can fill in after the plan arrives).
   const liveLogJob = logJob ? jobs.find((j) => j.id === logJob.id) ?? logJob : null
 
+  // ---- selection: tick rows (Shift+click for a run), then act on them all ----
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const anchor = useRef<string | null>(null)
+  const shownRef = useRef(shown)
+  shownRef.current = shown
+  const onSelect = useCallback((id: string, range: boolean) => {
+    const list = shownRef.current
+    const from = range && anchor.current ? list.findIndex((j) => j.id === anchor.current) : -1
+    anchor.current = id
+    setPicked((prev) => {
+      const next = new Set(prev)
+      const on = !prev.has(id)
+      const to = list.findIndex((j) => j.id === id)
+      const ids = from >= 0 && to >= 0 ? list.slice(Math.min(from, to), Math.max(from, to) + 1).map((j) => j.id) : [id]
+      for (const x of ids) {
+        if (on) next.add(x)
+        else next.delete(x)
+      }
+      return next
+    })
+  }, [])
+  // Ticks on downloads that left the list (cleared, or out of the filter) are dropped.
+  const sel = useMemo(() => shown.filter((j) => picked.has(j.id)), [shown, picked])
+  const [removeArmed, confirmRemove] = useConfirm()
+  const each = async (fn: (id: string) => Promise<unknown>, which: Job[]) => {
+    let failed = 0
+    for (const j of which) await fn(j.id).catch(() => failed++)
+    if (failed) toast('error', `${plural(failed, 'download')} couldn't be changed`)
+  }
+  const selPausable = sel.filter((j) => ACTIVE.includes(j.status) || j.status === 'queued')
+  const selResumable = sel.filter((j) => j.status === 'paused')
+  const selRetryable = sel.filter((j) => j.status === 'failed' || j.status === 'cancelled')
+  const selWaiting = sel.filter((j) => j.status === 'queued' || j.status === 'paused')
+  const removeSelected = () =>
+    // Only finished downloads leave without a second click: the rest would be lost.
+    confirmRemove(() => {
+      void each(api.removeJob, sel)
+      setPicked(new Set())
+    }, sel.some((j) => j.status !== 'completed'))
+
+  // Ctrl+F finds; Ctrl+A ticks what's shown, Delete removes the ticked, Esc unticks.
+  const searchRef = useRef<HTMLInputElement>(null)
+  const keys = useRef<(e: KeyboardEvent) => void>(() => {})
+  keys.current = (e) => {
+    if (document.querySelector('[aria-modal]')) return
+    const ctrl = e.ctrlKey || e.metaKey
+    if (ctrl && e.key.toLowerCase() === 'f') {
+      e.preventDefault()
+      searchRef.current?.focus()
+      searchRef.current?.select()
+      return
+    }
+    if (editable(e.target)) return
+    if (ctrl && e.key.toLowerCase() === 'a') {
+      e.preventDefault()
+      setPicked(new Set(shownRef.current.map((j) => j.id)))
+    } else if (e.key === 'Escape' && sel.length > 0) {
+      setPicked(new Set())
+    } else if (e.key === 'Delete' && sel.length > 0) {
+      e.preventDefault()
+      removeSelected()
+    }
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keys.current(e)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  // A full queue (500) is made a few rows at a time as it scrolls into view.
+  const rows = useSteps(shown)
+
   return (
     <div className="content" style={{maxWidth: 980}}>
       <div className="page-head">
@@ -361,6 +458,7 @@ export function QueuePage() {
           </div>
           <div className="q-toolbar">
             <input
+              ref={searchRef}
               type="search"
               className="q-search"
               placeholder="Search titles, channels and links…"
@@ -385,10 +483,40 @@ export function QueuePage() {
             </Button>
           </div>
 
+          {sel.length > 0 && (
+            <div className="q-selbar" role="region" aria-label="Selected downloads">
+              <span className="summary">{plural(sel.length, 'download')} selected</span>
+              <Button size="sm" icon="pause" disabled={selPausable.length === 0} onClick={() => void each(api.pauseJob, selPausable)}>
+                Pause
+              </Button>
+              <Button size="sm" icon="play" disabled={selResumable.length === 0} onClick={() => void each(api.resumeJob, selResumable)}>
+                Resume
+              </Button>
+              <Button size="sm" icon="retry" disabled={selRetryable.length === 0} onClick={() => void each(api.retryJob, selRetryable)}>
+                Retry
+              </Button>
+              <Button size="sm" icon="toTop" disabled={selWaiting.length === 0} onClick={() => void each(api.moveJobToTop, [...selWaiting].reverse())}>
+                Move to top
+              </Button>
+              <Button size="sm" variant="ghost" className="danger" icon="trash" onClick={removeSelected}>
+                {removeArmed ? 'Click again to remove' : 'Remove'}
+              </Button>
+              <div style={{flex: 1}} />
+              <Button size="sm" variant="ghost" onClick={() => setPicked(new Set())}>
+                Clear selection
+              </Button>
+            </div>
+          )}
+
           {shown.length === 0 ? (
             <div className="empty">{search.trim() ? `Nothing matches “${search.trim()}”.` : `Nothing here. ${plural(counts.all, 'download')} in other tabs.`}</div>
           ) : (
-            shown.map((j) => <JobRow key={j.id} job={j} onLog={setLogJob} onEdit={setEditJob} notify={notify} />)
+            <div className={picked.size > 0 ? 'jobs selecting' : 'jobs'}>
+              {rows.shown.map((j) => (
+                <JobRow key={j.id} job={j} onLog={setLogJob} onEdit={setEditJob} notify={notify} selected={picked.has(j.id)} onSelect={onSelect} />
+              ))}
+              {rows.sentinel}
+            </div>
           )}
         </>
       )}

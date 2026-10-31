@@ -1556,6 +1556,42 @@ input[type='checkbox'] {
   content-visibility: auto;
   contain-intrinsic-size: auto 96px;
 }
+.job {
+  position: relative;
+}
+/* A row's tick sits on its thumbnail: shown on hover and focus, and on every row once one is ticked. */
+.jsel {
+  position: absolute;
+  top: 18px;
+  left: 20px;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+  opacity: 0;
+}
+.job:hover .jsel,
+.jsel:focus-visible,
+.jobs.selecting .jsel {
+  opacity: 1;
+}
+.job.on {
+  border-color: var(--control-border);
+  background: var(--panel-2);
+}
+.q-selbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
 .job + .job {
   margin-top: 8px;
 }
