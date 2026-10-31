@@ -39,9 +39,8 @@ func (e errNotHere) Error() string { return "left to yt-dlp: " + string(e) }
 
 // Lister lists channel tabs and playlists.
 type Lister struct {
-	clients clients
-	base    string           // https://www.youtube.com; replaced in tests
-	now     func() time.Time // dates "3 years ago"
+	base string           // https://www.youtube.com; replaced in tests
+	now  func() time.Time // dates "3 years ago"
 }
 
 // NewLister returns a Lister.
@@ -141,7 +140,7 @@ func (l *Lister) List(ctx context.Context, o Options, link string, limit int, pr
 	if !ok {
 		return nil, errNotHere("not a channel tab or playlist link")
 	}
-	hc := l.clients.get(o)
+	hc := pool.get(o)
 	out := &parts{progress: progress}
 	var pl map[string]any
 	var err error

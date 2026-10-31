@@ -30,7 +30,6 @@ const (
 type Searcher struct {
 	mu      sync.Mutex
 	current *session
-	clients clients
 
 	api string           // replaced in tests
 	now func() time.Time // dates "3 years ago"
@@ -108,7 +107,7 @@ func (s *Searcher) session(o Options, query, params string, restart bool) *sessi
 		s.current.cancel()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	s.current = &session{key: key, query: query, params: params, client: s.clients.get(o),
+	s.current = &session{key: key, query: query, params: params, client: pool.get(o),
 		ctx: ctx, cancel: cancel, lock: make(chan struct{}, 1)}
 	return s.current
 }

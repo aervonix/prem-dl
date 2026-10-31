@@ -34,6 +34,10 @@ type Options struct {
 }
 
 // clients keeps an HTTP client per Options, so requests reuse their connection to YouTube.
+// Searches and listings share one set: going from a search to a channel doesn't open a new
+// connection (TLS and HTTP/2 setup, 100-200 ms, more through a proxy).
+var pool clients
+
 type clients struct {
 	mu sync.Mutex
 	m  map[Options]*http.Client
