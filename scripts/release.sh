@@ -86,7 +86,8 @@ wails build -tags "webkit2_41 bundled" -trimpath
 rm -f "$secret_file"
 [ -x "$bin" ] || fail "wails build made no build/bin/Prem-dl"
 # The secret is in there XORed: its plain form must not be.
-if grep -aq 'trb_' "$bin"; then fail "the build secret is readable in build/bin/Prem-dl"; fi
+# (The updater's own pattern for a secret, trb_[0-9A-Za-z]{12}_..., is in there too: look for a real one.)
+if grep -aqE 'trb_[0-9A-Za-z]{12}_' "$bin"; then fail "the build secret is readable in build/bin/Prem-dl"; fi
 
 # The desktop entry both packages carry. The .deb's Exec must read exactly as the app writes it
 # for /usr/bin/prem-dl (sys.SchemeCommand), or the app adds a user entry of its own.

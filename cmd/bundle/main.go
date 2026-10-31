@@ -4,15 +4,23 @@
 // sums, the same way the app installs them. Then:
 //
 //	wails build -tags bundled
+//
+// -os windows fetches Windows' tools on another system, for a Windows build made there
+// (scripts/release-windows.sh). That yt-dlp can't be run here, so its version is the release's
+// tag, and the archive is only checked to hold the Windows launcher.
 package main
 
 import (
+	"archive/zip"
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 
 	"yt-dlp-gui/internal/ytdlp"
@@ -22,17 +30,22 @@ func main() {
 	dir := flag.String("dir", "bundle", "folder to fill")
 	channel := flag.String("channel", "stable", "yt-dlp release channel: stable, nightly or master")
 	withFFmpeg := flag.Bool("ffmpeg", true, "also bundle ffmpeg (about 90 MB on Windows, 140 MB on Linux)")
+	goos := flag.String("os", runtime.GOOS, "the system the build is for: windows or linux")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	if err := run(ctx, *dir, *channel, *withFFmpeg); err != nil {
+	if err := run(ctx, *dir, *channel, *goos, *withFFmpeg); err != nil {
 		fmt.Fprintln(os.Stderr, "bundle:", err)
 		os.Exit(1)
 	}
 }
 
-func run(ctx context.Context, dir, channel string, withFFmpeg bool) error {
+func run(ctx context.Context, dir, channel, goos string, withFFmpeg bool) error {
+	goarch := runtime.GOARCH
+	if goos != runtime.GOOS {
+		goarch = "amd64"
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -47,16 +60,26 @@ func run(ctx context.Context, dir, channel string, withFFmpeg bool) error {
 
 	fmt.Println("yt-dlp:")
 	ytZip := filepath.Join(dir, "yt-dlp.zip")
-	err := ytdlp.Download(ctx, client, channel, ytZip+".part", progress)
+	tag, err := ytdlp.DownloadFor(ctx, client, channel, goos, goarch, ytZip+".part", progress)
 	fmt.Println()
 	if err != nil {
 		return err
 	}
 	defer os.Remove(ytZip + ".part")
-	// Unpacked once, to check it runs here and to learn its version.
-	version, err := tryYtdlp(ctx, ytZip+".part")
-	if err != nil {
-		return err
+	var version string
+	if goos == runtime.GOOS {
+		// Unpacked once, to check it runs here and to learn its version.
+		if version, err = tryYtdlp(ctx, ytZip+".part"); err != nil {
+			return err
+		}
+	} else {
+		if tag == "" {
+			return errors.New("couldn't tell which yt-dlp release was downloaded; try again")
+		}
+		if err := holdsLauncher(ytZip+".part", goos); err != nil {
+			return err
+		}
+		version = tag
 	}
 	if err := os.Rename(ytZip+".part", ytZip); err != nil {
 		return err
@@ -77,12 +100,27 @@ func run(ctx context.Context, dir, channel string, withFFmpeg bool) error {
 	fmt.Println("ffmpeg:")
 	part := zipPath + ".part"
 	defer os.Remove(part)
-	err = ytdlp.DownloadFFmpeg(ctx, client, part, progress)
+	err = ytdlp.DownloadFFmpegFor(ctx, client, goos, goarch, part, progress)
 	fmt.Println()
 	if err != nil {
 		return err
 	}
 	return os.Rename(part, zipPath)
+}
+
+// holdsLauncher checks that a yt-dlp archive for another system has its launcher at the top.
+func holdsLauncher(archive, goos string) error {
+	z, err := zip.OpenReader(archive)
+	if err != nil {
+		return fmt.Errorf("the yt-dlp archive doesn't open: %w", err)
+	}
+	defer z.Close()
+	for _, f := range z.File {
+		if !strings.Contains(f.Name, "/") && strings.HasPrefix(f.Name, "yt-dlp") && (goos != "windows" || strings.HasSuffix(f.Name, ".exe")) {
+			return nil
+		}
+	}
+	return fmt.Errorf("the yt-dlp archive has no %s launcher", goos)
 }
 
 func tryYtdlp(ctx context.Context, archive string) (string, error) {

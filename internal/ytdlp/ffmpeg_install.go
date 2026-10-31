@@ -25,11 +25,11 @@ import (
 // fetched again if they don't match (a rebuild landed in between).
 const ffmpegRelease = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/"
 
-// ffmpegAsset is the build for this computer, or "" when there is none. On Windows the shared
+// ffmpegAsset is the build for goos/goarch, or "" when there is none. On Windows the shared
 // build (ffmpeg.exe and ffprobe.exe over common DLLs) is 87 MB to download against 191 MB for the
 // static one, which carries the same code twice. Linux builds are only static, and come as tar.xz.
-func ffmpegAsset() string {
-	switch runtime.GOOS + "/" + runtime.GOARCH {
+func ffmpegAsset(goos, goarch string) string {
+	switch goos + "/" + goarch {
 	case "windows/amd64":
 		return "ffmpeg-master-latest-win64-gpl-shared.zip"
 	case "linux/amd64":
@@ -60,7 +60,7 @@ func FFmpegDir(managedDir string) string {
 
 // CanInstallFFmpeg reports whether InstallFFmpeg has a build for this computer.
 func CanInstallFFmpeg() bool {
-	return ffmpegAsset() != ""
+	return ffmpegAsset(runtime.GOOS, runtime.GOARCH) != ""
 }
 
 // InstallFFmpeg downloads ffmpeg into FFmpegDir, verifying the archive's SHA-256 and running the
@@ -92,7 +92,12 @@ var errNoFFmpegBuild = errors.New("there is no ffmpeg build to install on this c
 // leaves it at path as a zip. A tar.xz (Linux) is repacked into a zip of the same layout holding
 // only what the app keeps, so both install the same way.
 func DownloadFFmpeg(ctx context.Context, client *http.Client, path string, progress ProgressFunc) error {
-	asset := ffmpegAsset()
+	return DownloadFFmpegFor(ctx, client, runtime.GOOS, runtime.GOARCH, path, progress)
+}
+
+// DownloadFFmpegFor is DownloadFFmpeg for another system.
+func DownloadFFmpegFor(ctx context.Context, client *http.Client, goos, goarch, path string, progress ProgressFunc) error {
+	asset := ffmpegAsset(goos, goarch)
 	if asset == "" {
 		return errNoFFmpegBuild
 	}
@@ -110,7 +115,7 @@ func DownloadFFmpeg(ctx context.Context, client *http.Client, path string, progr
 	if err != nil || download == path {
 		return err
 	}
-	return repackFFmpeg(download, path, runtime.GOOS)
+	return repackFFmpeg(download, path, goos)
 }
 
 // repackFFmpeg copies the entries the app keeps from a tar.xz build into a zip at dest.

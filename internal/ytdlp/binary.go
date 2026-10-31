@@ -271,11 +271,11 @@ func channelRepo(channel string) string {
 	}
 }
 
-// assetName is the zip of yt-dlp's unpacked ("onedir") build for this computer.
-func assetName() string {
-	switch runtime.GOOS {
+// assetName is the zip of yt-dlp's unpacked ("onedir") build for goos/goarch.
+func assetName(goos, goarch string) string {
+	switch goos {
 	case "windows":
-		switch runtime.GOARCH {
+		switch goarch {
 		case "arm64":
 			return "yt-dlp_win_arm64.zip"
 		case "386":
@@ -285,7 +285,7 @@ func assetName() string {
 	case "darwin":
 		return "yt-dlp_macos.zip"
 	default:
-		if runtime.GOARCH == "arm64" {
+		if goarch == "arm64" {
 			return "yt-dlp_linux_aarch64.zip"
 		}
 		return "yt-dlp_linux.zip"
@@ -387,15 +387,23 @@ func tagFromLocation(loc string) string {
 // Download fetches the newest unpacked build of yt-dlp for the channel as a zip at path,
 // verified against the release's SHA-256 sums. Install unpacks it.
 func Download(ctx context.Context, client *http.Client, channel, path string, progress ProgressFunc) error {
-	name := assetName()
+	_, err := DownloadFor(ctx, client, channel, runtime.GOOS, runtime.GOARCH, path, progress)
+	return err
+}
+
+// DownloadFor is Download for another system (a release built for Windows on Linux, say). It
+// returns the release's tag, which is yt-dlp's version, or "" when the release couldn't be
+// pinned to one.
+func DownloadFor(ctx context.Context, client *http.Client, channel, goos, goarch, path string, progress ProgressFunc) (string, error) {
+	name := assetName(goos, goarch)
 	base := releaseBase(ctx, client, channelRepo(channel))
 	sums, err := fetchAll(ctx, client, base+"SHA2-256SUMS", 1<<20)
 	if err != nil {
-		return fmt.Errorf("downloading checksums: %w", err)
+		return "", fmt.Errorf("downloading checksums: %w", err)
 	}
 	want, ok := parseChecksum(sums, name)
 	if !ok {
-		return fmt.Errorf("no checksum published for %s; refusing an unverified download", name)
+		return "", fmt.Errorf("no checksum published for %s; refusing an unverified download", name)
 	}
 	hash, err := downloadTo(ctx, client, base+name, path, progress)
 	if err == nil && hash != want {
@@ -403,8 +411,13 @@ func Download(ctx context.Context, client *http.Client, channel, path string, pr
 	}
 	if err != nil {
 		os.Remove(path)
+		return "", err
 	}
-	return err
+	tag := ""
+	if m := regexp.MustCompile(`/releases/download/([^/]+)/$`).FindStringSubmatch(base); m != nil {
+		tag = m[1]
+	}
+	return tag, nil
 }
 
 // Install unpacks a zip Download fetched (the copy built into the app) next to YtdlpDir, runs

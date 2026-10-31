@@ -226,11 +226,24 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
   uninstaller deletes `%APPDATA%\Prem-dl.exe` (WebView2 data, shared with any other copy named
   Prem-dl.exe): back it up before test-uninstalling on a dev machine, and use `uninstall.exe /S
   _?=<dir>` so it runs synchronously.
-- Prem-dl's own update (`app_update.go`, `internal/selfupdate`) reads GitHub's `releases/latest`
-  anonymously, so it only works while the repo is public; a private repo answers 404. Installed
-  copies (found by the uninstall entry's `uninstall.exe` next to the exe) run the new setup as
-  `/update /D=<dir>`: it skips its pages, waits for the app to close and starts it again.
-  Try the flow in dev with `$env:PREMDL_UPDATE_API` pointing at a fake API (dev builds only).
+- Prem-dl's own update (`app_update.go`, `internal/selfupdate`) comes from the TrueRip release
+  server (`~/Coding/API`, its README's "Public repositories: build secrets"), not GitHub. The repo
+  is public, so it holds no key: release builds carry a build secret (`cmd/buildsecret` writes the
+  gitignored `internal/selfupdate/secret_release.go`, XORed, for the build only), and each install
+  trades it for its own key (`POST /v1/enrol`, kept as `update.key` in the data folder, pinged once
+  per start, enrolled again when dropped). A source build has no secret and never checks. A
+  release is taken only when its manifest verifies with the embedded `ReleasePublicKey` (Ed25519
+  over the manifest's exact bytes), names `prem-dl` and the channel, and the download matches its
+  size and SHA-256 (resumed from `.part` with Range). One file per release, so one channel per
+  system (`selfupdate.Channel`): `stable` = `Prem-dl-Setup.exe`, `linux` = the AppImage. Installed
+  Windows copies (the uninstall entry's `uninstall.exe` next to the exe) run the new setup as
+  `/update /D=<dir>`; an AppImage downloads beside `$APPIMAGE`, renames over it and starts it once
+  this process has exited (`swapAppImage`); the .deb and portable copies link to the release page.
+  Try it in dev against the local API (`scripts/dev.sh`, `project.py --target local`):
+  `PREMDL_UPDATE_API=http://127.0.0.1:8001`, `PREMDL_BUILD_SECRET` from `project.py --target local
+  secret-file prem-dl --format raw --out -`, `PREMDL_TEST_APPIMAGE` = a scratch file to swap (dev
+  builds only; the key is `update-dev.key`). The signing key is `~/.truerip/release-keys/prem-dl.key`:
+  never in a repo, and losing it means no install can be updated again.
 - Editing Go files while `wails dev` runs triggers rebuilds that drop the bridge; wait for port 34115.
 - `wails dev`'s Vite can keep serving old `frontend/wailsjs` bindings after `wails generate module`
   (seen as `received 3 arguments to method ..., expected 4` in the log); touching the file doesn't
@@ -260,8 +273,8 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
 ## Linux
 
 Ported (Ubuntu, Wails on WebKitGTK): downloads, tray, notifications, `prem-dl:` links, start
-at sign-in, window size, cookies and the Chrome helper, packages. Linux copies don't update
-themselves: the check counts only releases with a Linux file and opens the release page. Linux code is in `*_linux.go`; `_other.go` covers the rest (macOS).
+at sign-in, window size, cookies and the Chrome helper, packages. The AppImage updates itself
+from the `linux` channel; the .deb only says a new version is out and links to it. Linux code is in `*_linux.go`; `_other.go` covers the rest (macOS).
 
 ```bash
 sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
@@ -275,6 +288,7 @@ GORACE=atexit_sleep_ms=0 go test -race ./...
 cd frontend && npm ci && npx tsc --noEmit && npm test
 YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -run Integration -v
 scripts/release.sh [--skip-fetch]  # build/release: prem-dl_<v>_amd64.deb, Prem-dl-x86_64.AppImage, SHA256SUMS-linux.txt
+scripts/release-windows.sh [--skip-fetch]  # the same build/release Windows files, cross-built here (needs nsis)
 ```
 
 - `wails doctor` asks for `libwebkit2gtk-4.0-dev`, which Ubuntu 24.04+ doesn't have; 4.1 plus the tag is right.
@@ -329,7 +343,8 @@ scripts/release.sh [--skip-fetch]  # build/release: prem-dl_<v>_amd64.deb, Prem-
 **Packages (`scripts/release.sh`)**
 - Both use the system's WebKitGTK 4.1 (bundling WebKit is large and fragile); the binary needs
   glibc 2.34, so a build here runs on Ubuntu 22.04+ and Debian 12+. Releases carry
-  `SHA256SUMS-linux.txt` beside Windows' `SHA256SUMS.txt`, which the Windows updater reads.
+  `SHA256SUMS-linux.txt` beside Windows' `SHA256SUMS.txt` (for people checking by hand; the
+  updater checks the signed manifest instead).
 - The .deb installs `/usr/bin/prem-dl` as a real file and its entry's Exec is exactly
   `/usr/bin/prem-dl %u`: the app compares it with `sys.SchemeCommand(os.Executable())` and writes
   a user entry when they differ. It skips its own icons when a package installed them (`SystemIcon`).
@@ -341,6 +356,28 @@ scripts/release.sh [--skip-fetch]  # build/release: prem-dl_<v>_amd64.deb, Prem-
 - This machine has a test `.deb` installed (`/usr/bin/prem-dl`), whose entry handles `prem-dl:`.
   Starting `build/bin/Prem-dl` writes a user entry that overrides it until removed. GNOME Shell
   doesn't notice a package entry that a removed user entry was hiding until the user signs in again.
+
+## Releases
+
+Both systems build on the Linux laptop (no CI): `scripts/release.sh` (AppImage, .deb) and
+`scripts/release-windows.sh` (`Prem-dl.exe`, `Prem-dl-Setup.exe`, cross-compiled; NSIS from apt;
+Windows' tools fetched with `cmd/bundle -os windows` into `build/bundle-windows` and swapped into
+`bundle/` for the build). Both write the build secret in and take it out again, and refuse a
+binary where `trb_` is readable. `release-windows.sh` can't run the Windows tools here: start the
+new `Prem-dl.exe` on Windows once before publishing. `release.ps1` still builds on Windows.
+
+Publish with the API repo's `project.py` (`~/Coding/API`, `P="uv run --project backend python
+scripts/project.py"`), one file per channel, then the GitHub release with all files:
+
+```bash
+$P publish prem-dl stable build/release/Prem-dl-Setup.exe --version X.Y.Z --notes-file NOTES.md
+$P publish prem-dl linux build/release/Prem-dl-x86_64.AppImage --version X.Y.Z --notes-file NOTES.md
+gh auth switch -u aervonix        # gh also holds another account; releases must come from aervonix
+gh release create vX.Y.Z build/release/* --repo aervonix/prem-dl --notes-file NOTES.md
+```
+
+Installs see a release as soon as it's on its channel; a bad one is yanked
+(`$P yank prem-dl <channel> X.Y.Z`) and fixed with a higher version, never replaced.
 
 ## Windows environment notes
 

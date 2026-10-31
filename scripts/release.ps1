@@ -78,7 +78,8 @@ try {
     Remove-Item $secretFile -ErrorAction SilentlyContinue
 }
 # The secret is in there XORed: its plain form must not be.
-if (Select-String -Path $exe -Pattern 'trb_' -SimpleMatch -Quiet) { throw 'The build secret is readable in build\bin\Prem-dl.exe' }
+# (The updater's own pattern for a secret, trb_[0-9A-Za-z]{12}_..., is in there too: look for a real one.)
+if (Select-String -Path $exe -Pattern 'trb_[0-9A-Za-z]{12}_' -CaseSensitive -Quiet) { throw 'The build secret is readable in build\bin\Prem-dl.exe' }
 Copy-Item $exe, (Join-Path $bin 'Prem-dl-Setup.exe') $out
 # wails fills in its template with this build's values; the template is what's committed.
 git checkout -- build/windows/installer/wails_tools.nsh
