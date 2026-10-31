@@ -448,6 +448,7 @@ func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist, stream bo
 			return ProbeResponse{Result: res}
 		}
 	}
+	gen := a.infos.Gen()
 	env, cleanup, err := a.buildEnv(ctx)
 	if err != nil {
 		return ProbeResponse{Error: toAppError(err)}
@@ -461,7 +462,7 @@ func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist, stream bo
 		}
 		return ProbeResponse{Error: toAppError(err)}
 	}
-	a.infos.Put(link, res)
+	a.infos.PutFrom(gen, link, res)
 	return ProbeResponse{Result: res}
 }
 
@@ -670,6 +671,7 @@ func inOrder[T any](n, limit int, work func(i int) T, use func(i int, r T)) {
 func (a *App) bulkItems(ctx context.Context, link string, nested bool) (items []queue.NewJob, failed []LinkFailure, err error) {
 	res, ok := a.listNative(ctx, link, 0)
 	if !ok {
+		gen := a.infos.Gen()
 		env, cleanup, err := a.buildEnv(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -679,7 +681,7 @@ func (a *App) bulkItems(ctx context.Context, link string, nested bool) (items []
 		if err != nil {
 			return nil, nil, err
 		}
-		a.infos.Put(link, res)
+		a.infos.PutFrom(gen, link, res)
 	}
 	switch res.Kind {
 	case "video":
@@ -940,6 +942,9 @@ func (a *App) importCookies(data []byte) CookieResponse {
 		s.Cookies.Mode = "file"
 		s.Cookies.File = info.Path
 	})
+	// The file's content changed even when its path didn't: analyses made signed out (or as
+	// someone else) would download without what the new cookies give.
+	a.infos.Clear()
 	if err != nil {
 		return CookieResponse{Info: info, Settings: a.store.Get(), Error: err.Error()}
 	}
@@ -956,6 +961,7 @@ func (a *App) RemoveCookieFile() CookieResponse {
 			s.Cookies.File = ""
 		}
 	})
+	a.infos.Clear()
 	if err != nil {
 		return CookieResponse{Settings: a.store.Get(), Error: err.Error()}
 	}

@@ -124,12 +124,13 @@ func isRunning(s queue.Status) bool {
 
 // analyseAhead analyses a queued video for prefetcher and keeps the result for its download.
 func (a *App) analyseAhead(ctx context.Context, link string) {
+	gen := a.infos.Gen()
 	env, cleanup, err := a.buildEnv(ctx)
 	if err != nil {
 		return
 	}
 	defer cleanup()
 	if res, err := ytdlp.Probe(ctx, env, link, true); err == nil {
-		a.infos.Put(link, res)
+		a.infos.PutFrom(gen, link, res)
 	}
 }

@@ -22,6 +22,7 @@ import (
 type InfoCache struct {
 	mu    sync.Mutex
 	items map[string]*cachedInfo
+	gen   uint64 // counts Clear calls
 	now   func() time.Time
 }
 
@@ -43,9 +44,20 @@ func NewInfoCache() *InfoCache {
 	return &InfoCache{items: map[string]*cachedInfo{}, now: time.Now}
 }
 
+// Gen is read before an analysis starts and handed to PutFrom, so an analysis made under
+// settings that a Clear has since replaced isn't kept.
+func (c *InfoCache) Gen() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.gen
+}
+
 // Put remembers the analysis of a video under the link it was read from and its own URL
 // (the link the UI queues). Results that can't be reused are ignored.
-func (c *InfoCache) Put(link string, res *ProbeResult) {
+func (c *InfoCache) Put(link string, res *ProbeResult) { c.PutFrom(c.Gen(), link, res) }
+
+// PutFrom is Put for an analysis that started when the cache was at gen.
+func (c *InfoCache) PutFrom(gen uint64, link string, res *ProbeResult) {
 	if res == nil || res.Kind != "video" || res.Video == nil || len(res.info) == 0 {
 		return
 	}
@@ -61,6 +73,9 @@ func (c *InfoCache) Put(link string, res *ProbeResult) {
 	item := &cachedInfo{gz: buf.Bytes(), added: c.now()}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if gen != c.gen {
+		return // cleared while it ran: it used the old cookies or network settings
+	}
 	c.pruneLocked()
 	for _, u := range []string{link, v.URL} {
 		if k := infoKey(u); k != "" {
@@ -124,25 +139,34 @@ func (c *InfoCache) Has(link string) bool {
 // IsYouTubeVideo reports whether link is a single YouTube video (a watch, youtu.be, Shorts or
 // live link), the kind of link whose analysis the cache keeps.
 func IsYouTubeVideo(link string) bool {
+	return YouTubeVideoID(link) != ""
+}
+
+// YouTubeVideoID is the video ID of a single YouTube video's link (watch, youtu.be, Shorts, live),
+// or "" for any other link.
+func YouTubeVideoID(link string) string {
 	norm, err := NormalizeURL(link)
 	if err != nil {
-		return false
+		return ""
 	}
 	u, err := url.Parse(norm)
 	if err != nil {
-		return false
+		return ""
 	}
 	host := strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(u.Hostname()), "www."), "m.")
 	segs := strings.FieldsFunc(u.Path, func(r rune) bool { return r == '/' })
 	switch {
 	case host == "youtu.be":
-		return len(segs) == 1
+		if len(segs) == 1 {
+			return segs[0]
+		}
 	case host != "youtube.com" && host != "music.youtube.com":
-		return false
 	case u.Path == "/watch":
-		return u.Query().Get("v") != ""
+		return u.Query().Get("v")
+	case len(segs) == 2 && (segs[0] == "shorts" || segs[0] == "live"):
+		return segs[1]
 	}
-	return len(segs) == 2 && (segs[0] == "shorts" || segs[0] == "live")
+	return ""
 }
 
 // Clear forgets everything, for when settings that change what a page returns (cookies, proxy,
@@ -150,6 +174,7 @@ func IsYouTubeVideo(link string) bool {
 func (c *InfoCache) Clear() {
 	c.mu.Lock()
 	clear(c.items)
+	c.gen++
 	c.mu.Unlock()
 }
 

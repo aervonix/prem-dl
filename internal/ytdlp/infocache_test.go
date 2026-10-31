@@ -151,3 +151,35 @@ func TestIsYouTubeVideo(t *testing.T) {
 		}
 	}
 }
+
+// An analysis still running when cookies change finishes under the old ones: it isn't kept.
+func TestInfoCacheDropsAnalysisFromBeforeClear(t *testing.T) {
+	c := NewInfoCache()
+	gen := c.Gen()
+	c.Clear()
+	c.PutFrom(gen, "youtu.be/abc", probed(t, "Youtube", nil))
+	if c.Has("youtu.be/abc") {
+		t.Error("kept an analysis that began before Clear")
+	}
+	c.PutFrom(c.Gen(), "youtu.be/abc", probed(t, "Youtube", nil))
+	if !c.Has("youtu.be/abc") {
+		t.Error("dropped a fresh analysis")
+	}
+}
+
+func TestYouTubeVideoID(t *testing.T) {
+	for link, want := range map[string]string{
+		"https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s": "dQw4w9WgXcQ",
+		"https://youtu.be/dQw4w9WgXcQ?si=abc":               "dQw4w9WgXcQ",
+		"https://m.youtube.com/shorts/abc":                  "abc",
+		"https://music.youtube.com/watch?v=xyz":             "xyz",
+		"https://www.youtube.com/live/live1":                "live1",
+		"https://www.youtube.com/@chan/videos":              "",
+		"https://www.youtube.com/playlist?list=PL1":         "",
+		"https://vimeo.com/123":                             "",
+	} {
+		if got := YouTubeVideoID(link); got != want {
+			t.Errorf("%s: %q, want %q", link, got, want)
+		}
+	}
+}

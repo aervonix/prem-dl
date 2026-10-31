@@ -323,7 +323,10 @@ func collectEntries(entries []json.RawMessage, group string, depth int, out *[]P
 		if bytes.Equal(bytes.TrimSpace(e), []byte("null")) || decodeInfo(e, &r) != nil {
 			continue
 		}
-		if len(r.Entries) > 0 && depth < 3 {
+		nested := r.Type == "playlist" || r.Type == "multi_video"
+		if (len(r.Entries) > 0 || nested) && depth < 3 {
+			// An empty nested tab (a channel with no videos yet, or the first part of a streamed
+			// listing) adds nothing; it isn't an entry.
 			g := r.Title
 			if g == "" {
 				g = group
