@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -78,6 +79,19 @@ func fakeYtdlp(url string) {
 		time.Sleep(1500 * time.Millisecond)
 	case strings.HasSuffix(url, "/already"):
 		p("[download] " + filepath.Join(os.TempDir(), "old.mp4") + " has already been downloaded")
+	case strings.HasSuffix(url, "/vp8"):
+		// VP8 + Vorbis: merging into MP4 fails (yt-dlp's real output); into MKV it works.
+		if slices.Contains(os.Args, "--merge-output-format=mkv") {
+			p("[download] " + filepath.Join(os.TempDir(), "t.f1.webm") + " has already been downloaded")
+			p("YTGUI_PP Merger|started")
+			p("YTGUI_FILE\t" + filepath.Join(os.TempDir(), "t.mkv"))
+			return
+		}
+		p(`YTGUI_P {"status":"finished","downloaded_bytes":10,"total_bytes":10,"filename":"t.f1.webm"}`)
+		p("YTGUI_PP Merger|started")
+		p(`[Merger] Merging formats into "` + filepath.Join(os.TempDir(), "t.mp4") + `"`)
+		fmt.Fprintln(os.Stderr, "ERROR: Postprocessing: Conversion failed!")
+		os.Exit(1)
 	case strings.HasSuffix(url, "/big"):
 		// 3 GB planned; the test's drive has 1 GB free. It would download for a minute.
 		p(`YTGUI_PLAN {"id":"big","title":"Big","duration":10,"filesize_approx":3000000000}`)
@@ -285,6 +299,23 @@ func TestNotEnoughSpaceStopsTheDownload(t *testing.T) {
 	h.m.deps.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	ok := h.add(t, "/ok")
 	waitFor(t, "completion", func() bool { return h.status(ok.ID) == StatusCompleted })
+}
+
+// Auto merges into MP4; streams MP4 can't hold are merged into MKV by a second run, once.
+func TestAutoMergeFallsBackToMKV(t *testing.T) {
+	h := newHarness(t, 1)
+	j := h.add(t, "/vp8")
+	waitFor(t, "completion", func() bool { return h.status(j.ID) == StatusCompleted })
+	got, _ := h.m.Get(j.ID)
+	if filepath.Base(got.OutputFile) != "t.mkv" || !strings.Contains(got.Note, "MKV") {
+		t.Fatalf("output %q, note %q", got.OutputFile, got.Note)
+	}
+	// With MP4 chosen, it fails as asked rather than becoming an MKV.
+	jobs, _, err := h.m.Add([]NewJob{{URL: "https://fake.test/b/vp8"}}, settings.DownloadOptions{Preset: "best", Container: "mp4"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "failure", func() bool { return h.status(jobs[0].ID) == StatusFailed })
 }
 
 func TestArchiveSkipSaysSo(t *testing.T) {

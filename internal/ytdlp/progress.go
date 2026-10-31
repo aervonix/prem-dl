@@ -277,6 +277,12 @@ func (t *Tracker) Planned() int64 {
 // formatFileRe matches the per-stream files of a merged download ("title [id].f137.mp4").
 var formatFileRe = regexp.MustCompile(`\.f[^.\\/]+\.[^.\\/]+$`)
 
+// IsStreamFile reports whether path is one stream of a download that is merged afterwards
+// ("title.f137.mp4"), not a finished file.
+func IsStreamFile(path string) bool {
+	return formatFileRe.MatchString(strings.TrimSuffix(path, ".part"))
+}
+
 func (t *Tracker) expectedTotal(cur Progress) int64 {
 	if t.Cut {
 		return max(cur.Total, cur.TotalEstimate)

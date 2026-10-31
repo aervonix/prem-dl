@@ -164,6 +164,9 @@ type entry struct {
 	fromInfo, pageOnly bool
 	// failure is why Prem-dl stopped the run itself (stopFail).
 	failure *apperr.AppError
+	// asMKV makes the next run merge into MKV: the Auto container's MP4 couldn't hold the
+	// streams' codecs. mkvTried keeps it to one attempt.
+	asMKV, mkvTried bool
 }
 
 // Manager owns every job.
@@ -409,6 +412,7 @@ func (m *Manager) requeueLocked(e *entry, edit func(*Job)) error {
 			return errAlreadyQueued
 		}
 	}
+	e.mkvTried = false // a retry asked for may fall back to MKV again
 	m.setLocked(e, func(j *Job) {
 		if edit != nil {
 			edit(j)
@@ -776,8 +780,12 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, e *entry) 
 	}
 	m.mu.Lock()
 	e.fromInfo = target.InfoFile != ""
+	opts := job.Options
+	if e.asMKV {
+		opts.Container = "mkv"
+	}
 	m.mu.Unlock()
-	args := env.DownloadArgs(job.Options, target)
+	args := env.DownloadArgs(opts, target)
 
 	cmd := exec.CommandContext(ctx, env.Bin, args...)
 	sys.Quiet(cmd)
@@ -850,6 +858,8 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 	e.cancel = nil
 	fromInfo := e.fromInfo
 	e.fromInfo = false
+	asMKV := e.asMKV
+	e.asMKV = false
 	// Every branch below saves the job (setLocked), which carries this along.
 	waited := !e.job.WaitUntil.IsZero()
 	e.job.WaitUntil = time.Time{}
@@ -911,11 +921,23 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 				j.Note = "Already downloaded"
 			case h != nil && h.inArchive && j.OutputFile == "":
 				j.Note = "Already downloaded (the download archive lists it)"
+			case asMKV:
+				j.Note = "Saved as MKV: its video or audio can't go in MP4"
 			}
 		})
+		if asMKV && e.job.OutputFile != "" {
+			// What the failed MP4 merge left behind (title.temp.mp4).
+			_ = os.Remove(strings.TrimSuffix(e.job.OutputFile, filepath.Ext(e.job.OutputFile)) + ".temp.mp4")
+		}
 	case fromInfo:
 		// The saved analysis didn't work (the network changed, say): run again at once from the page.
 		e.pageOnly = true
+		m.setLocked(e, func(j *Job) { j.Status = StatusQueued; j.Stage = "Starting"; j.Speed = 0; j.ETA = -1 })
+	case h != nil && h.merging && h.convFailed && e.job.Options.Container == "" && !e.mkvTried:
+		// Auto merges into MP4, which takes VP9, AV1 and Opus but not VP8 or Vorbis (still used
+		// by some sites): ffmpeg fails, and yt-dlp says only "Postprocessing: Conversion failed!"
+		// (observed). The streams are downloaded, so a run into MKV just merges them.
+		e.asMKV, e.mkvTried = true, true
 		m.setLocked(e, func(j *Job) { j.Status = StatusQueued; j.Stage = "Starting"; j.Speed = 0; j.ETA = -1 })
 	default:
 		var lines []string
@@ -969,6 +991,9 @@ type lineHandler struct {
 	errLines    []string
 	alreadyPath string
 	inArchive   bool // skipped: the download archive lists it
+	// The Merger started, and a post-processor failed. stdout and stderr are read separately,
+	// so the two can arrive in either order; together they mean the merge failed.
+	merging, convFailed bool
 }
 
 var (
@@ -1085,6 +1110,9 @@ func (h *lineHandler) handle(line string, isErr bool) {
 			j.ETA = snap.ETA
 		})
 	case ytdlp.KindPost:
+		if parsed.PostName == "Merger" && parsed.PostStat == "started" {
+			h.merging = true
+		}
 		if parsed.PostStat == "started" {
 			stage := ytdlp.PostStage(parsed.PostName)
 			// Some post-processors (subtitle conversion) run before the media is fetched, so only
@@ -1110,8 +1138,12 @@ func (h *lineHandler) handle(line string, isErr bool) {
 			h.m.set(h.e, func(j *Job) { j.OutputFile = filepath.Clean(parsed.File) })
 		}
 	default:
-		if m := alreadyRe.FindStringSubmatch(line); m != nil && !isErr {
+		// One stream of a merge found from an earlier run isn't the finished file.
+		if m := alreadyRe.FindStringSubmatch(line); m != nil && !isErr && !ytdlp.IsStreamFile(m[1]) {
 			h.alreadyPath = m[1]
+		}
+		if isErr && strings.HasPrefix(line, "ERROR: Postprocessing: Conversion failed") {
+			h.convFailed = true
 		}
 		if !isErr && inArchiveRe.MatchString(line) {
 			h.inArchive = true
