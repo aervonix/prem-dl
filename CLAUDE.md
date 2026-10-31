@@ -84,8 +84,19 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
   request and yt-dlp solves it itself. Needs node and an unpacked yt-dlp; otherwise off.
 - `internal/settings` – `Settings` + `DownloadOptions`, validation, atomic writes. Data lives in `%APPDATA%\yt-dlp-gui`.
 - `internal/sys` – hidden consoles, process-tree kill (`taskkill /T`), open/reveal in Explorer, the tray
-  icon + taskbar progress (`shell_windows.go`, raw Win32/COM on its own thread), per-user registry entries.
-- `internal/linkbridge` – loopback endpoint the Chrome helper posts links to (only its origin accepted).
+  icon + taskbar progress (`shell_windows.go`, raw Win32/COM on its own thread), per-user registry entries,
+  `Awake` (no sleep while downloads run: `SetThreadExecutionState` on a thread kept for it, a logind
+  `sleep` inhibitor on Linux; let go a minute after the last), `FreeSpace`.
+- `internal/linkbridge` – loopback endpoint the Chrome helper posts links to (only its origin accepted):
+  open on the Download page, `download` at once with a preset (`quickDownload`: analysed in the
+  background; a playlist/channel opens for review instead), or `follow`. Replies list the presets
+  (`/hello` too), and the helper's right-click menu follows them.
+- `untrusted.go` – checks on what comes from outside: `toastText` (Wails puts Windows toast text in
+  CDATA unescaped), `openable` (Open file runs only absolute paths; network paths only inside a
+  download folder), stale cookie/analysis temp files removed at start.
+- `playlistfile.go` – `<Playlist>.m3u8` beside a downloaded playlist (`PlaylistFile`), rebuilt as
+  each video finishes, keeping its earlier entries (`#PREMDL-INDEX` lines hold the positions).
+- `internal/follow/transfer.go` – export/import of follows (Prem-dl JSON, Takeout's subscriptions.csv, OPML).
 - `background.go`, `activity.go`, `launch.go` – tray, close-to-tray, notifications, start with Windows,
   `prem-dl:` links and `--background`; `activity` turns queue changes into taskbar progress and toasts.
 - `chromehelper/` – the unpacked extension (cookies, toolbar button, right-click menu); embedded in the exe.
@@ -93,7 +104,9 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
   `store.tsx` is the reducer fed by backend events; `pages/`, `components/`, one `styles.css`.
   `pages/settings/` holds one component per Settings tab (all stay mounted, hidden when not shown);
   `SettingsPage.tsx` owns the draft and the save bar. `components/QualityPicker.tsx` is the Quality
-  section; `quality.ts` mirrors yt-dlp's stream choice (`QualitySort`) to estimate each preset's size.
+  section; `quality.ts` mirrors yt-dlp's stream choice (`QualitySort`, and `CompatibleSort` for
+  "Most compatible") to estimate each preset's size. Long lists (`VideoGrid`, the queue, the
+  playlist list) are made in steps by `useSteps` (240 at a time, more as the end scrolls near).
   Tests sit next to their file (`*.test.ts[x]`) and mock `./api` (see `store.test.tsx`).
 
 ## Conventions
@@ -176,6 +189,20 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
   nobody analysed (search ticks, bulk adds, follow checks) get one from `prefetch.go`: while
   something downloads, the YouTube videos next in line (one per slot) are analysed ahead, one at
   a time; an analysis whose job starts meanwhile is cancelled.
+- Auto merges into MP4 (VP9/AV1/Opus fit), not VP8 or Vorbis: ffmpeg fails and yt-dlp says only
+  `ERROR: Postprocessing: Conversion failed!` (captured with a local VP8+Vorbis DASH stream). The
+  queue then runs once more into MKV (`asMKV`), reusing the streams. `--merge-output-format=mp4/mkv`
+  is no fix: yt-dlp then sends VP9+Opus to MKV too. stdout and stderr are read separately, so the
+  Merger start and the error can arrive in either order (`merging`, `convFailed`).
+- "Most compatible" (`CompatibleSort`) is `+vcodec:avc,res,fps,+acodec:m4a,...`: with the audio
+  codec ahead of resolution, YouTube's 360p "18" (it carries AAC) beat 1080p H.264.
+- Literal text can't go through an output template's default: `%(album|X)s` ends at the first `)s`
+  and there is no escape. Playlist album/track tags go to ffmpeg's Metadata step instead
+  (`--postprocessor-args=Metadata+ffmpeg_o:-metadata album='...'`, quoted with `shellQuote` for
+  yt-dlp's shlex split). Square cover art crops in `ThumbnailsConvertor`, so only a thumbnail that
+  gets converted (YouTube's best are WebP) is cropped.
+- A download's plan (`YTGUI_STREAMS`, just before bytes flow) is checked against the drive's free
+  space (`checkSpace`); one that won't fit stops (`stopFail`) with "Not enough space".
 
 **Wails / Go**
 - Wails runtime helpers (`ClipboardGetText`, dialogs, ...) call `log.Fatal` on a nil/bad context, killing
@@ -205,6 +232,12 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
   `/update /D=<dir>`: it skips its pages, waits for the app to close and starts it again.
   Try the flow in dev with `$env:PREMDL_UPDATE_API` pointing at a fake API (dev builds only).
 - Editing Go files while `wails dev` runs triggers rebuilds that drop the bridge; wait for port 34115.
+- `wails dev`'s Vite can keep serving old `frontend/wailsjs` bindings after `wails generate module`
+  (seen as `received 3 arguments to method ..., expected 4` in the log); touching the file doesn't
+  help, restarting `wails dev` does.
+- `prem-dl:` links can be opened by any web page once the browser has asked, so they only open
+  for review or the follow dialog (`prem-dl://download` opens too), and links to localhost or
+  private/link-local addresses are refused (`localHost`). Only linkbridge downloads at once.
 - No C compiler on the Windows machine, so run `go test -race` on Linux (see below). Keep lock ordering simple
   (`lineHandler.mu` -> `Manager.mu` and `Manager.saveMu` -> `Manager.mu`, never the reverse).
   queue.json is encoded and written outside `Manager.mu`; don't move disk work back under it.
@@ -214,6 +247,15 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
 - Hidden checkbox inputs must be positioned inside their label, or focusing them scrolls the whole shell.
 - `scrollIntoView` and the browser tool's ref-clicks can scroll `overflow:hidden` ancestors, so they
   hide scroll bugs. Verify scrolling with real wheel events.
+- StrictMode (dev) mounts every component twice: a cleanup that cancels backend work (ChannelView's
+  `cancelBrowse`) runs between the two and killed the first read. Defer such cancels a tick and
+  skip them if the component mounted again.
+- The Download page and Settings both render a `QualityPicker`/`OptionsPanel`, and hidden pages stay
+  mounted: in browser tests scope locators to `.page:not([hidden])`.
+- Headless checks: `playwright-core` (installed in the scratchpad) with the cached
+  `~/.cache/ms-playwright/chromium-*/chrome-linux64/chrome` drives `http://localhost:34115`, where
+  `window.go.main.App.*` calls the backend. `SaveSettings` from a script doesn't tell an open page
+  (reload it), and test downloads go to the scratchpad through Save to.
 
 ## Linux
 

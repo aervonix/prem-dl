@@ -22,7 +22,10 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
   chose, even from the tray. What's already there isn't downloaded; streams wait until they've
   ended, and videos you downloaded before are skipped when "Remember downloaded videos" is on.
   Open a followed channel to browse its Videos, Shorts and Live tabs and tick older videos to
-  download; ones already downloaded or in the queue are marked.
+  download; ones already downloaded or in the queue are marked. Filters skip uploads by length or
+  title words, and a channel can record its live streams as they happen instead of waiting for
+  the replay. Import your YouTube subscriptions (Google Takeout's `subscriptions.csv`), or move your
+  follows to another computer with Export and Import.
 - **Search YouTube.** Search from inside Prem-dl and the results show as the same thumbnail grid,
   with filters for type (videos, channels, playlists), upload date and length. Tick videos to
   download them with your default options, or open them on the Download page to choose. Ticks are
@@ -39,15 +42,22 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
   (MP3, M4A, Opus, AAC, FLAC, WAV or the original stream). Or pick an exact format from a table of
   resolution, codec, bitrate and size. Container can be automatic, MP4, MKV or WebM. Within the
   same resolution, Best goes for the stream with the most data rather than the newest codec.
+  "Most compatible" picks H.264 and AAC, for editors, TVs and older phones (1080p at most on
+  YouTube).
 - **Subtitles.** Save them as files, embed them in the video, or both, in any language, with or
   without auto-generated captions, and optionally converted to SRT, VTT or ASS.
-- **Extras.** Embed metadata, chapters and cover art, cut out SponsorBlock segments, or download just
-  part of a video by start and end time.
+- **Extras.** Embed metadata, chapters and cover art (cropped square for music), cut out
+  SponsorBlock segments, or download just part of a video by start and end time. A playlist can get
+  a `.m3u8` playlist file, and its audio the playlist as album with track numbers.
+- **File names.** One template in Settings, and presets (or a single download) can have their
+  own: a podcasts preset dated, an archive one with the video ID.
 - **Presets.** Save option sets under a name, like "Music" (MP3 with cover art) or "Archive" (MKV,
   subtitles, info JSON), and pick one on the Download page. Tie a preset to a site and its links pick
   it by themselves: music.youtube.com links start as Music.
 - **A real queue.** Several downloads at once, with pause, resume, cancel and retry, and a log for
-  each one. The queue survives a restart; anything that was running comes back paused.
+  each one. Tick several to act on them together. The queue survives a restart; anything that was
+  running comes back paused. A download that won't fit on the drive stops before it starts, and
+  downloads can be limited to certain hours (for a data cap that's free at night).
 - **Works in the background.** Progress shows on the taskbar button, and a Windows notification
   (with Open and Show in folder) tells you when downloads finish while you're in another app. It can
   keep running in the notification area when you close the window, and start there with Windows.
@@ -151,6 +161,8 @@ Settings → General has the options for this:
 - **Start with Windows.** Prem-dl starts in the notification area when you sign in, without opening
   the window.
 - **Windows notifications.** Shown when downloads finish while Prem-dl isn't the app you're in.
+- **Keep the computer awake while downloading.** It doesn't go to sleep until the downloads are
+  done (the screen can still turn off, and closing a laptop's lid still sleeps).
 
 On first start Prem-dl registers `prem-dl:` links for your Windows account (no admin rights needed),
 which is how the Chrome helper starts it with a link. If you move `Prem-dl.exe`, starting it once
