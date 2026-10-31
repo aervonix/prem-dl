@@ -370,10 +370,10 @@ Publish with the API repo's `project.py` (`~/Coding/API`, `P="uv run --project b
 scripts/project.py"`), one file per channel, then the GitHub release with all files:
 
 ```bash
-$P publish prem-dl stable build/release/Prem-dl-Setup.exe --version X.Y.Z --notes-file NOTES.md
-$P publish prem-dl linux build/release/Prem-dl-x86_64.AppImage --version X.Y.Z --notes-file NOTES.md
-gh auth switch -u aervonix        # gh also holds another account; releases must come from aervonix
-gh release create vX.Y.Z build/release/* --repo aervonix/prem-dl --notes-file NOTES.md
+$P publish prem-dl stable build/release/Prem-dl-Setup.exe --version X.Y.Z --notes-file build/notes/X.Y.Z.md
+$P publish prem-dl linux build/release/Prem-dl-x86_64.AppImage --version X.Y.Z --notes-file build/notes/X.Y.Z.md
+# gh also holds another account: hand aervonix's token to this one command (never print it)
+GH_TOKEN="$(gh auth token --user aervonix)" gh release create vX.Y.Z build/release/* --repo aervonix/prem-dl --title "Prem-dl X.Y.Z" --notes-file build/notes/X.Y.Z.md
 ```
 
 Installs see a release as soon as it's on its channel; a bad one is yanked
