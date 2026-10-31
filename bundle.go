@@ -44,13 +44,19 @@ func (a *App) unpackBundle(ctx context.Context, force bool) error {
 		return nil
 	}
 	dir := a.managedDir()
+	stampPath := filepath.Join(dir, "bin", bundleStampName)
+	// The stamp's second line names the exe that wrote it. The same exe carries the same bundle,
+	// so its checksum (185 MB read: 0.1 s here, seconds on a hard disk) isn't worked out again.
+	exe := exeID()
+	if recorded, by := readStamp(stampPath); !force && exe != "" && by == exe && bundleInPlace(dir, stampPath, recorded) {
+		return nil
+	}
 	stamp, err := bundleStamp()
 	if err != nil {
 		return err
 	}
-	stampPath := filepath.Join(dir, "bin", bundleStampName)
 	if !force && bundleInPlace(dir, stampPath, stamp) {
-		return nil
+		return os.WriteFile(stampPath, []byte(stamp+"\n"+exe+"\n"), 0o644)
 	}
 	// A failed unpack must not leave the old stamp claiming the folder is complete.
 	_ = os.Remove(stampPath)
@@ -66,14 +72,37 @@ func (a *App) unpackBundle(ctx context.Context, force bool) error {
 			return fmt.Errorf("unpacking ffmpeg: %w", err)
 		}
 	}
-	return os.WriteFile(stampPath, []byte(stamp+"\n"), 0o644)
+	return os.WriteFile(stampPath, []byte(stamp+"\n"+exe+"\n"), 0o644)
+}
+
+// readStamp returns the bundle a stamp file records and the exe that wrote it ("" for stamps
+// written before it was recorded).
+func readStamp(path string) (stamp, exe string) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", ""
+	}
+	stamp, exe, _ = strings.Cut(strings.TrimSpace(string(raw)), "\n")
+	return strings.TrimSpace(stamp), strings.TrimSpace(exe)
+}
+
+// exeID identifies the running exe by path, size and time, or "" when it can't be read.
+func exeID() string {
+	path, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%s %d %d", path, fi.Size(), fi.ModTime().UnixNano())
 }
 
 // bundleInPlace reports whether the app's folder already holds this bundle: the stamp matches
 // and the programs are still there (antivirus or a clean-up may have removed them since).
 func bundleInPlace(dir, stampPath, stamp string) bool {
-	raw, err := os.ReadFile(stampPath)
-	if err != nil || strings.TrimSpace(string(raw)) != stamp {
+	if recorded, _ := readStamp(stampPath); recorded == "" || recorded != stamp {
 		return false
 	}
 	need := []string{ytdlp.ManagedPath(dir)}

@@ -161,3 +161,29 @@ func TestIntegrationUnpackBundle(t *testing.T) {
 		t.Error("ffmpeg was unpacked without being bundled")
 	}
 }
+
+// The exe that wrote the stamp carries the same bundle, so its 185 MB aren't read again.
+func TestSameExeTrustsItsStamp(t *testing.T) {
+	old := bundleFS
+	defer func() { bundleFS = old }()
+	bundleFS = fstest.MapFS{
+		"yt-dlp.zip":     {Data: []byte("not a zip")},
+		"yt-dlp.version": {Data: []byte("2026.10.21\n")},
+	}
+	dir := t.TempDir()
+	a := &App{dataDir: dir}
+	if err := os.MkdirAll(filepath.Dir(ytdlp.ManagedPath(dir)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(ytdlp.ManagedPath(dir), []byte("yt"), 0o755)
+	stampPath := filepath.Join(dir, "bin", bundleStampName)
+	_ = os.WriteFile(stampPath, []byte("recorded\n"+exeID()+"\n"), 0o644)
+	if err := a.unpackBundle(context.Background(), false); err != nil {
+		t.Errorf("unpacked again for the same exe: %v", err)
+	}
+	// Another exe (an update) works the stamp out, and here unpacks.
+	_ = os.WriteFile(stampPath, []byte("recorded\nsome other exe\n"), 0o644)
+	if err := a.unpackBundle(context.Background(), false); err == nil {
+		t.Error("another exe's stamp was trusted")
+	}
+}

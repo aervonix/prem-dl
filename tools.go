@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"yt-dlp-gui/internal/apperr"
@@ -60,24 +61,64 @@ func (a *App) detectTools() {
 	st := ToolStatus{JSRuntimes: []ytdlp.JSRuntime{}, BuiltIn: bundleFS != nil}
 
 	bin, err := a.findYtdlp()
+	ytPath := ""
+	var version chan string
 	if err != nil {
 		st.YtdlpError = errToolsMissing.Message
 	} else {
-		bin.Version = a.versionOf(ctx, bin.Path)
 		st.Ytdlp = &bin
-		if bin.Version == "" {
-			st.YtdlpError = "Prem-dl's download tools didn't start. The files may be damaged or blocked by antivirus."
-		}
+		ytPath = bin.Path
+		// Starting yt-dlp takes 0.3 s or more; ffmpeg and the JS runtimes are looked at meanwhile.
+		version = make(chan string, 1)
+		go func() { version <- a.versionOf(ctx, bin.Path) }()
 	}
-	ytPath := ""
-	if st.Ytdlp != nil {
-		ytPath = st.Ytdlp.Path
-	}
-	if ff := a.findFFmpeg(ctx, ytPath); ff.Path != "" {
+	var wg sync.WaitGroup
+	var ff ytdlp.FFmpeg
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ff = a.findFFmpeg(ctx, ytPath)
+	}()
+	js := ytdlp.DetectJSRuntimes(ctx)
+	wg.Wait()
+	if ff.Path != "" {
 		st.FFmpeg = &ff
 	}
-	st.JSRuntimes = append(st.JSRuntimes, ytdlp.DetectJSRuntimes(ctx)...)
+	st.JSRuntimes = append(st.JSRuntimes, js...)
 
+	if version == nil {
+		a.publishTools(gen, st)
+		return
+	}
+	// Downloads need only the paths, so they start now; yt-dlp's version (whether it runs at
+	// all) follows, for Settings and the "didn't start" banner.
+	select {
+	case v := <-version:
+		st.Ytdlp.Version = v
+	default:
+		a.publishTools(gen, st)
+		v := <-version
+		st = cloneTools(st)
+		st.Ytdlp.Version = v
+	}
+	if st.Ytdlp.Version == "" {
+		st.YtdlpError = "Prem-dl's download tools didn't start. The files may be damaged or blocked by antivirus."
+	}
+	a.publishTools(gen, st)
+}
+
+// cloneTools copies st so a published status isn't changed afterwards.
+func cloneTools(st ToolStatus) ToolStatus {
+	if st.Ytdlp != nil {
+		b := *st.Ytdlp
+		st.Ytdlp = &b
+	}
+	st.JSRuntimes = append([]ytdlp.JSRuntime{}, st.JSRuntimes...)
+	return st
+}
+
+// publishTools makes st the current status, unless a newer pass has published already.
+func (a *App) publishTools(gen int64, st ToolStatus) {
 	a.toolsMu.Lock()
 	stale := gen < a.toolsPub
 	if !stale {
