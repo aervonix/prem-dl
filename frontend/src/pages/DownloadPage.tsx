@@ -1,5 +1,6 @@
 import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {api, errMessage, on} from '../api'
+import {Banner} from '../components/Banners'
 import {ErrorPanel} from '../components/ErrorPanel'
 import {FeedDialog} from '../components/FeedDialog'
 import {VideoGrid, selectable, useSteps} from '../components/VideoGrid'
@@ -157,6 +158,7 @@ function SavePresetDialog({presets, initialName, host, onClose, onSave}: {preset
   }
   return (
     <Modal
+      dismissable={false}
       title="Save as preset"
       onClose={onClose}
       footer={
@@ -214,6 +216,7 @@ export function DownloadPage() {
   const [followed, setFollowed] = useState(false)
   const requestId = useRef(0)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const readyDownload = useRef<() => Promise<void>>(() => Promise.resolve())
   const lastLink = useRef('')
   const defaults = settings?.defaults
   const defaultsRef = useRef(defaults)
@@ -441,13 +444,32 @@ export function DownloadPage() {
 
   // Links handed over by the Chrome helper or a second launch, or dropped on the window. One is
   // analysed straight away; several fill the box, ready to add.
+  // A playlist with videos ticked isn't replaced unasked: the new link waits in a notice.
+  const [held, setHeld] = useState<string[] | null>(null)
+  const take = (links: string[]) => {
+    setHeld(null)
+    setText(links.join('\n'))
+    if (links.length === 1) void analyze(links[0])
+  }
   useEffect(() => {
     const links = state.incoming?.links
     if (!links || links.length === 0) return
-    setText(links.join('\n'))
-    if (links.length === 1) void analyze(links[0])
+    if (phase === 'ready' && playlist && selected.size > 0 && !(links.length === 1 && links[0] === probedUrl)) return setHeld(links)
+    take(links)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.incoming?.n])
+
+  /** After queuing: stay here, ready for the next link, with a way to the queue. */
+  const added = (text: string) => {
+    toast('success', text, {label: 'View queue', run: () => go('queue')})
+    inputRef.current?.focus({preventScroll: true})
+  }
+
+  // The link box has the focus whenever the page is shown with nothing analysed, so a paste lands.
+  useEffect(() => {
+    if (state.page === 'download' && phase === 'idle') inputRef.current?.focus({preventScroll: true})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.page])
 
   const submit = useCallback(async () => {
     if (!opts || links.length === 0 || adding) return
@@ -472,9 +494,8 @@ export function DownloadPage() {
       if (res.error) return toast('error', res.error)
       if (res.added > 0 && res.failed.length === 0) {
         // Everything was queued: show it downloading. Otherwise stay, with the leftovers in the box.
-        if (res.skipped > 0) toast('info', `${plural(res.skipped, 'download')} already in the queue`)
         setText('')
-        go('queue')
+        added(`Added ${plural(res.added, 'download')}${res.skipped ? ` (${res.skipped} already queued)` : ''}`)
         return
       }
       if (res.added > 0) {
@@ -584,17 +605,34 @@ export function DownloadPage() {
       const res = await api.enqueue(items, options)
       if (res.error) return toast('error', res.error)
       if (res.added === 0 && res.skipped > 0) return toast('info', 'Already in the queue')
-      if (res.skipped > 0) toast('info', `${plural(res.skipped, 'download')} already in the queue`)
-      // The form is cleared for next time; the Queue page shows the download starting.
+      // The form is cleared for the next link; the toast leads to the queue.
       setText('')
       reset()
-      go('queue')
+      added(
+        video
+          ? `Added ${video.title || 'the video'} to the queue`
+          : `Added ${plural(res.added, 'video')} to the queue${res.skipped ? ` (${res.skipped} already there)` : ''}`,
+      )
     } catch (e) {
       toast('error', errMessage(e))
     } finally {
       setAdding(false)
     }
   }
+
+  // Enter in the link box and Ctrl+Enter anywhere on the page press Download once it shows.
+  const canDownload = phase === 'ready' && !!result && !!opts && !problem && !waitsForCount && !adding && (!playlist || selectedEntries.length > 0)
+  readyDownload.current = () => (canDownload ? download() : Promise.resolve())
+  useEffect(() => {
+    if (state.page !== 'download') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || !e.ctrlKey || e.altKey || e.shiftKey || document.querySelector('[aria-modal]')) return
+      e.preventDefault()
+      void readyDownload.current()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [state.page])
 
   // A scheduled stream whose details couldn't be read: queued under its link, which the title
   // replaces once it starts.
@@ -607,7 +645,7 @@ export function DownloadPage() {
     if (res.added === 0) return toast('info', 'Already in the queue')
     setText('')
     reset()
-    go('queue')
+    added('Added to the queue. It waits for the stream to start.')
   }
 
   const saveAsDefaults = async () => {
@@ -685,9 +723,11 @@ export function DownloadPage() {
             spellCheck={false}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
                 e.preventDefault()
-                void submit()
+                // Analysed already: Enter again downloads it.
+                if (phase === 'ready' && links[0] === probedUrl && !bulk) void readyDownload.current()
+                else void submit()
               }
             }}
             onPaste={(e) => {
@@ -723,8 +763,27 @@ export function DownloadPage() {
             </Button>
           </div>
         )}
-        {!bulk && links.length === 1 && phase === 'idle' && <div className="hint" style={{marginTop: 8}}>Press Enter to analyze · Shift+Enter adds another link</div>}
+        {!bulk && links.length === 1 && phase === 'idle' && <div className="hint" style={{marginTop: 8}}>Press Enter to analyze, then Enter again to download · Shift+Enter adds another link</div>}
       </Card>
+
+      {held && (
+        <Banner
+          tone="info"
+          icon="link"
+          title={held.length === 1 ? `A new link arrived: ${hostOf(held[0])}` : `${held.length} new links arrived`}
+          actions={
+            <>
+              <Button size="sm" variant="primary" onClick={() => take(held)}>
+                Open {held.length === 1 ? 'it' : 'them'}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setHeld(null)}>
+                Keep this playlist
+              </Button>
+            </>
+          }>
+          Opening {held.length === 1 ? 'it' : 'them'} clears the {plural(selected.size, 'video')} ticked here.
+        </Banner>
+      )}
 
       {bulkProgress && (
         <div className="row" style={{padding: '28px 4px', color: 'var(--muted)'}}>
@@ -888,8 +947,8 @@ export function DownloadPage() {
                   value={view}
                   onChange={changeView}
                   options={[
-                    {value: 'grid', label: <Icon name="grid" size={14} />, title: 'Grid of thumbnails'},
-                    {value: 'list', label: <Icon name="list" size={14} />, title: 'Compact list'},
+                    {value: 'grid', label: <Icon name="grid" size={14} />, title: 'Grid of thumbnails', ariaLabel: 'Grid'},
+                    {value: 'list', label: <Icon name="list" size={14} />, title: 'Compact list', ariaLabel: 'List'},
                   ]}
                 />
               </div>
@@ -952,7 +1011,7 @@ export function DownloadPage() {
               ) : video && opts.chapters.length > 0 ? (
                 `${plural(opts.chapters.length, 'chapter')}, each saved as its own file`
               ) : video && opts && plannedName(video, opts) ? (
-                <span title={`${opts.outputDir || settings?.downloadDir || ''}\\${plannedName(video, opts)}`}>
+                <span title={`${opts.outputDir || settings?.downloadDir || ''}${state.platform === 'windows' ? '\\' : '/'}${plannedName(video, opts)}`}>
                   Saves as <b>{plannedName(video, opts)}</b>
                 </span>
               ) : (
@@ -967,7 +1026,7 @@ export function DownloadPage() {
               }}>
               Clear
             </Button>
-            <Button variant="primary" size="lg" icon={video?.upcoming ? 'clock' : 'download'} loading={adding} disabled={!!problem || waitsForCount || (!!playlist && selectedEntries.length === 0)} onClick={() => void download()}>
+            <Button variant="primary" size="lg" icon={video?.upcoming ? 'clock' : 'download'} loading={adding} disabled={!!problem || waitsForCount || (!!playlist && selectedEntries.length === 0)} title="Ctrl+Enter" aria-keyshortcuts="Control+Enter" onClick={() => void download()}>
               {playlist ? `Download ${selectedEntries.length}` : video?.upcoming ? 'Wait for it' : 'Download'}
             </Button>
           </div>

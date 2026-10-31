@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react'
 import {api} from '../../api'
 import {ErrorPanel} from '../../components/ErrorPanel'
-import {Button, Card, Field, Modal} from '../../components/ui'
+import {Button, Card, Field, Modal, useConfirm} from '../../components/ui'
 import {plural} from '../../format'
 import {Icon} from '../../icons'
 import {useApp} from '../../store'
@@ -59,6 +59,7 @@ function PasteCookiesModal({initial = '', onClose, onImport}: {initial?: string;
 /** Where cookies come from: off, a browser, or a cookies.txt (imported, pasted or from Chrome). */
 export function CookiesTab({draft, saved, upd}: TabProps) {
   const {state, setSettings, toast, attempt} = useApp()
+  const [removeArmed, confirmRemove] = useConfirm()
   const [cookieInfo, setCookieInfo] = useState<CookieInfo | null>(null)
   const [cookieTest, setCookieTest] = useState<CookieTest | null>(null)
   const [testing, setTesting] = useState(false)
@@ -382,11 +383,13 @@ export function CookiesTab({draft, saved, upd}: TabProps) {
                     variant="ghost"
                     className="danger"
                     icon="trash"
-                    onClick={async () => {
-                      const res = await attempt(api.removeCookieFile())
-                      if (res && applyCookieResponse(res)) toast('info', 'Cookies removed')
-                    }}>
-                    Remove
+                    onClick={() =>
+                      confirmRemove(async () => {
+                        const res = await attempt(api.removeCookieFile())
+                        if (res && applyCookieResponse(res)) toast('info', 'Cookies removed')
+                      })
+                    }>
+                    {removeArmed ? 'Click again to delete them' : 'Remove'}
                   </Button>
                 </>
               )}

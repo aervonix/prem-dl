@@ -98,7 +98,7 @@ const FeedRow = memo(function FeedRow({
       </span>
       <div style={{minWidth: 0}}>
         <button type="button" className="feed-open" title="Browse its videos" onClick={() => onOpen(feed)} style={{display: 'block', maxWidth: '100%'}}>
-          <div className="jtitle truncate">
+          <div className="jtitle truncate" title={feed.title}>
             {feed.title}
             {feed.paused && (
               <span className="badge" style={{marginLeft: 8}}>
@@ -130,7 +130,7 @@ const FeedRow = memo(function FeedRow({
       </div>
       {feed.error && (
         <div className="jerr">
-          <ErrorPanel error={feed.error} onRetry={() => run(() => api.checkFeed(feed.id))} compact />
+          <ErrorPanel error={feed.error} onRetry={() => run(() => api.checkFeed(feed.id))} compact live={false} />
         </div>
       )}
     </div>

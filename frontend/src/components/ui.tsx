@@ -1,7 +1,26 @@
-import {cloneElement, isValidElement, useEffect, useId, useRef, useState} from 'react'
+import {Children, cloneElement, isValidElement, useEffect, useId, useRef, useState} from 'react'
 import type {ButtonHTMLAttributes, ReactNode} from 'react'
 import {Icon} from '../icons'
 import type {IconName} from '../icons'
+
+/**
+ * A button that asks for a second click before doing something that can't be undone: the first
+ * arms it (its label says what the next click will do), and it disarms itself after 4 s.
+ */
+export function useConfirm(): [armed: boolean, press: (run: () => void, needed?: boolean) => void] {
+  const [armed, setArmed] = useState(false)
+  useEffect(() => {
+    if (!armed) return
+    const t = window.setTimeout(() => setArmed(false), 4000)
+    return () => window.clearTimeout(t)
+  }, [armed])
+  const press = (run: () => void, needed = true) => {
+    if (needed && !armed) return setArmed(true)
+    setArmed(false)
+    run()
+  }
+  return [armed, press]
+}
 
 export function Spinner() {
   return <span className="spinner" role="status" aria-label="Loading" />
@@ -47,7 +66,7 @@ export function Switch({
 }) {
   return (
     <label className="switch" style={disabled ? {opacity: 0.5} : undefined}>
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
+      <input type="checkbox" role="switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
       <span className="track" />
       <span>
         <div className="label">{label}</div>
@@ -62,6 +81,8 @@ export interface SegOption<T extends string> {
   label: ReactNode
   disabled?: boolean
   title?: string
+  /** The option's name for screen readers, when label is only an icon. */
+  ariaLabel?: string
 }
 
 export function Segmented<T extends string>({
@@ -78,7 +99,7 @@ export function Segmented<T extends string>({
   return (
     <div className="seg" role="group" aria-label={label}>
       {options.map((o) => (
-        <button key={o.value} type="button" aria-pressed={o.value === value} disabled={o.disabled} title={o.title} onClick={() => onChange(o.value)}>
+        <button key={o.value} type="button" aria-pressed={o.value === value} disabled={o.disabled} title={o.title} aria-label={o.ariaLabel} onClick={() => onChange(o.value)}>
           {o.label}
         </button>
       ))}
@@ -101,12 +122,21 @@ export function Field({label, hint, children, className}: {label?: ReactNode; hi
   )
 }
 
-// Passes the generated id to a single input/select child so the label is associated with it.
+// Passes the generated id to the field's input/select so the label is associated with it: the
+// child itself, or the first one inside a plain wrapper (a box with a Browse button beside it).
 function FieldControl({id, children}: {id: string; children: ReactNode}) {
-  if (isValidElement<{id?: string}>(children) && typeof children.type === 'string' && ['input', 'select', 'textarea'].includes(children.type) && !children.props.id) {
-    return cloneElement(children, {id})
+  let used = false
+  const give = (node: ReactNode, depth: number): ReactNode => {
+    if (used || !isValidElement<{id?: string; children?: ReactNode}>(node) || typeof node.type !== 'string') return node
+    if (['input', 'select', 'textarea'].includes(node.type)) {
+      used = true
+      return node.props.id ? node : cloneElement(node, {id})
+    }
+    if (depth === 0 || node.props.children === undefined) return node
+    const kids = Children.map(node.props.children, (c) => give(c, depth - 1))
+    return used ? cloneElement(node, {}, kids) : node
   }
-  return <>{children}</>
+  return <>{give(children, 2)}</>
 }
 
 export function Card({
@@ -149,9 +179,29 @@ export function Progress({percent, state, label}: {percent: number; state?: 'bus
   )
 }
 
-export function Chip({pressed, onClick, children, title}: {pressed?: boolean; onClick?: () => void; children: ReactNode; title?: string}) {
+/** A toggle (pressed set) or, with removes, a picked item that a click takes away. */
+export function Chip({
+  pressed,
+  removes,
+  onClick,
+  children,
+  title,
+}: {
+  pressed?: boolean
+  /** The chip stands for something picked, and clicking it removes that (named for screen readers). */
+  removes?: string
+  onClick?: () => void
+  children: ReactNode
+  title?: string
+}) {
   return (
-    <button type="button" className="chip" aria-pressed={pressed} onClick={onClick} title={title}>
+    <button
+      type="button"
+      className={`chip${removes ? ' picked' : ''}`}
+      aria-pressed={removes ? undefined : pressed}
+      aria-label={removes ? `Remove ${removes}` : undefined}
+      onClick={onClick}
+      title={title}>
       {children}
     </button>
   )
@@ -159,7 +209,20 @@ export function Chip({pressed, onClick, children, title}: {pressed?: boolean; on
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
-export function Modal({title, onClose, children, footer}: {title: ReactNode; onClose: () => void; children: ReactNode; footer?: ReactNode}) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  footer,
+  dismissable = true,
+}: {
+  title: ReactNode
+  onClose: () => void
+  children: ReactNode
+  footer?: ReactNode
+  /** A click outside closes it. Off for dialogs with a form, where a stray click would lose the edits. */
+  dismissable?: boolean
+}) {
   const titleId = useId()
   const box = useRef<HTMLDivElement>(null)
   const close = useRef(onClose)
@@ -197,10 +260,10 @@ export function Modal({title, onClose, children, footer}: {title: ReactNode; onC
     }
   }, [opener])
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="overlay" onMouseDown={(e) => dismissable && e.target === e.currentTarget && onClose()}>
       <div className="modal" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1} ref={box}>
         <div className="modal-head">
-          <h2 className="truncate" id={titleId}>
+          <h2 className="truncate" id={titleId} title={typeof title === 'string' ? title : undefined}>
             {title}
           </h2>
           <IconButton icon="x" label="Close" onClick={onClose} />
@@ -216,7 +279,8 @@ export function Empty({title, children}: {title: string; children?: ReactNode}) 
   return (
     <div className="empty">
       <h3>{title}</h3>
-      {children && <p>{children}</p>}
+      {/* A div: callers pass buttons and blocks, which a <p> can't hold. */}
+      {children && <div className="empty-text">{children}</div>}
     </div>
   )
 }

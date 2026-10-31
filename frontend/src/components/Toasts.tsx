@@ -26,9 +26,10 @@ function ToastItem({t, dismiss}: {t: Toast; dismiss: (id: number) => void}) {
   const [held, setHeld] = useState(false)
   useEffect(() => {
     if (held) return
-    const timer = window.setTimeout(done, t.kind === 'error' ? 9000 : 5000)
+    // One with a button stays long enough to Tab to it.
+    const timer = window.setTimeout(done, t.kind === 'error' ? 9000 : t.action ? 8000 : 5000)
     return () => window.clearTimeout(timer)
-  }, [held, done, t.kind])
+  }, [held, done, t.kind, t.action])
 
   return (
     <div

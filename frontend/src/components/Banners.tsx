@@ -7,7 +7,7 @@ import {useApp, useJobs} from '../store'
 import {Button, IconButton, Progress} from './ui'
 import {EJS_DOCS} from './ErrorPanel'
 
-function Banner({tone, icon, title, children, actions}: {tone: 'warn' | 'bad' | 'info' | 'ok'; icon: IconName; title: string; children?: ReactNode; actions?: ReactNode}) {
+export function Banner({tone, icon, title, children, actions}: {tone: 'warn' | 'bad' | 'info' | 'ok'; icon: IconName; title: string; children?: ReactNode; actions?: ReactNode}) {
   return (
     <div className={`banner ${tone}`} role={tone === 'bad' ? 'alert' : 'status'}>
       <span className="ic">

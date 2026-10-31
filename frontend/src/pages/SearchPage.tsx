@@ -130,6 +130,8 @@ export function SearchPage() {
       setAdding(false)
     }
   }
+  /** One video or playlist on the Download page, keeping the ticks here. */
+  const openOne = useCallback((url: string) => openLinks([url]), [openLinks])
   const chooseOptions = () => {
     openLinks([...picked.values()].map((e) => e.url))
     setPicked(new Map())
@@ -214,11 +216,14 @@ export function SearchPage() {
           <Spinner /> <span>Searching…</span>
         </div>
       ) : !shown ? (
-        <Empty title="Search YouTube">Find videos, channels and playlists, then tick the ones to download. Pasting a link here opens it on the Download page.</Empty>
+        <Empty title="Search YouTube">
+          Find videos, channels and playlists, then tick the ones to download (Shift+click ticks a run). Double-click a video to choose its options. Pasting a link here opens it on the
+          Download page.
+        </Empty>
       ) : entries.length === 0 ? (
         <Empty title={`No results for “${shown.query}”`}>{filter.type || filter.uploaded || filter.length ? 'Try fewer filters.' : 'Try other words.'}</Empty>
       ) : (
-        <VideoGrid entries={entries} selected={selected} setSelected={setSelected} uploader reveal status={status} onOpen={(url) => openLinks([url])} />
+        <VideoGrid entries={entries} selected={selected} setSelected={setSelected} uploader reveal status={status} onOpen={openOne} onOpenVideo={openOne} />
       )}
 
       {shown && entries.length > 0 && (

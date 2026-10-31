@@ -24,6 +24,8 @@ export interface State {
   platform: string
   /** The desktop has no tray, so closing can't keep the app running. */
   noTray: boolean
+  /** Settings has edits that aren't saved (a dot on its sidebar item). */
+  settingsDirty: boolean
   settings: Settings | null
   /** Followed channels and playlists. */
   feeds: Feed[]
@@ -65,6 +67,7 @@ export const initial: State = {
   dataDir: '',
   platform: 'windows',
   noTray: false,
+  settingsDirty: false,
   settings: null,
   feeds: [],
   tools: emptyTools,
@@ -90,6 +93,7 @@ export type Action =
   | {type: 'repairing'; on: boolean}
   | {type: 'settings'; settings: Settings}
   | {type: 'noTray'}
+  | {type: 'settingsDirty'; on: boolean}
   | {type: 'feeds'; feeds: Feed[]}
   | {type: 'appUpdate'; info: AppUpdate}
   | {type: 'appUpdateProgress'; p: State['appUpdateProgress']}
@@ -156,6 +160,8 @@ export function reducer(s: State, a: Action): State {
       return {...s, settings: a.settings}
     case 'noTray':
       return {...s, noTray: true}
+    case 'settingsDirty':
+      return s.settingsDirty === a.on ? s : {...s, settingsDirty: a.on}
     case 'feeds':
       return {...s, feeds: a.feeds}
     case 'appUpdate':
@@ -195,6 +201,8 @@ interface Ctx {
   toast: (kind: ToastKind, text: string, action?: Toast['action']) => void
   dismissToast: (id: number) => void
   dismiss: (key: string) => void
+  /** Settings tells the sidebar whether it has unsaved edits. */
+  setSettingsDirty: (on: boolean) => void
   setSettings: (s: Settings) => void
   setTools: (t: ToolStatus) => void
   /** Run a backend call that may reject; shows an error toast and returns undefined on failure. */
@@ -395,6 +403,7 @@ export function AppProvider({children}: {children: ReactNode}) {
       toast,
       dismissToast: (id) => dispatch({type: 'toastDone', id}),
       dismiss: (key) => dispatch({type: 'dismiss', key}),
+      setSettingsDirty: (on) => dispatch({type: 'settingsDirty', on}),
       setSettings: (settings) => dispatch({type: 'settings', settings}),
       setTools: (tools) => dispatch({type: 'tools', tools}),
       attempt,

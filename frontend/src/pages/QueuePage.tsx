@@ -3,7 +3,7 @@ import {api, errMessage} from '../api'
 import {ErrorPanel} from '../components/ErrorPanel'
 import {RetryDialog} from '../components/RetryDialog'
 import {Thumb} from '../components/Thumb'
-import {Button, Empty, IconButton, Modal, Progress, Segmented} from '../components/ui'
+import {Button, Empty, IconButton, Modal, Progress, Segmented, useConfirm} from '../components/ui'
 import {basename, bytes, eta, goTime, plural, speed} from '../format'
 import {Icon} from '../icons'
 import {useApp, useJobs} from '../store'
@@ -112,7 +112,7 @@ const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onL
             </span>
           )}
         </div>
-        {s !== 'failed' && s !== 'cancelled' && !waiting && <Progress percent={percent} state={progressState(job)} label={job.title} />}
+        {s !== 'failed' && s !== 'cancelled' && !waiting && <Progress percent={percent} state={progressState(job)} label={`${job.title}: ${job.stage}`} />}
         {waiting && (
           <div className="jretry">
             <span>
@@ -158,7 +158,7 @@ const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onL
         {(s === 'failed' || s === 'cancelled') && <IconButton icon="sliders" label="Change options and retry" onClick={() => onEdit(job)} />}
         {s === 'completed' && job.outputFile && (
           <>
-            <IconButton icon="play" label="Open file" onClick={() => void run(() => api.openFile(job.id))} />
+            <IconButton icon="file" label="Open file" onClick={() => void run(() => api.openFile(job.id))} />
             <IconButton icon="folder" label="Show in folder" onClick={() => void run(() => api.revealFile(job.id))} />
           </>
         )}
@@ -176,6 +176,7 @@ const JobRow = memo(function JobRow({job, onLog, onEdit, notify}: {job: Job; onL
             onEdit={() => onEdit(job)}
             onDetails={() => onLog(job)}
             compact
+            live={false}
           />
         </div>
       )}
@@ -284,6 +285,9 @@ export function QueuePage() {
     return c
   }, [jobs])
 
+  // Failed downloads can't be retried once cleared: that takes a second click.
+  const [clearArmed, confirmClear] = useConfirm()
+
   const totalSpeed = useMemo(() => jobs.reduce((n, j) => (j.status === 'downloading' ? n + j.speed : n), 0), [jobs])
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -350,8 +354,8 @@ export function QueuePage() {
                 variant="ghost"
                 disabled={counts.done === 0 && counts.failed === 0}
                 title="Also remove failed and cancelled downloads, which can then no longer be retried. Files on disk are kept."
-                onClick={() => void attempt(api.clearFinished(false))}>
-                Clear all finished
+                onClick={() => confirmClear(() => void attempt(api.clearFinished(false)), counts.failed > 0)}>
+                {clearArmed ? `Click again to remove ${counts.failed} failed too` : 'Clear all finished'}
               </Button>
             </div>
           </div>

@@ -73,6 +73,7 @@ const Card = memo(function Card({
   uploader,
   onPick,
   onOpen,
+  onOpenVideo,
   reveal,
 }: {
   entry: PlaylistEntry
@@ -81,6 +82,7 @@ const Card = memo(function Card({
   uploader: boolean
   onPick: (index: number, range: boolean) => void
   onOpen?: (url: string) => void
+  onOpenVideo?: (url: string) => void
   /** Its place in the batch that brought it, which delays its fade-in; -1 shows it at once. */
   reveal: number
 }) {
@@ -99,7 +101,9 @@ const Card = memo(function Card({
       className={`vcard${checked ? ' on' : ''}${!can && !playlist ? ' off' : ''}${reveal >= 0 ? ' reveal' : ''}`}
       style={reveal >= 0 ? ({'--reveal': Math.min(reveal, REVEAL_MAX)} as CSSProperties) : undefined}
       onClick={pick}
-      title={title}>
+      // Two clicks tick and untick it again, so the ticks stay as they were.
+      onDoubleClick={can && onOpenVideo ? () => onOpenVideo(e.url) : undefined}
+      title={onOpenVideo && can ? `${title}\nDouble-click to choose its options` : title}>
       <div className="vthumb">
         {e.thumbnail && failedSrc !== e.thumbnail ? (
           <img src={e.thumbnail} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedSrc(e.thumbnail)} />
@@ -184,6 +188,7 @@ export const VideoGrid = memo(function VideoGrid({
   selected,
   setSelected,
   onOpen,
+  onOpenVideo,
   tall,
   uploader,
   status,
@@ -194,6 +199,8 @@ export const VideoGrid = memo(function VideoGrid({
   setSelected: Dispatch<SetStateAction<Set<number>>>
   /** Open a playlist listed among the videos (a channel's Playlists tab). */
   onOpen?: (url: string) => void
+  /** Double-clicking a video opens it on its own (search results: to choose its options). */
+  onOpenVideo?: (url: string) => void
   /** Portrait thumbnails, for Shorts. */
   tall?: boolean
   /** Show each video's uploader (a playlist mixes channels; a channel page doesn't need it). */
@@ -262,6 +269,7 @@ export const VideoGrid = memo(function VideoGrid({
             uploader={!!uploader}
             onPick={onPick}
             onOpen={onOpen}
+            onOpenVideo={onOpenVideo}
             reveal={reveal ? (order.current.get(e.index) ?? -1) : -1}
           />
         )

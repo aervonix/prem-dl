@@ -51,6 +51,7 @@ export function RetryDialog({job, onClose}: {job: Job; onClose: () => void}) {
 
   return (
     <Modal
+      dismissable={false}
       title={`Change options: ${job.title}`}
       onClose={onClose}
       footer={

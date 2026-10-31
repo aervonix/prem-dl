@@ -137,6 +137,7 @@ export function FeedDialog({
 
   return (
     <Modal
+      dismissable={false}
       title={feed ? `Options for ${name}` : already ? 'Already following' : `Follow ${name || 'this'}`}
       onClose={onClose}
       footer={

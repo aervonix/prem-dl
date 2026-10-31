@@ -25,7 +25,7 @@ const SECTIONS: readonly {id: string; label: string; Tab: ComponentType<TabProps
 const isSection = (id: string) => SECTIONS.some((s) => s.id === id)
 
 export function SettingsPage() {
-  const {state, setSettings, toast} = useApp()
+  const {state, setSettings, setSettingsDirty, toast} = useApp()
   const saved = state.settings
   const [draft, setDraft] = useState<Settings | null>(saved)
   const [saving, setSaving] = useState(false)
@@ -33,6 +33,13 @@ export function SettingsPage() {
   const [discards, setDiscards] = useState(0)
 
   const dirty = useMemo(() => !!saved && !!draft && JSON.stringify(saved) !== JSON.stringify(draft), [saved, draft])
+  useEffect(() => setSettingsDirty(dirty), [dirty, setSettingsDirty])
+
+  // The theme shows as it's picked; leaving Settings or discarding puts the saved one back.
+  const shownTheme = state.page === 'settings' && draft ? draft.theme : (saved?.theme ?? 'system')
+  useEffect(() => {
+    document.documentElement.dataset.theme = shownTheme
+  }, [shownTheme])
 
   // Follow saved changes (imports, "save as defaults", changes the backend makes): fields the user
   // hasn't touched take the new value, unsaved edits are kept.

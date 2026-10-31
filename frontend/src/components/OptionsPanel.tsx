@@ -95,7 +95,7 @@ export function OptionsPanel({
               </div>
               <div className="chips">
                 {sub.langs.map((l) => (
-                  <Chip key={l} pressed onClick={() => toggleLang(l)} title="Remove">
+                  <Chip key={l} onClick={() => toggleLang(l)} title="Remove" removes={langLabel(l)}>
                     {langLabel(l)} <Icon name="x" size={12} />
                   </Chip>
                 ))}

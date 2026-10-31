@@ -4,8 +4,12 @@ import {Icon} from '../icons'
 import {plural} from '../format'
 import {useApp} from '../store'
 
-function editable(t: EventTarget | null): boolean {
-  return t instanceof HTMLElement && (t.isContentEditable || t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type === 'text'))
+/** Whether t takes typed text (where a paste or a drop of text is the box's own business). */
+export function editable(t: EventTarget | null): boolean {
+  return (
+    t instanceof HTMLElement &&
+    (t.isContentEditable || t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && ['text', 'search', 'url', 'number', ''].includes(t.type)))
+  )
 }
 
 /**

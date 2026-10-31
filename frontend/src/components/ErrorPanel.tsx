@@ -6,6 +6,17 @@ import {Button} from './ui'
 
 export const EJS_DOCS = 'https://github.com/yt-dlp/yt-dlp/wiki/EJS'
 
+// Where "Open settings" goes for each error that has it, and what the button says.
+const SETTINGS_FOR: Record<string, [section: string, label: string]> = {
+  geo_blocked: ['network', 'Network settings'],
+  network: ['network', 'Network settings'],
+  rate_limited: ['network', 'Network settings'],
+  js_runtime: ['updates', 'Show runtime status'],
+  disk_full: ['general', 'Change download folder'],
+  path_too_long: ['general', 'File name settings'],
+  permission: ['general', 'Change download folder'],
+}
+
 /**
  * Presents a structured error from the backend: what happened, what to do, and a button that
  * performs the most likely fix.
@@ -17,6 +28,7 @@ export function ErrorPanel({
   onEdit,
   onWait,
   compact,
+  live = true,
 }: {
   error: AppError
   onRetry?: () => void
@@ -26,6 +38,11 @@ export function ErrorPanel({
   /** Change the download's options and run it again. */
   onEdit?: () => void
   compact?: boolean
+  /**
+   * Announce it to screen readers when it appears. Lists of failed downloads or feeds turn this
+   * off: opening the page would read every one of them out.
+   */
+  live?: boolean
 }) {
   const {go, repairTools, checkAppUpdate, toast, copy, state} = useApp()
   const [checking, setChecking] = useState(false)
@@ -39,7 +56,7 @@ export function ErrorPanel({
   }
 
   return (
-    <div className={`errpanel${compact ? ' compact' : ''}`} role="alert">
+    <div className={`errpanel${compact ? ' compact' : ''}`} role={live ? 'alert' : undefined}>
       <div className="t">
         <Icon name="warning" size={17} />
         {error.title}
@@ -63,8 +80,8 @@ export function ErrorPanel({
           </Button>
         )}
         {error.action === 'settings' && (
-          <Button size="sm" variant="primary" icon="settings" onClick={() => go('settings')}>
-            Open settings
+          <Button size="sm" variant="primary" icon="settings" onClick={() => go('settings', SETTINGS_FOR[error.code]?.[0] ?? 'general')}>
+            {SETTINGS_FOR[error.code]?.[1] ?? 'Open settings'}
           </Button>
         )}
         {onWait && error.code === 'upcoming' && (
