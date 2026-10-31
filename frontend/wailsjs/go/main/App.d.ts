@@ -132,6 +132,8 @@ export function Search(arg1:string,arg2:ytdlp.SearchFilter,arg3:number,arg4:numb
 
 export function SetWindowFocused(arg1:boolean):Promise<void>;
 
+export function StartNow():Promise<void>;
+
 export function TestCookies():Promise<ytdlp.CookieTest>;
 
 export function UnfollowFeed(arg1:string):Promise<void>;

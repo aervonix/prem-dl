@@ -120,6 +120,8 @@ export interface Settings {
   startWithWindows: boolean
   /** The computer doesn't go to sleep while downloads run (the screen may still turn off). */
   keepAwake: boolean
+  /** When downloads may start; running ones finish. from after to crosses midnight. */
+  activeHours: ActiveHours
   /** Hours between checks of followed channels and playlists: 0 (only when asked), 1, 3, 6, 12 or 24. */
   followEvery: number
   extraArgs: string
@@ -524,6 +526,14 @@ export interface FeedFilter {
   include: string[]
   /** Titles containing any of these are skipped. */
   exclude: string[]
+}
+
+export interface ActiveHours {
+  on: boolean
+  /** "01:00" */
+  from: string
+  /** "07:00" */
+  to: string
 }
 
 /** What importing follows did. */

@@ -27,6 +27,22 @@ export function NetworkTab({draft, upd}: TabProps) {
           description="Turn this on if analysing links or downloads hang or time out while websites open fine in your browser. Some networks hand out IPv6 addresses that don't work; browsers quietly fall back, the download tools wait each one out."
         />
         <Switch
+          checked={draft.activeHours.on}
+          onChange={(v) => upd({activeHours: {...draft.activeHours, on: v}})}
+          label="Only start downloads during certain hours"
+          description="For a data cap that's free at night, or to keep the connection free by day. Downloads already running finish; the rest wait. The queue has a Start now button."
+        />
+        {draft.activeHours.on && (
+          <div className="grid2">
+            <Field label="From">
+              <input type="time" value={draft.activeHours.from} onChange={(e) => upd({activeHours: {...draft.activeHours, from: e.target.value}})} />
+            </Field>
+            <Field label="Until" hint="Earlier than From means overnight.">
+              <input type="time" value={draft.activeHours.to} onChange={(e) => upd({activeHours: {...draft.activeHours, to: e.target.value}})} />
+            </Field>
+          </div>
+        )}
+        <Switch
           checked={draft.autoRetry}
           onChange={(v) => upd({autoRetry: v})}
           label="Retry failed downloads automatically"

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -135,6 +136,7 @@ type Settings struct {
 	CloseToTray         bool            `json:"closeToTray"`      // closing the window keeps the app running in the tray
 	StartWithWindows    bool            `json:"startWithWindows"` // start in the tray when the user signs in
 	KeepAwake           bool            `json:"keepAwake"`        // the computer doesn't sleep while downloads run
+	ActiveHours         ActiveHours     `json:"activeHours"`      // when downloads may start
 	FollowEvery         int             `json:"followEvery"`      // hours between checks of followed channels; 0 = only when asked
 	ExtraArgs           string          `json:"extraArgs"`
 	Defaults            DownloadOptions `json:"defaults"`
@@ -162,6 +164,7 @@ func Default() Settings {
 		NotifyPopup:         true,
 		NotifySystem:        true,
 		KeepAwake:           true,
+		ActiveHours:         ActiveHours{From: "01:00", To: "07:00"},
 		FollowEvery:         6,
 		Defaults: DownloadOptions{
 			Preset:            "best",
@@ -370,6 +373,9 @@ func (s *Settings) Validate() error {
 		s.FilenameTemplate = def.FilenameTemplate
 	}
 	if err := checkTemplate(s.FilenameTemplate); err != nil {
+		return err
+	}
+	if err := s.ActiveHours.validate(); err != nil {
 		return err
 	}
 	if s.MaxConcurrent < 1 || s.MaxConcurrent > 10 {
@@ -730,4 +736,60 @@ func FindPreset(name string, presets []NamedPreset) *NamedPreset {
 		}
 	}
 	return nil
+}
+
+// ActiveHours limits when downloads start: overnight on a data cap, say. Downloads running when
+// the window closes finish; the rest wait for it to open again. From after To crosses midnight.
+type ActiveHours struct {
+	On   bool   `json:"on"`
+	From string `json:"from"` // "01:00"
+	To   string `json:"to"`   // "07:00"
+}
+
+var clockRe = regexp.MustCompile(`^([01]?\d|2[0-3]):([0-5]\d)$`)
+
+func clockMinutes(s string) (int, bool) {
+	m := clockRe.FindStringSubmatch(strings.TrimSpace(s))
+	if m == nil {
+		return 0, false
+	}
+	h, _ := strconv.Atoi(m[1])
+	mm, _ := strconv.Atoi(m[2])
+	return h*60 + mm, true
+}
+
+func (h *ActiveHours) validate() error {
+	h.From, h.To = strings.TrimSpace(h.From), strings.TrimSpace(h.To)
+	if h.From == "" && h.To == "" {
+		h.From, h.To = "01:00", "07:00"
+	}
+	from, ok1 := clockMinutes(h.From)
+	to, ok2 := clockMinutes(h.To)
+	if !ok1 || !ok2 {
+		return errors.New("download hours are times like 01:00 and 07:00")
+	}
+	if h.On && from == to {
+		return errors.New("download hours start and end at the same time")
+	}
+	return nil
+}
+
+// Open reports whether downloads may start at now, and if not, when they may next.
+func (h ActiveHours) Open(now time.Time) (bool, time.Time) {
+	from, ok1 := clockMinutes(h.From)
+	to, ok2 := clockMinutes(h.To)
+	if !h.On || !ok1 || !ok2 || from == to {
+		return true, time.Time{}
+	}
+	cur := now.Hour()*60 + now.Minute()
+	in := from < to && cur >= from && cur < to || from > to && (cur >= from || cur < to)
+	if in {
+		return true, time.Time{}
+	}
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	next := day.Add(time.Duration(from) * time.Minute)
+	if !next.After(now) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return false, next
 }

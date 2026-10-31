@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func writeSettings(t *testing.T, dir string, v any) []byte {
@@ -284,5 +285,33 @@ func TestOptionTemplateChecked(t *testing.T) {
 	o.FilenameTemplate = "  %(title)s [%(id)s].%(ext)s "
 	if err := ValidateOptions(&o); err != nil || o.FilenameTemplate != "%(title)s [%(id)s].%(ext)s" {
 		t.Errorf("%q, %v", o.FilenameTemplate, err)
+	}
+}
+
+func TestActiveHoursOpen(t *testing.T) {
+	at := func(hm string) time.Time {
+		tm, _ := time.ParseInLocation("2006-01-02 15:04", "2026-10-31 "+hm, time.Local)
+		return tm
+	}
+	night := ActiveHours{On: true, From: "23:00", To: "07:00"}
+	for hm, want := range map[string]bool{"23:30": true, "02:00": true, "06:59": true, "07:00": false, "12:00": false, "22:59": false} {
+		if open, _ := night.Open(at(hm)); open != want {
+			t.Errorf("night at %s: %v", hm, open)
+		}
+	}
+	if _, opens := night.Open(at("12:00")); !opens.Equal(at("23:00")) {
+		t.Errorf("opens %v", opens)
+	}
+	day := ActiveHours{On: true, From: "09:00", To: "17:00"}
+	if _, opens := day.Open(at("18:00")); !opens.Equal(at("09:00").AddDate(0, 0, 1)) {
+		t.Errorf("after hours opens %v, want tomorrow 09:00", opens)
+	}
+	if open, _ := (ActiveHours{From: "09:00", To: "17:00"}).Open(at("18:00")); !open {
+		t.Error("off means always")
+	}
+	s := Default()
+	s.ActiveHours = ActiveHours{On: true, From: "25:00", To: "07:00"}
+	if s.Validate() == nil {
+		t.Error("25:00 accepted")
 	}
 }

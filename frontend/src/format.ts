@@ -44,6 +44,21 @@ export function uploadDate(d: string): string {
 // Made once: building a formatter costs ~20 µs, and a big channel shows thousands of counts.
 const compact = new Intl.NumberFormat(undefined, {notation: 'compact', maximumFractionDigits: 1})
 
+/** Whether downloads may start now under these hours, and if not the "HH:MM" they open. Mirrors settings.ActiveHours.Open. */
+export function hoursOpen(h: {on: boolean; from: string; to: string} | undefined, now = new Date()): {open: boolean; opens: string} {
+  const mins = (s: string) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(s.trim())
+    return m ? Number(m[1]) * 60 + Number(m[2]) : NaN
+  }
+  if (!h?.on) return {open: true, opens: ''}
+  const from = mins(h.from)
+  const to = mins(h.to)
+  if (Number.isNaN(from) || Number.isNaN(to) || from === to) return {open: true, opens: ''}
+  const cur = now.getHours() * 60 + now.getMinutes()
+  const open = from < to ? cur >= from && cur < to : cur >= from || cur < to
+  return {open, opens: open ? '' : h.from.trim()}
+}
+
 export function compactCount(n: number): string {
   if (!n) return ''
   return compact.format(n)

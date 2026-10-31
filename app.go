@@ -745,12 +745,15 @@ func (a *App) bulkItems(ctx context.Context, link string, nested bool) (items []
 
 // ---- queue control ----
 
-func (a *App) PauseJob(id string) error     { return a.q.Pause(id) }
-func (a *App) ResumeJob(id string) error    { return a.q.Resume(id) }
-func (a *App) CancelJob(id string) error    { return a.q.Cancel(id) }
-func (a *App) RetryJob(id string) error     { return a.q.Retry(id) }
-func (a *App) RemoveJob(id string) error    { return a.q.Remove(id) }
-func (a *App) PauseAll()                    { a.q.PauseAll() }
+func (a *App) PauseJob(id string) error  { return a.q.Pause(id) }
+func (a *App) ResumeJob(id string) error { return a.q.Resume(id) }
+func (a *App) CancelJob(id string) error { return a.q.Cancel(id) }
+func (a *App) RetryJob(id string) error  { return a.q.Retry(id) }
+func (a *App) RemoveJob(id string) error { return a.q.Remove(id) }
+func (a *App) PauseAll()                 { a.q.PauseAll() }
+
+// StartNow starts queued downloads outside the download hours, until the queue is empty.
+func (a *App) StartNow()                    { a.q.StartNow() }
 func (a *App) ResumeAll()                   { a.q.ResumeAll() }
 func (a *App) GetJobLog(id string) []string { return a.q.Log(id) }
 

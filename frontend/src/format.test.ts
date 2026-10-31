@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest'
-import {ago, basename, bytes, compactCount, dirname, duration, eta, goTime, hostOf, parseTime, plural, span, speed, startsAt, uploadDate} from './format'
+import {ago, basename, bytes, compactCount, dirname, duration, eta, goTime, hostOf, parseTime, plural, span, speed, startsAt, uploadDate, hoursOpen} from './format'
 
 describe('bytes', () => {
   it('prints whole bytes and one decimal above', () => {
@@ -183,5 +183,16 @@ describe('startsAt', () => {
   it('says how far off a start is, either way', () => {
     expect(startsAt(now / 1000 + 3 * 86400, now)).toMatch(/ \(in 3 days\)$/)
     expect(startsAt(now / 1000 - 2 * 3600, now)).toMatch(/ \(2 hours ago\)$/)
+  })
+})
+
+describe('hoursOpen', () => {
+  const at = (h: number, m = 0) => new Date(2026, 9, 31, h, m)
+  it('mirrors settings.ActiveHours.Open, overnight too', () => {
+    const night = {on: true, from: '23:00', to: '07:00'}
+    expect(hoursOpen(night, at(2)).open).toBe(true)
+    expect(hoursOpen(night, at(12))).toEqual({open: false, opens: '23:00'})
+    expect(hoursOpen({on: true, from: '09:00', to: '17:00'}, at(17))).toEqual({open: false, opens: '09:00'})
+    expect(hoursOpen({on: false, from: '09:00', to: '17:00'}, at(20)).open).toBe(true)
   })
 })

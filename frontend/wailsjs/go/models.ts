@@ -921,6 +921,22 @@ export namespace queue {
 
 export namespace settings {
 	
+	export class ActiveHours {
+	    on: boolean;
+	    from: string;
+	    to: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActiveHours(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.on = source["on"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	    }
+	}
 	export class Cookies {
 	    mode: string;
 	    browser: string;
@@ -1104,6 +1120,7 @@ export namespace settings {
 	    closeToTray: boolean;
 	    startWithWindows: boolean;
 	    keepAwake: boolean;
+	    activeHours: ActiveHours;
 	    followEvery: number;
 	    extraArgs: string;
 	    defaults: DownloadOptions;
@@ -1137,6 +1154,7 @@ export namespace settings {
 	        this.closeToTray = source["closeToTray"];
 	        this.startWithWindows = source["startWithWindows"];
 	        this.keepAwake = source["keepAwake"];
+	        this.activeHours = this.convertValues(source["activeHours"], ActiveHours);
 	        this.followEvery = source["followEvery"];
 	        this.extraArgs = source["extraArgs"];
 	        this.defaults = this.convertValues(source["defaults"], DownloadOptions);

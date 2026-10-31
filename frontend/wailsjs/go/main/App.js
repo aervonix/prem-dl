@@ -254,6 +254,10 @@ export function SetWindowFocused(arg1) {
   return window['go']['main']['App']['SetWindowFocused'](arg1);
 }
 
+export function StartNow() {
+  return window['go']['main']['App']['StartNow']();
+}
+
 export function TestCookies() {
   return window['go']['main']['App']['TestCookies']();
 }

@@ -6,7 +6,7 @@ import {useSteps} from '../components/VideoGrid'
 import {RetryDialog} from '../components/RetryDialog'
 import {Thumb} from '../components/Thumb'
 import {Button, Empty, IconButton, Modal, Progress, Segmented, useConfirm} from '../components/ui'
-import {basename, bytes, eta, goTime, plural, speed} from '../format'
+import {basename, bytes, eta, goTime, hoursOpen, plural, speed} from '../format'
 import {Icon} from '../icons'
 import {useApp, useJobs} from '../store'
 import type {Job, JobStatus} from '../types'
@@ -282,7 +282,7 @@ let lastFilter: Filter = 'all'
 let lastSearch = ''
 
 export function QueuePage() {
-  const {go, toast, copy, attempt} = useApp()
+  const {state, go, toast, copy, attempt} = useApp()
   const jobs = useJobs()
   const [filter, setFilterState] = useState<Filter>(lastFilter)
   const setFilter = useCallback((f: Filter) => {
@@ -332,6 +332,14 @@ export function QueuePage() {
 
   // Keep the log's job fresh (title/URL can fill in after the plan arrives).
   const liveLogJob = logJob ? jobs.find((j) => j.id === logJob.id) ?? logJob : null
+
+  // Outside the download hours queued downloads wait; checked again every half minute.
+  const [minute, setMinute] = useState(() => Date.now())
+  useEffect(() => {
+    const t = window.setInterval(() => setMinute(Date.now()), 30_000)
+    return () => window.clearInterval(t)
+  }, [])
+  const hours = useMemo(() => hoursOpen(state.settings?.activeHours, new Date(minute)), [state.settings?.activeHours, minute])
 
   // ---- selection: tick rows (Shift+click for a run), then act on them all ----
   const [picked, setPicked] = useState<Set<string>>(new Set())
@@ -482,6 +490,17 @@ export function QueuePage() {
               Copy links
             </Button>
           </div>
+
+          {hours && !hours.open && counts.active === 0 && jobs.some((j) => j.status === 'queued') && (
+            <div className="q-selbar" role="status">
+              <Icon name="clock" size={16} />
+              <span className="summary">Downloads start at {hours.opens}, the download hours set in Settings → Network.</span>
+              <div style={{flex: 1}} />
+              <Button size="sm" variant="primary" icon="play" onClick={() => void attempt(api.startNow())}>
+                Start now
+              </Button>
+            </div>
+          )}
 
           {sel.length > 0 && (
             <div className="q-selbar" role="region" aria-label="Selected downloads">

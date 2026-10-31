@@ -983,3 +983,23 @@ func TestWaitingForAStreamFreesItsSlot(t *testing.T) {
 		}
 	}
 }
+
+// Outside the download hours nothing new starts, until StartNow.
+func TestDownloadHoursHoldTheQueue(t *testing.T) {
+	h := newHarness(t, 1)
+	now := time.Now()
+	h.settings.ActiveHours = settings.ActiveHours{On: true, From: now.Add(2 * time.Hour).Format("15:04"), To: now.Add(3 * time.Hour).Format("15:04")}
+	j := h.add(t, "/ok")
+	time.Sleep(200 * time.Millisecond)
+	if s := h.status(j.ID); s != StatusQueued {
+		t.Fatalf("started outside the hours: %s", s)
+	}
+	h.m.StartNow()
+	waitFor(t, "completion", func() bool { return h.status(j.ID) == StatusCompleted })
+	// The queue ran dry, so the next one waits for the hours again.
+	k := h.add(t, "/b/ok")
+	time.Sleep(200 * time.Millisecond)
+	if s := h.status(k.ID); s != StatusQueued {
+		t.Errorf("Start now outlived the queue: %s", s)
+	}
+}

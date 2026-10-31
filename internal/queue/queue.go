@@ -186,6 +186,7 @@ type Manager struct {
 	noSave   bool
 	saveGen  int64 // snapshots taken
 	held     bool  // nothing new starts (yt-dlp is being replaced); see Hold
+	anyTime  bool  // StartNow: downloads start outside the download hours until the queue is empty
 	// wake runs the scheduler when the earliest automatic retry is due.
 	wake *time.Timer
 
@@ -618,6 +619,14 @@ func (m *Manager) Release() {
 	m.scheduleLocked()
 }
 
+// StartNow lets queued downloads start outside the download hours, until the queue is empty.
+func (m *Manager) StartNow() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.anyTime = true
+	m.scheduleLocked()
+}
+
 // Kick re-evaluates the schedule, e.g. after the concurrency setting changed.
 func (m *Manager) Kick() {
 	m.mu.Lock()
@@ -670,17 +679,33 @@ func (m *Manager) scheduleLocked() {
 	if m.ctx.Err() != nil || m.held {
 		return
 	}
-	limit := m.deps.Settings().MaxConcurrent
+	s := m.deps.Settings()
+	limit := s.MaxConcurrent
 	now := time.Now()
 	running := 0
+	waiting := false
 	var nextRetry time.Time
 	for _, e := range m.entries {
 		if e.job.Status.active() && e.job.WaitUntil.IsZero() {
 			running++
 		}
+		if e.job.Status == StatusQueued {
+			waiting = true
+		}
 		if r := e.job.RetryAt; e.job.Status == StatusQueued && r.After(now) && (nextRetry.IsZero() || r.Before(nextRetry)) {
 			nextRetry = r
 		}
+	}
+	if !waiting {
+		m.anyTime = false // "Start now" lasts until the queue has run dry
+	}
+	if open, opens := s.ActiveHours.Open(now); !open && !m.anyTime {
+		// Outside the download hours: nothing new starts until they open.
+		if nextRetry.IsZero() || opens.Before(nextRetry) {
+			nextRetry = opens
+		}
+		m.wakeAtLocked(nextRetry)
+		return
 	}
 	m.wakeAtLocked(nextRetry)
 	for _, id := range m.order {

@@ -91,6 +91,8 @@ export const api = {
   cancelBulk: App.CancelBulk,
 
   pauseJob: App.PauseJob,
+  /** Start queued downloads outside the download hours, until the queue is empty. */
+  startNow: App.StartNow,
   resumeJob: App.ResumeJob,
   cancelJob: App.CancelJob,
   retryJob: App.RetryJob,
