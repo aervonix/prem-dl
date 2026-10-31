@@ -1993,3 +1993,15 @@ h1[tabindex='-1']:focus {
     margin: 0;
   }
 }
+
+/* A YouTube video's title and thumbnail while its formats are read. */
+.peek {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 16px;
+  align-items: center;
+}
+.peek .thumb {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+}

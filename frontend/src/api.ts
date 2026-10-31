@@ -1,6 +1,6 @@
 // The only module that talks to the Go backend. Everything else imports `api` from here.
 import * as App from '../wailsjs/go/main/App'
-import type {main, queue, settings, ytdlp, apperr, follow} from '../wailsjs/go/models'
+import type {main, queue, settings, ytdlp, ytweb, apperr, follow} from '../wailsjs/go/models'
 import {EventsOn} from '../wailsjs/runtime/runtime'
 import type * as T from './types'
 
@@ -67,6 +67,8 @@ export type _Guards = [
   Expect<Guard<follow.NewFeed, T.NewFeed>>,
   Expect<Guard<follow.Filter, T.FeedFilter>>,
   Expect<Guard<main.ImportResult, T.ImportResult>>,
+  Expect<Guard<main.PeekResponse, T.PeekResponse>>,
+  Expect<Guard<ytweb.Peek, T.Peek>>,
   Expect<Guard<follow.Target, T.FeedTarget>>,
   Expect<Guard<main.FeedResponse, T.FeedResponse>>,
   Expect<Guard<main.TargetResponse, T.TargetResponse>>,
@@ -156,6 +158,8 @@ export const api = {
   pauseFeed: App.PauseFeed,
   /** List a followed feed's videos: a channel tab ('' = the first followed one), up to limit (0 = all). */
   browseFeed: (id: string, tab: T.ChannelTab | '', limit: number) => cast<T.ProbeResponse>(App.BrowseFeed(id, tab, limit)),
+  /** A YouTube video's title and thumbnail, long before its analysis; ok false for anything else. */
+  peek: (link: string) => cast<T.PeekResponse>(App.Peek(link)),
   /** Read a browseFeed listing on to `want` entries in all (0 = to the end) and return the new ones. */
   moreFeedEntries: (listing: number, want: number) => cast<T.ListingPart>(App.MoreFeedEntries(listing, want)),
   cancelBrowse: App.CancelBrowse,

@@ -11,7 +11,7 @@ import {compactCount, duration, hostOf, plural, startsAt, uploadDate} from '../f
 import {Icon} from '../icons'
 import {forPreset, parseSites, presetFor, presetOptions, sameOptions, switchTo} from '../presets'
 import {useApp} from '../store'
-import type {AppError, BulkLink, DownloadOptions, NamedPreset, NewJob, PlaylistEntry, ProbeResult, VideoInfo} from '../types'
+import type {AppError, BulkLink, DownloadOptions, NamedPreset, NewJob, Peek, PlaylistEntry, ProbeResult, VideoInfo} from '../types'
 
 type Phase = 'idle' | 'analyzing' | 'ready' | 'error'
 
@@ -218,6 +218,7 @@ export function DownloadPage() {
   const requestId = useRef(0)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const readyDownload = useRef<() => Promise<void>>(() => Promise.resolve())
+  const [peek, setPeek] = useState<Peek | null>(null)
   const lastLink = useRef('')
   const defaults = settings?.defaults
   const defaultsRef = useRef(defaults)
@@ -378,6 +379,12 @@ export function DownloadPage() {
       setPhase('analyzing')
       setError(null)
       setResult(null)
+      setPeek(null)
+      // A YouTube video's title and thumbnail come back in a fraction of the analysis' time.
+      void api
+        .peek(link)
+        .then((p) => id === requestId.current && p.ok && setPeek(p.peek))
+        .catch(() => {})
       setReading(false)
       setReadError('')
       setNoPlaylist(noPl)
@@ -797,7 +804,24 @@ export function DownloadPage() {
           </Button>
         </div>
       )}
-      {phase === 'analyzing' && (
+      {phase === 'analyzing' && peek && (
+        <Card>
+          <div className="peek">
+            <Thumb src={peek.thumbnail} seconds={0} className="thumb" />
+            <div style={{minWidth: 0}}>
+              <div className="jtitle">{peek.title}</div>
+              <div className="muted">{peek.uploader}</div>
+              <div className="row" style={{marginTop: 10, color: 'var(--muted)'}}>
+                <Spinner /> <span>Reading its formats…</span>
+                <Button size="sm" variant="ghost" onClick={reset}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
+      {phase === 'analyzing' && !peek && (
         <div className="row" style={{padding: '28px 4px', color: 'var(--muted)'}}>
           <Spinner /> <span>Reading {hostOf(probedUrl)}… large playlists and channels can take a minute.</span>
           <Button size="sm" variant="ghost" onClick={reset}>

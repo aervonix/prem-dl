@@ -514,6 +514,23 @@ func (a *App) listNative(ctx context.Context, link string, limit int) (*ytdlp.Pr
 	return res, true
 }
 
+// PeekResponse is a YouTube video's title and thumbnail, to show while it's analysed.
+type PeekResponse struct {
+	Peek ytweb.Peek `json:"peek"`
+	OK   bool       `json:"ok"`
+}
+
+// Peek asks YouTube for a video's title, channel and thumbnail, which arrive long before its
+// analysis. Only single YouTube videos; anything else, or a failure, says ok false.
+func (a *App) Peek(link string) PeekResponse {
+	if ytdlp.YouTubeVideoID(link) == "" {
+		return PeekResponse{}
+	}
+	s := a.store.Get()
+	p, err := ytweb.PeekVideo(a.root, ytweb.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, link)
+	return PeekResponse{Peek: p, OK: err == nil && p.Title != ""}
+}
+
 // CancelProbe aborts the analysis in progress, if any.
 func (a *App) CancelProbe() { a.cancelProbe() }
 

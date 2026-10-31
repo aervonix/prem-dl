@@ -178,6 +178,10 @@ export function PauseJob(arg1) {
   return window['go']['main']['App']['PauseJob'](arg1);
 }
 
+export function Peek(arg1) {
+  return window['go']['main']['App']['Peek'](arg1);
+}
+
 export function PickDirectory(arg1, arg2) {
   return window['go']['main']['App']['PickDirectory'](arg1, arg2);
 }

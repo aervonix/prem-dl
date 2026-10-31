@@ -538,6 +538,18 @@ export interface ActiveHours {
   to: string
 }
 
+/** A YouTube video's title and thumbnail from oEmbed, shown while it's analysed. */
+export interface Peek {
+  title: string
+  uploader: string
+  thumbnail: string
+}
+
+export interface PeekResponse {
+  peek: Peek
+  ok: boolean
+}
+
 /** What importing follows did. */
 export interface ImportResult {
   added: number
