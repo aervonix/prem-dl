@@ -72,6 +72,9 @@ type DownloadOptions struct {
 	PlaylistNumbering bool   `json:"playlistNumbering"`
 	// PlaylistFile writes "<Playlist>.m3u8" beside a playlist's videos, in playlist order.
 	PlaylistFile bool `json:"playlistFile"`
+	// PlaylistTags tags audio from a playlist with the playlist as its album and its position
+	// as the track number, so music players keep it together and in order.
+	PlaylistTags bool `json:"playlistTags"`
 	// IgnoreArchive downloads the video even when the download archive lists it.
 	IgnoreArchive bool `json:"ignoreArchive"`
 	// SponsorBlockMark marks the SponsorBlock segments as chapters instead of cutting them out.
@@ -193,6 +196,7 @@ func StarterPresets() []NamedPreset {
 				PlaylistFolder:    true,
 				PlaylistNumbering: true,
 				PlaylistFile:      true,
+				PlaylistTags:      true,
 			},
 		},
 		{

@@ -54,6 +54,8 @@ export interface DownloadOptions {
   playlistNumbering: boolean
   /** Write "<Playlist>.m3u8" beside a playlist's videos, in playlist order. */
   playlistFile: boolean
+  /** Tag playlist audio with the playlist as album and its position as track number. */
+  playlistTags: boolean
   /** Download even when the download archive lists the video. */
   ignoreArchive: boolean
   /** Mark the SponsorBlock segments as chapters instead of cutting them out. */

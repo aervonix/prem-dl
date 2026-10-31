@@ -159,6 +159,17 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 		// WebP thumbnails can't be embedded in most containers.
 		a = append(a, "--convert-thumbnails=jpg")
 	}
+	if o.PlaylistTags && o.EmbedMetadata && t.PlaylistTitle != "" && t.PlaylistIndex > 0 && (o.Preset == "audio" || customAudio(o)) {
+		// yt-dlp sees one video, not the playlist, so the tags come from here, as ffmpeg's own
+		// arguments to the metadata step: an output template's default can't hold every title
+		// (")s" ends it, and there's no escape). Observed: "Mix: A (B) 100% done)s" came
+		// through, with track 7/12.
+		track := strconv.Itoa(t.PlaylistIndex)
+		if t.PlaylistCount > 0 {
+			track += "/" + strconv.Itoa(t.PlaylistCount)
+		}
+		a = append(a, "--postprocessor-args=Metadata+ffmpeg_o:-metadata album="+shellQuote(t.PlaylistTitle)+" -metadata track="+track)
+	}
 	if o.SquareCover && o.EmbedThumbnail && (o.Preset == "audio" || customAudio(o)) {
 		// Crops the middle square out while the thumbnail is converted (observed: YouTube's
 		// 1280x720 WebP became a 720x720 cover in the MP3). A thumbnail that is already a JPEG
@@ -243,6 +254,12 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 // yt-dlp's default codec preference. Observed: signed in, YouTube offers two "1080p Premium"
 // streams, VP9 at ~2.8 Mbps and AV1 at ~0.4 Mbps, and the default ranking picked the AV1 one.
 const QualitySort = "res,fps,hdr:12,vbr"
+
+// shellQuote quotes s for yt-dlp's shell-like split of post-processor arguments (Python's shlex):
+// everything inside single quotes is literal, and a single quote is closed, escaped and reopened.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
+}
 
 // squareCrop is ffmpeg's arguments for a square JPEG from the middle of a picture. yt-dlp splits
 // them like a shell, so the expression is quoted for ffmpeg's filter parser inside.

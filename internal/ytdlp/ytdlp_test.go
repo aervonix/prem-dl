@@ -1167,3 +1167,27 @@ func TestPresetTemplateNamesTheFile(t *testing.T) {
 		t.Errorf("global template unused: %v", args)
 	}
 }
+
+func TestPlaylistTags(t *testing.T) {
+	e := testEnv()
+	o := e.Settings.Defaults
+	o.Preset, o.EmbedMetadata, o.PlaylistTags = "audio", true, true
+	tgt := Target{URL: "https://example.com/v", PlaylistTitle: "It's: a (mix) 100%", PlaylistIndex: 3, PlaylistCount: 12}
+	want := `--postprocessor-args=Metadata+ffmpeg_o:-metadata album='It'"'"'s: a (mix) 100%' -metadata track=3/12`
+	if args := e.DownloadArgs(o, tgt); !has(args, want) {
+		t.Errorf("missing %s in %v", want, args)
+	}
+	for name, change := range map[string]func(*settings.DownloadOptions, *Target){
+		"video":       func(o *settings.DownloadOptions, _ *Target) { o.Preset = "best" },
+		"no metadata": func(o *settings.DownloadOptions, _ *Target) { o.EmbedMetadata = false },
+		"one video":   func(_ *settings.DownloadOptions, t *Target) { t.PlaylistTitle, t.PlaylistIndex = "", 0 },
+	} {
+		oo, tt := o, tgt
+		change(&oo, &tt)
+		for _, a := range e.DownloadArgs(oo, tt) {
+			if strings.HasPrefix(a, "--postprocessor-args=Metadata") {
+				t.Errorf("%s: tagged anyway", name)
+			}
+		}
+	}
+}

@@ -982,6 +982,7 @@ export namespace settings {
 	    playlistFolder: boolean;
 	    playlistNumbering: boolean;
 	    playlistFile: boolean;
+	    playlistTags: boolean;
 	    ignoreArchive: boolean;
 	    sponsorBlockMark: boolean;
 	    splitChapters: boolean;
@@ -1019,6 +1020,7 @@ export namespace settings {
 	        this.playlistFolder = source["playlistFolder"];
 	        this.playlistNumbering = source["playlistNumbering"];
 	        this.playlistFile = source["playlistFile"];
+	        this.playlistTags = source["playlistTags"];
 	        this.ignoreArchive = source["ignoreArchive"];
 	        this.sponsorBlockMark = source["sponsorBlockMark"];
 	        this.splitChapters = source["splitChapters"];

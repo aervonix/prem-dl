@@ -273,6 +273,14 @@ export function OptionsPanel({
                   label="Write a playlist file (.m3u8)"
                   description="Players such as VLC or foobar then play the folder in playlist order"
                 />
+                {audioFile && value.embedMetadata && (
+                  <Switch
+                    checked={value.playlistTags}
+                    onChange={(v) => set('playlistTags', v)}
+                    label="Tag the playlist as the album"
+                    description="Album = the playlist's name, track number = its place in it, so music apps keep it together"
+                  />
+                )}
               </div>
             ) : null}
 
