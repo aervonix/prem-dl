@@ -1254,6 +1254,10 @@ input[type='checkbox'] {
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 6px;
 }
+.vgrid-more {
+  grid-column: 1 / -1;
+  height: 1px;
+}
 .vgrid.tall {
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
 }

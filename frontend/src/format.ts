@@ -41,9 +41,12 @@ export function uploadDate(d: string): string {
   return date.toLocaleDateString(undefined, {day: 'numeric', month: 'short', year: 'numeric'})
 }
 
+// Made once: building a formatter costs ~20 µs, and a big channel shows thousands of counts.
+const compact = new Intl.NumberFormat(undefined, {notation: 'compact', maximumFractionDigits: 1})
+
 export function compactCount(n: number): string {
   if (!n) return ''
-  return new Intl.NumberFormat(undefined, {notation: 'compact', maximumFractionDigits: 1}).format(n)
+  return compact.format(n)
 }
 
 export function hostOf(url: string): string {

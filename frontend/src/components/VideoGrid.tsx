@@ -1,5 +1,5 @@
-import {memo, useCallback, useMemo, useRef, useState} from 'react'
-import type {CSSProperties, Dispatch, MouseEvent, SetStateAction} from 'react'
+import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react'
+import type {CSSProperties, Dispatch, MouseEvent, ReactNode, SetStateAction} from 'react'
 import {ago, compactCount, duration} from '../format'
 import {Icon} from '../icons'
 import {useJobs} from '../store'
@@ -24,13 +24,18 @@ const STATUS: Partial<Record<JobStatus, [rank: number, text: string]>> = {
 /** A VideoGrid status for each video from the queue: "Downloaded", "In queue"... or ''. */
 export function useJobStatus(): (e: PlaylistEntry) => string {
   const jobs = useJobs()
+  const last = useRef(new Map<string, [number, string]>())
   const statusByUrl = useMemo(() => {
     const m = new Map<string, [number, string]>()
     for (const j of jobs) {
       const s = STATUS[j.status]
       if (s && s[0] > (m.get(j.url)?.[0] ?? 0)) m.set(j.url, s)
     }
-    return m
+    // Jobs change several times a second while downloading, the words rarely: keep the same
+    // map (and so the same function) until one does, or every card would be looked at again.
+    const prev = last.current
+    if (m.size === prev.size && [...m].every(([url, s]) => prev.get(url) === s)) return prev
+    return (last.current = m)
   }, [jobs])
   return useCallback((e: PlaylistEntry) => statusByUrl.get(e.url)?.[1] ?? '', [statusByUrl])
 }
@@ -47,6 +52,19 @@ function metaLine(e: PlaylistEntry, uploader: boolean): string {
 
 // Cards past this many in a batch fade in with the last of these; they are below the fold.
 const REVEAL_MAX = 15
+
+// A big channel lists thousands of videos. Cards are made this many at a time, the next lot as
+// the end of the last comes near: 8,000 cards at once took 1.5 s to show and 0.7 s to Select all.
+const STEP = 240
+
+/** The nearest ancestor that scrolls, which an IntersectionObserver has to watch from. */
+function scroller(el: HTMLElement | null): HTMLElement | null {
+  for (let p = el?.parentElement; p; p = p.parentElement) {
+    const y = getComputedStyle(p).overflowY
+    if (y === 'auto' || y === 'scroll') return p
+  }
+  return null
+}
 
 const Card = memo(function Card({
   entry,
@@ -128,10 +146,40 @@ const Card = memo(function Card({
 })
 
 /**
+ * The first entries of a long list, and an element to put after them that brings the next lot
+ * when it scrolls near. A new list (fewer entries than before, or another first entry) starts
+ * again; one that grows keeps what's shown.
+ */
+export function useSteps<T>(entries: T[]): {shown: T[]; sentinel: ReactNode} {
+  const [limit, setLimit] = useState(STEP)
+  const [was, setWas] = useState({first: entries[0], n: entries.length})
+  if (entries[0] !== was.first || entries.length < was.n) {
+    setWas({first: entries[0], n: entries.length})
+    setLimit(STEP)
+  } else if (entries.length !== was.n) {
+    setWas({first: was.first, n: entries.length})
+  }
+  const shown = entries.length > limit ? entries.slice(0, limit) : entries
+  const more = useRef<HTMLDivElement>(null)
+  const hasMore = shown.length < entries.length
+  useEffect(() => {
+    const el = more.current
+    if (!el || !hasMore) return
+    const io = new IntersectionObserver((seen) => seen.some((s) => s.isIntersecting) && setLimit((l) => l + STEP), {
+      root: scroller(el),
+      rootMargin: '1200px 0px',
+    })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [hasMore, limit])
+  return {shown, sentinel: hasMore ? <div ref={more} className="vgrid-more" aria-hidden="true" /> : null}
+}
+
+/**
  * Videos as a grid of thumbnails, the way YouTube shows a channel, each with a checkbox. Shift+click
  * ticks or clears everything since the last one clicked. Entries are keyed by their index.
  */
-export function VideoGrid({
+export const VideoGrid = memo(function VideoGrid({
   entries,
   selected,
   setSelected,
@@ -167,6 +215,8 @@ export function VideoGrid({
   const list = useRef(entries)
   list.current = entries
 
+  const {shown, sentinel} = useSteps(entries)
+
   const onPick = useCallback(
     (index: number, range: boolean) => {
       // Read now: the updater may run later, after the anchor has moved on.
@@ -196,7 +246,7 @@ export function VideoGrid({
   let lastGroup = ''
   return (
     <div className={`vgrid${tall ? ' tall' : ''}${selected.size > 0 ? ' selecting' : ''}`} role="group" aria-label="Videos">
-      {entries.map((e) => {
+      {shown.map((e) => {
         const header = e.group && e.group !== lastGroup ? (
           <div key={`g-${e.index}`} className="vgroup">
             {e.group}
@@ -217,6 +267,7 @@ export function VideoGrid({
         )
         return header ? [header, card] : card
       })}
+      {sentinel}
     </div>
   )
-}
+})

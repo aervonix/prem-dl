@@ -2,7 +2,7 @@ import {memo, useCallback, useEffect, useMemo, useRef, useState} from 'react'
 import {api, errMessage, on} from '../api'
 import {ErrorPanel} from '../components/ErrorPanel'
 import {FeedDialog} from '../components/FeedDialog'
-import {VideoGrid, selectable} from '../components/VideoGrid'
+import {VideoGrid, selectable, useSteps} from '../components/VideoGrid'
 import {OptionsPanel, optionsProblem} from '../components/OptionsPanel'
 import {Thumb} from '../components/Thumb'
 import {Button, Card, Empty, Field, Modal, Segmented, Spinner} from '../components/ui'
@@ -70,6 +70,8 @@ function savedView(): View {
     return 'grid'
   }
 }
+
+const NONE: PlaylistEntry[] = []
 
 const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}: {entry: PlaylistEntry; checked: boolean; onToggle: (index: number) => void; onOpen: (url: string) => void}) {
   if (entry.isPlaylist && !entry.unavailable) {
@@ -664,6 +666,7 @@ export function DownloadPage() {
   }, [playlistUrl, state.feeds])
 
   const rows = playlist ? visible : []
+  const listRows = useSteps(view === 'list' ? rows : NONE)
   let lastGroup = ''
 
   return (
@@ -901,7 +904,7 @@ export function DownloadPage() {
               ) : (
                 <div className="pl-list" role="group" aria-label="Playlist videos">
                   {rows.length === 0 && <div className="empty" style={{padding: 24}}>{filter.trim() ? `No videos match “${filter.trim()}”.` : 'This playlist is empty.'}</div>}
-                  {rows.map((e) => {
+                  {listRows.shown.map((e) => {
                     const header = e.group && e.group !== lastGroup ? <div key={`g-${e.index}`} className="pl-group">{e.group}</div> : null
                     lastGroup = e.group
                     return (
@@ -911,6 +914,7 @@ export function DownloadPage() {
                       </div>
                     )
                   })}
+                  {listRows.sentinel}
                 </div>
               )}
               <div className="hint" style={{marginTop: 8}}>
