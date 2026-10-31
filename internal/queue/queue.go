@@ -206,6 +206,7 @@ func New(deps Deps) *Manager {
 func (m *Manager) Start() {
 	m.wg.Add(1)
 	go m.flusher()
+	m.Kick() // a stream that was being waited for when the app closed
 }
 
 func newID() string {
@@ -249,18 +250,19 @@ func (m *Manager) Add(items []NewJob, opts settings.DownloadOptions) ([]Job, int
 	live := map[string]bool{}
 	for _, e := range m.entries {
 		if !e.job.Status.finished() {
-			live[e.job.URL] = true
+			live[sameKey(e.job.URL)] = true
 		}
 	}
 	var added []Job
 	skipped := 0
 	for i, it := range items {
 		link := links[i]
-		if live[link] {
+		key := sameKey(link)
+		if live[key] {
 			skipped++
 			continue
 		}
-		live[link] = true
+		live[key] = true
 		m.seq++
 		j := Job{
 			ID: newID(), Seq: m.seq, URL: link, Title: it.Title, Uploader: it.Uploader, Thumbnail: it.Thumbnail,
@@ -383,11 +385,21 @@ func (m *Manager) RetryWith(id string, opts settings.DownloadOptions) error {
 	return m.requeueLocked(e, func(j *Job) { j.Options = opts })
 }
 
+// sameKey is what two links share when they download the same thing: a YouTube video's ID
+// (watch?v=X, youtu.be/X?si=..., watch?v=X&t=42s), otherwise the link itself.
+func sameKey(link string) string {
+	if id := ytdlp.YouTubeVideoID(link); id != "" {
+		return "youtube:" + id
+	}
+	return link
+}
+
 // requeueLocked puts a failed or cancelled job back in line, after edit (if any) changes it.
 func (m *Manager) requeueLocked(e *entry, edit func(*Job)) error {
 	// Two runs of one link would write the same .part file.
+	key := sameKey(e.job.URL)
 	for _, o := range m.entries {
-		if o != e && o.job.URL == e.job.URL && !o.job.Status.finished() {
+		if o != e && !o.job.Status.finished() && sameKey(o.job.URL) == key {
 			return errAlreadyQueued
 		}
 	}
@@ -877,8 +889,11 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 			if j.OutputFile == "" && h != nil {
 				j.OutputFile = h.alreadyPath
 			}
-			if h != nil && h.alreadyPath != "" {
+			switch {
+			case h != nil && h.alreadyPath != "":
 				j.Note = "Already downloaded"
+			case h != nil && h.inArchive && j.OutputFile == "":
+				j.Note = "Already downloaded (the download archive lists it)"
 			}
 		})
 	case fromInfo:
@@ -936,9 +951,13 @@ type lineHandler struct {
 	tracker     ytdlp.Tracker
 	errLines    []string
 	alreadyPath string
+	inArchive   bool // skipped: the download archive lists it
 }
 
-var alreadyRe = regexp.MustCompile(`^\[download\] (.+) has already been downloaded`)
+var (
+	alreadyRe   = regexp.MustCompile(`^\[download\] (.+) has already been downloaded`)
+	inArchiveRe = regexp.MustCompile(`^\[download\] .+ has already been recorded in the archive`)
+)
 
 // maxLine is the longest output line we look at. Longer ones (-j prints megabytes of JSON on
 // one line) are skipped: a Scanner that stops on them would leave yt-dlp blocked on a full pipe.
@@ -1066,10 +1085,17 @@ func (h *lineHandler) handle(line string, isErr bool) {
 			})
 		}
 	case ytdlp.KindFile:
-		h.m.set(h.e, func(j *Job) { j.OutputFile = filepath.Clean(parsed.File) })
+		// --print writes to stdout. On stderr it would be server text (an error message) made
+		// to look like the marker, and the path is what Open file runs.
+		if !isErr {
+			h.m.set(h.e, func(j *Job) { j.OutputFile = filepath.Clean(parsed.File) })
+		}
 	default:
-		if m := alreadyRe.FindStringSubmatch(line); m != nil {
+		if m := alreadyRe.FindStringSubmatch(line); m != nil && !isErr {
 			h.alreadyPath = m[1]
+		}
+		if !isErr && inArchiveRe.MatchString(line) {
+			h.inArchive = true
 		}
 		if isErr && strings.HasPrefix(line, "WARNING:") {
 			w := strings.TrimSpace(strings.TrimPrefix(line, "WARNING:"))
@@ -1257,8 +1283,12 @@ func (m *Manager) load() {
 		if j.ID == "" {
 			continue
 		}
-		switch j.Status {
-		case StatusQueued, StatusStarting, StatusDownloading, StatusProcessing:
+		// A crash can save a job while it waits for a stream; the wait starts over when it runs.
+		j.WaitUntil = time.Time{}
+		switch {
+		case j.Status == StatusQueued && j.Stage == "Waiting" && j.Options.WaitForVideo:
+			// Put back in line by Shutdown while it waited for a stream: it waits again.
+		case j.Status == StatusQueued, j.Status.active():
 			j.Status = StatusPaused
 			j.Stage = "Interrupted"
 			j.Speed = 0

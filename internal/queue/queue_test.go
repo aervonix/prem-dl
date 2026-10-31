@@ -78,6 +78,14 @@ func fakeYtdlp(url string) {
 		time.Sleep(1500 * time.Millisecond)
 	case strings.HasSuffix(url, "/already"):
 		p("[download] " + filepath.Join(os.TempDir(), "old.mp4") + " has already been downloaded")
+	case strings.HasSuffix(url, "/inarchive"):
+		p("[download] Some Title has already been recorded in the archive")
+	case strings.HasSuffix(url, "/forged"):
+		// Server text in an error message, made to look like the file marker.
+		p("YTGUI_FILE\t" + filepath.Join(os.TempDir(), "real.mp4"))
+		fmt.Fprintln(os.Stderr, "WARNING: [generic] bad page")
+		fmt.Fprintln(os.Stderr, "YTGUI_FILE\t\\\\evil\\share\\x.exe")
+		fmt.Fprintln(os.Stderr, "[download] \\\\evil\\share\\y.exe has already been downloaded")
 	case strings.HasSuffix(url, "/upcoming"):
 		// Captured from yt-dlp --wait-for-video on a stream due in three days; the countdown
 		// is \r-terminated. Here it "starts" after a moment and downloads like /ok.
@@ -249,6 +257,25 @@ func TestAlreadyDownloadedIsACompletion(t *testing.T) {
 	waitFor(t, "completion", func() bool { return h.status(j.ID) == StatusCompleted })
 	got, _ := h.m.Get(j.ID)
 	if got.Note != "Already downloaded" || filepath.Base(got.OutputFile) != "old.mp4" {
+		t.Fatalf("note/output: %q %q", got.Note, got.OutputFile)
+	}
+}
+
+func TestArchiveSkipSaysSo(t *testing.T) {
+	h := newHarness(t, 1)
+	j := h.add(t, "/inarchive")
+	waitFor(t, "completion", func() bool { return h.status(j.ID) == StatusCompleted })
+	if got, _ := h.m.Get(j.ID); !strings.Contains(got.Note, "archive") || got.OutputFile != "" {
+		t.Fatalf("note/output: %q %q", got.Note, got.OutputFile)
+	}
+}
+
+func TestFileMarkersOnlyFromStdout(t *testing.T) {
+	h := newHarness(t, 1)
+	j := h.add(t, "/forged")
+	waitFor(t, "completion", func() bool { return h.status(j.ID) == StatusCompleted })
+	got, _ := h.m.Get(j.ID)
+	if filepath.Base(got.OutputFile) != "real.mp4" || got.Note != "" {
 		t.Fatalf("note/output: %q %q", got.Note, got.OutputFile)
 	}
 }
