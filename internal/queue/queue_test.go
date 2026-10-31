@@ -78,6 +78,11 @@ func fakeYtdlp(url string) {
 		time.Sleep(1500 * time.Millisecond)
 	case strings.HasSuffix(url, "/already"):
 		p("[download] " + filepath.Join(os.TempDir(), "old.mp4") + " has already been downloaded")
+	case strings.HasSuffix(url, "/big"):
+		// 3 GB planned; the test's drive has 1 GB free. It would download for a minute.
+		p(`YTGUI_PLAN {"id":"big","title":"Big","duration":10,"filesize_approx":3000000000}`)
+		p(`YTGUI_STREAMS [{"filesize":2900000000,"vcodec":"avc1","acodec":"none"},{"filesize":100000000,"vcodec":"none","acodec":"opus"}]`)
+		time.Sleep(60 * time.Second)
 	case strings.HasSuffix(url, "/inarchive"):
 		p("[download] Some Title has already been recorded in the archive")
 	case strings.HasSuffix(url, "/forged"):
@@ -259,6 +264,27 @@ func TestAlreadyDownloadedIsACompletion(t *testing.T) {
 	if got.Note != "Already downloaded" || filepath.Base(got.OutputFile) != "old.mp4" {
 		t.Fatalf("note/output: %q %q", got.Note, got.OutputFile)
 	}
+}
+
+// A download whose plan doesn't fit on the drive stops before it starts, saying how much it needs.
+func TestNotEnoughSpaceStopsTheDownload(t *testing.T) {
+	h := newHarness(t, 1)
+	var asked string
+	h.m.deps.FreeSpace = func(dir string) (uint64, error) { asked = dir; return 1_000_000_000, nil }
+	j := h.add(t, "/big")
+	start := time.Now()
+	waitFor(t, "failure", func() bool { return h.status(j.ID) == StatusFailed })
+	got, _ := h.m.Get(j.ID)
+	if got.Error == nil || got.Error.Code != "disk_full" || !strings.Contains(got.Error.Message, "3.0 GB") || !strings.Contains(got.Error.Message, "1.0 GB") {
+		t.Fatalf("error %+v", got.Error)
+	}
+	if asked != h.dir || time.Since(start) > 20*time.Second {
+		t.Errorf("asked about %q; took %v", asked, time.Since(start))
+	}
+	// One that fits goes ahead.
+	h.m.deps.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
+	ok := h.add(t, "/ok")
+	waitFor(t, "completion", func() bool { return h.status(ok.ID) == StatusCompleted })
 }
 
 func TestArchiveSkipSaysSo(t *testing.T) {

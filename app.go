@@ -153,6 +153,7 @@ func NewApp(launch launchArgs) *App {
 			a.ahead.wake()
 		},
 		StatePath: filepath.Join(dir, "queue.json"),
+		FreeSpace: sys.FreeSpace,
 	})
 	a.ahead = newPrefetcher(a.q.List, func() int { return a.store.Get().MaxConcurrent }, a.infos.Has, a.analyseAhead)
 	a.feeds = a.newFeeds()

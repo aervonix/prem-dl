@@ -118,6 +118,9 @@ type Deps struct {
 	Observe func(changed []Job, removed []string)
 	// StatePath is where the job list is persisted ("" disables persistence).
 	StatePath string
+	// FreeSpace, if set, says how many bytes are free on the drive of a folder. A download whose
+	// plan doesn't fit stops before it starts, rather than failing with a full disk at the end.
+	FreeSpace func(dir string) (uint64, error)
 }
 
 type stopReason int
@@ -126,6 +129,7 @@ const (
 	stopNone stopReason = iota
 	stopPause
 	stopCancel
+	stopFail // stopped by Prem-dl itself; entry.failure says why
 )
 
 const (
@@ -158,6 +162,8 @@ type entry struct {
 	// fromInfo is set while the run downloads from a saved analysis (Deps.Info) rather than
 	// the page. If that fails, the job runs again at once, and pageOnly makes that run read the page.
 	fromInfo, pageOnly bool
+	// failure is why Prem-dl stopped the run itself (stopFail).
+	failure *apperr.AppError
 }
 
 // Manager owns every job.
@@ -861,6 +867,17 @@ func (m *Manager) finish(e *entry, ctx context.Context, runErr error, h *lineHan
 	switch {
 	case stop == stopPause:
 		m.setLocked(e, func(j *Job) { j.Status = StatusPaused; j.Stage = "Paused"; j.Speed = 0; j.ETA = -1 })
+	case stop == stopFail:
+		failure := e.failure
+		e.failure = nil
+		m.setLocked(e, func(j *Job) {
+			j.Status = StatusFailed
+			j.Stage = "Failed"
+			j.Speed = 0
+			j.ETA = -1
+			j.Error = failure
+			j.FinishedAt = now
+		})
 	case stop == stopCancel:
 		m.setLocked(e, func(j *Job) {
 			j.Status = StatusCancelled
@@ -1050,7 +1067,9 @@ func (h *lineHandler) handle(line string, isErr bool) {
 			}
 		})
 	case ytdlp.KindStreams:
+		// Printed right after the plan, just before the download starts.
 		h.tracker.SetStreams(parsed.Streams)
+		h.checkSpace()
 	case ytdlp.KindProgress:
 		snap, ok := h.tracker.Update(parsed.Progress)
 		if !ok {
@@ -1106,6 +1125,54 @@ func (h *lineHandler) handle(line string, isErr bool) {
 			})
 		}
 	}
+}
+
+// checkSpace stops the run when its planned size doesn't fit on the download folder's drive.
+func (h *lineHandler) checkSpace() {
+	need := h.tracker.Planned()
+	if h.m.deps.FreeSpace == nil || need <= 0 {
+		return
+	}
+	h.m.mu.Lock()
+	dir := h.e.job.Options.OutputDir
+	h.m.mu.Unlock()
+	if dir == "" && h.m.deps.Settings != nil {
+		dir = h.m.deps.Settings().DownloadDir
+	}
+	if dir == "" {
+		return
+	}
+	free, err := h.m.deps.FreeSpace(dir)
+	// A little over the estimate: sizes are approximate, and the drive shouldn't end up full.
+	if err != nil || uint64(need)+uint64(need)/20 <= free {
+		return
+	}
+	failure := apperr.New("disk_full", "Not enough space",
+		fmt.Sprintf("This download needs about %s, and the drive of %s has %s free.", humanBytes(uint64(need)), dir, humanBytes(free)),
+		"Free some space or choose another download folder, then try again.", apperr.ActionSettings)
+	failure.Retryable = true
+	h.m.mu.Lock()
+	if h.e.stop == stopNone && h.e.cancel != nil {
+		h.e.stop, h.e.failure = stopFail, failure
+		h.e.cancel()
+	}
+	h.m.mu.Unlock()
+}
+
+// humanBytes is "1.4 GB", "820 MB".
+func humanBytes(n uint64) string {
+	const unit = 1000
+	if n < unit*unit {
+		return fmt.Sprintf("%d KB", n/unit)
+	}
+	v, suffix := float64(n)/(unit*unit), "MB"
+	if v >= unit {
+		v, suffix = v/unit, "GB"
+	}
+	if v >= 100 {
+		return fmt.Sprintf("%.0f %s", v, suffix)
+	}
+	return fmt.Sprintf("%.1f %s", v, suffix)
 }
 
 func contains(s []string, v string) bool {

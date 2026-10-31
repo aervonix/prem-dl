@@ -258,6 +258,22 @@ func (t *Tracker) SetStreams(s []Stream) { t.streams = s }
 // SetPlan records the whole-download size estimate.
 func (t *Tracker) SetPlan(p Plan) { t.planTotal = p.Size() }
 
+// Planned is the download's expected size in bytes, from the streams when all their sizes are
+// known, else the plan's estimate; 0 when unknown. A cut downloads part of it, so it says 0.
+func (t *Tracker) Planned() int64 {
+	if t.Cut {
+		return 0
+	}
+	if len(t.streams) > 0 && t.sizesKnown() {
+		var n int64
+		for _, s := range t.streams {
+			n += s.Size
+		}
+		return n
+	}
+	return t.planTotal
+}
+
 // formatFileRe matches the per-stream files of a merged download ("title [id].f137.mp4").
 var formatFileRe = regexp.MustCompile(`\.f[^.\\/]+\.[^.\\/]+$`)
 
