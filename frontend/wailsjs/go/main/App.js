@@ -62,8 +62,8 @@ export function CopyText(arg1) {
   return window['go']['main']['App']['CopyText'](arg1);
 }
 
-export function EditFeed(arg1, arg2, arg3) {
-  return window['go']['main']['App']['EditFeed'](arg1, arg2, arg3);
+export function EditFeed(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['EditFeed'](arg1, arg2, arg3, arg4);
 }
 
 export function Enqueue(arg1, arg2) {

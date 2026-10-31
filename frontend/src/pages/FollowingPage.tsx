@@ -1,7 +1,7 @@
 import {memo, useEffect, useState} from 'react'
 import {api, errMessage} from '../api'
 import {ErrorPanel} from '../components/ErrorPanel'
-import {FeedDialog, TAB_LABELS, checkEvery} from '../components/FeedDialog'
+import {FeedDialog, TAB_LABELS, checkEvery, filterSummary} from '../components/FeedDialog'
 import {ChannelView} from './ChannelView'
 import {Button, Card, Empty, IconButton, Modal, Spinner} from '../components/ui'
 import {basename, goTime, hostOf, plural, span} from '../format'
@@ -108,7 +108,7 @@ const FeedRow = memo(function FeedRow({
           </div>
         </button>
         <div className="jsub truncate">
-          {what} · {optionsSummary(feed.options)}
+          {[what, optionsSummary(feed.options), filterSummary(feed.filter)].filter(Boolean).join(' · ')}
         </div>
         <div className="feed-status">
           {feed.checking && <Spinner />}

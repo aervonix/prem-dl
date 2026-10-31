@@ -482,6 +482,7 @@ export interface Feed {
   /** The YouTube channel tabs checked; empty for anything else, whose url is checked as it is. */
   tabs: ChannelTab[]
   options: DownloadOptions
+  filter: FeedFilter
   paused: boolean
   addedAt: string
   /** When the last check ended; Go's zero time (year 1) before the first. */
@@ -498,12 +499,28 @@ export interface Feed {
   error: AppError | null
 }
 
+/**
+ * What a check of a followed feed queues. Videos turned away are noted like ones already
+ * downloaded; a change applies to uploads from then on.
+ */
+export interface FeedFilter {
+  /** Shorter videos are skipped; 0 = no minimum. A video without a length passes. */
+  minMinutes: number
+  /** Longer ones are skipped; 0 = no maximum. */
+  maxMinutes: number
+  /** The title must contain one of these (ignoring case); empty = any title. */
+  include: string[]
+  /** Titles containing any of these are skipped. */
+  exclude: string[]
+}
+
 export interface NewFeed {
   url: string
   title: string
   uploader: string
   tabs: ChannelTab[]
   options: DownloadOptions
+  filter: FeedFilter
 }
 
 /** How a link would be followed (follow.Target). */

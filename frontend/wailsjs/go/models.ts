@@ -29,6 +29,24 @@ export namespace apperr {
 
 export namespace follow {
 	
+	export class Filter {
+	    minMinutes: number;
+	    maxMinutes: number;
+	    include: string[];
+	    exclude: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new Filter(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.minMinutes = source["minMinutes"];
+	        this.maxMinutes = source["maxMinutes"];
+	        this.include = source["include"];
+	        this.exclude = source["exclude"];
+	    }
+	}
 	export class Feed {
 	    id: string;
 	    url: string;
@@ -36,6 +54,7 @@ export namespace follow {
 	    uploader: string;
 	    tabs: string[];
 	    options: settings.DownloadOptions;
+	    filter: Filter;
 	    paused: boolean;
 	    addedAt: string;
 	    lastCheck: string;
@@ -58,6 +77,7 @@ export namespace follow {
 	        this.uploader = source["uploader"];
 	        this.tabs = source["tabs"];
 	        this.options = this.convertValues(source["options"], settings.DownloadOptions);
+	        this.filter = this.convertValues(source["filter"], Filter);
 	        this.paused = source["paused"];
 	        this.addedAt = source["addedAt"];
 	        this.lastCheck = source["lastCheck"];
@@ -87,12 +107,14 @@ export namespace follow {
 		    return a;
 		}
 	}
+	
 	export class NewFeed {
 	    url: string;
 	    title: string;
 	    uploader: string;
 	    tabs: string[];
 	    options: settings.DownloadOptions;
+	    filter: Filter;
 	
 	    static createFrom(source: any = {}) {
 	        return new NewFeed(source);
@@ -105,6 +127,7 @@ export namespace follow {
 	        this.uploader = source["uploader"];
 	        this.tabs = source["tabs"];
 	        this.options = this.convertValues(source["options"], settings.DownloadOptions);
+	        this.filter = this.convertValues(source["filter"], Filter);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

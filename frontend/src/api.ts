@@ -65,6 +65,7 @@ export type _Guards = [
   Expect<Guard<ytdlp.SearchFilter, T.SearchFilter>>,
   Expect<Guard<follow.Feed, T.Feed>>,
   Expect<Guard<follow.NewFeed, T.NewFeed>>,
+  Expect<Guard<follow.Filter, T.FeedFilter>>,
   Expect<Guard<follow.Target, T.FeedTarget>>,
   Expect<Guard<main.FeedResponse, T.FeedResponse>>,
   Expect<Guard<main.TargetResponse, T.TargetResponse>>,
@@ -142,8 +143,8 @@ export const api = {
   listFeeds: () => cast<T.Feed[]>(App.ListFeeds()),
   inspectFeed: (url: string) => cast<T.TargetResponse>(App.InspectFeed(url)),
   followFeed: (f: T.NewFeed) => cast<T.FeedResponse>(App.FollowFeed(f as unknown as follow.NewFeed)),
-  editFeed: (id: string, tabs: T.ChannelTab[], opts: T.DownloadOptions) =>
-    cast<T.FeedResponse>(App.EditFeed(id, tabs, opts as unknown as settings.DownloadOptions)),
+  editFeed: (id: string, tabs: T.ChannelTab[], opts: T.DownloadOptions, filter: T.FeedFilter) =>
+    cast<T.FeedResponse>(App.EditFeed(id, tabs, opts as unknown as settings.DownloadOptions, filter)),
   unfollowFeed: App.UnfollowFeed,
   pauseFeed: App.PauseFeed,
   /** List a followed feed's videos: a channel tab ('' = the first followed one), up to limit (0 = all). */

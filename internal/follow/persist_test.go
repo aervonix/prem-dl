@@ -16,7 +16,7 @@ func TestAddedTabSurvivesRestart(t *testing.T) {
 	m.check(f.ID)
 	_ = m.SetPaused(f.ID, true)
 	fk.set(chanHome+"/shorts", "s3", "s2", "s1")
-	if _, err := m.Edit(f.ID, []string{"shorts", "videos"}, opts()); err != nil {
+	if _, err := m.Edit(f.ID, []string{"shorts", "videos"}, opts(), Filter{}); err != nil {
 		t.Fatal(err)
 	}
 	m2 := New(fk.deps(path)) // the app restarts
@@ -50,7 +50,7 @@ func TestFeedDropsOneVideoChoices(t *testing.T) {
 	if len(f.Options.Chapters) != 0 || f.Options.WaitForVideo || f.Options.AudioLang != "en" {
 		t.Errorf("followed with %+v", f.Options)
 	}
-	f, err := m.Edit(f.ID, nil, o)
+	f, err := m.Edit(f.ID, nil, o, Filter{})
 	if err != nil {
 		t.Fatal(err)
 	}

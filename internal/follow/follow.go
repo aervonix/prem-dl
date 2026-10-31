@@ -17,6 +17,7 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,7 @@ type Feed struct {
 	// that isn't a YouTube channel, whose URL is checked as it is.
 	Tabs    []string                 `json:"tabs"`
 	Options settings.DownloadOptions `json:"options"`
+	Filter  Filter                   `json:"filter"`
 	Paused  bool                     `json:"paused"`
 
 	AddedAt   time.Time `json:"addedAt" ts_type:"string"`
@@ -58,6 +60,75 @@ type NewFeed struct {
 	Uploader string                   `json:"uploader"`
 	Tabs     []string                 `json:"tabs"`
 	Options  settings.DownloadOptions `json:"options"`
+	Filter   Filter                   `json:"filter"`
+}
+
+// Filter narrows what a check queues: a busy channel's long stream reruns, say, or only the
+// episodes of a podcast. A video it turns away is noted like one already downloaded, so it isn't
+// looked at again; changing the filter applies to uploads from then on.
+type Filter struct {
+	MinMinutes int `json:"minMinutes"` // shorter videos are skipped; 0 = no minimum
+	MaxMinutes int `json:"maxMinutes"` // longer ones are skipped; 0 = no maximum
+	// Include: the title must contain one of these (ignoring case); empty = any title.
+	Include []string `json:"include"`
+	// Exclude: titles containing any of these are skipped.
+	Exclude []string `json:"exclude"`
+}
+
+const (
+	maxFilterWords = 30
+	maxFilterWord  = 100
+	maxMinutes     = 100000
+)
+
+// clean trims the words and checks the numbers.
+func (f *Filter) clean() error {
+	if f.MinMinutes < 0 || f.MaxMinutes < 0 || f.MinMinutes > maxMinutes || f.MaxMinutes > maxMinutes {
+		return errors.New("lengths are whole minutes, 0 for no limit")
+	}
+	if f.MaxMinutes > 0 && f.MaxMinutes < f.MinMinutes {
+		return errors.New("the longest length is shorter than the shortest")
+	}
+	for _, words := range []*[]string{&f.Include, &f.Exclude} {
+		var out []string
+		for _, w := range *words {
+			w = strings.TrimSpace(w)
+			if w == "" || slices.ContainsFunc(out, func(o string) bool { return strings.EqualFold(o, w) }) {
+				continue
+			}
+			if len([]rune(w)) > maxFilterWord {
+				return fmt.Errorf("%q is too long for a title filter", w)
+			}
+			out = append(out, w)
+		}
+		if len(out) > maxFilterWords {
+			return fmt.Errorf("a title filter takes up to %d words", maxFilterWords)
+		}
+		if out == nil {
+			out = []string{}
+		}
+		*words = out
+	}
+	return nil
+}
+
+// allows reports whether a check may queue e. A video whose length the listing doesn't give
+// (some Shorts and streams) passes the length limits.
+func (f Filter) allows(e ytdlp.PlaylistEntry) bool {
+	if d := e.Duration; d > 0 {
+		if f.MinMinutes > 0 && d < float64(f.MinMinutes*60) {
+			return false
+		}
+		if f.MaxMinutes > 0 && d > float64(f.MaxMinutes*60) {
+			return false
+		}
+	}
+	title := strings.ToLower(e.Title)
+	has := func(w string) bool { return strings.Contains(title, strings.ToLower(w)) }
+	if len(f.Include) > 0 && !slices.ContainsFunc(f.Include, has) {
+		return false
+	}
+	return !slices.ContainsFunc(f.Exclude, has)
 }
 
 // Target describes a link the UI offers to follow.
@@ -228,6 +299,10 @@ func (m *Manager) Follow(nf NewFeed) (Feed, error) {
 		return Feed{}, err
 	}
 	oneVideoOnly(&opts)
+	filter := nf.Filter
+	if err := filter.clean(); err != nil {
+		return Feed{}, err
+	}
 	if opts.Preset == "custom" {
 		return Feed{}, errors.New("a format picked from one video's list can't be used for new uploads. Choose a quality preset")
 	}
@@ -242,7 +317,7 @@ func (m *Manager) Follow(nf NewFeed) (Feed, error) {
 	}
 	f := Feed{
 		ID: newID(), URL: t.URL, Title: feedTitle(nf, t.Channel), Uploader: strings.TrimSpace(nf.Uploader),
-		Tabs: tabs, Options: opts, AddedAt: now(),
+		Tabs: tabs, Options: opts, Filter: filter, AddedAt: now(),
 	}
 	m.mu.Lock()
 	if m.findURLLocked(t.URL) != nil {
@@ -325,9 +400,13 @@ func oneVideoOnly(o *settings.DownloadOptions) {
 	o.Chapters = []string{}
 }
 
-// Edit changes the download options of a feed, and for a channel which tabs are checked.
-func (m *Manager) Edit(id string, tabs []string, opts settings.DownloadOptions) (Feed, error) {
+// Edit changes the download options and filter of a feed, and for a channel which tabs are
+// checked.
+func (m *Manager) Edit(id string, tabs []string, opts settings.DownloadOptions, filter Filter) (Feed, error) {
 	if err := settings.ValidateOptions(&opts); err != nil {
+		return Feed{}, err
+	}
+	if err := filter.clean(); err != nil {
 		return Feed{}, err
 	}
 	if opts.Preset == "custom" {
@@ -354,6 +433,7 @@ func (m *Manager) Edit(id string, tabs []string, opts settings.DownloadOptions) 
 			r.Tabs, r.NewTabs = clean, added
 		}
 		r.Options = opts
+		r.Filter = filter
 		out = cloneFeed(r.Feed)
 		return nil
 	})
@@ -557,7 +637,7 @@ func (m *Manager) check(id string) {
 		e := it.PlaylistEntry
 		switch {
 		case r.seen[e.ID] || waiting(e):
-		case !f.Ready || contains(newTabs, it.tab), archive[strings.ToLower(e.Extractor)+" "+e.ID]:
+		case !f.Ready || contains(newTabs, it.tab), archive[strings.ToLower(e.Extractor)+" "+e.ID], !f.Filter.allows(e):
 			skip = append(skip, e.ID)
 		default:
 			fresh = append(fresh, e)
@@ -852,6 +932,7 @@ func (m *Manager) load() {
 		if r.Tabs == nil {
 			r.Tabs = []string{}
 		}
+		_ = r.Filter.clean() // feeds from before filters have none: empty lists, not null
 		if r.Seen == nil {
 			r.Seen = []string{}
 		}
@@ -905,6 +986,8 @@ func contains(s []string, v string) bool {
 
 func cloneFeed(f Feed) Feed {
 	f.Tabs = append([]string{}, f.Tabs...)
+	f.Filter.Include = append([]string{}, f.Filter.Include...)
+	f.Filter.Exclude = append([]string{}, f.Filter.Exclude...)
 	f.Options.Subtitles.Langs = append([]string{}, f.Options.Subtitles.Langs...)
 	f.Options.SponsorBlock = append([]string{}, f.Options.SponsorBlock...)
 	if f.Error != nil {

@@ -1,6 +1,7 @@
 import {useEffect, useState} from 'react'
 import {api, errMessage} from '../api'
 import {hostOf} from '../format'
+import {Icon} from '../icons'
 
 /** "youtube.com/@name": what to call a pasted link before the first check names it. */
 function shortLink(url: string): string {
@@ -12,9 +13,35 @@ function shortLink(url: string): string {
   }
 }
 import {useApp} from '../store'
-import type {ChannelTab, DownloadOptions, Feed, FeedTarget} from '../types'
+import type {ChannelTab, DownloadOptions, Feed, FeedFilter, FeedTarget} from '../types'
 import {OptionsPanel, optionsProblem} from './OptionsPanel'
-import {Button, Chip, Modal, Spinner} from './ui'
+import {Button, Chip, Field, Modal, Spinner} from './ui'
+
+const NO_FILTER: FeedFilter = {minMinutes: 0, maxMinutes: 0, include: [], exclude: []}
+
+/** "Episode, Part 2" -> ["Episode", "Part 2"]. */
+const words = (text: string) =>
+  text
+    .split(',')
+    .map((w) => w.trim())
+    .filter(Boolean)
+
+/** A filter as one line for the Following page: "10-90 min · title has Episode · not Rerun", or ''. */
+export function filterSummary(f: FeedFilter | undefined): string {
+  if (!f) return ''
+  const len =
+    f.minMinutes && f.maxMinutes ? `${f.minMinutes}–${f.maxMinutes} min` : f.minMinutes ? `${f.minMinutes} min or longer` : f.maxMinutes ? `up to ${f.maxMinutes} min` : ''
+  return [len, f.include.length ? `title has ${f.include.join(' or ')}` : '', f.exclude.length ? `not ${f.exclude.join(', ')}` : ''].filter(Boolean).join(' · ')
+}
+
+/** The problem with a filter as typed, or ''. */
+function filterProblem(min: string, max: string): string {
+  const lo = Number(min || 0)
+  const hi = Number(max || 0)
+  if (!Number.isInteger(lo) || !Number.isInteger(hi) || lo < 0 || hi < 0) return 'Lengths are whole minutes.'
+  if (hi > 0 && hi < lo) return 'The longest length is shorter than the shortest.'
+  return ''
+}
 
 export const TAB_LABELS: Record<ChannelTab, string> = {videos: 'Videos', shorts: 'Shorts', streams: 'Live'}
 const TABS: ChannelTab[] = ['videos', 'shorts', 'streams']
@@ -50,6 +77,14 @@ export function FeedDialog({
   // A format picked from one video's list can't apply to uploads that don't exist yet.
   const [opts, setOpts] = useState<DownloadOptions>(() => (options.preset === 'custom' ? {...options, preset: 'best', formatId: ''} : options))
   const [saving, setSaving] = useState(false)
+  const start = feed?.filter ?? NO_FILTER
+  const [minLen, setMinLen] = useState(start.minMinutes ? String(start.minMinutes) : '')
+  const [maxLen, setMaxLen] = useState(start.maxMinutes ? String(start.maxMinutes) : '')
+  const [include, setInclude] = useState(start.include.join(', '))
+  const [exclude, setExclude] = useState(start.exclude.join(', '))
+  const filter: FeedFilter = {minMinutes: Number(minLen || 0), maxMinutes: Number(maxLen || 0), include: words(include), exclude: words(exclude)}
+  const filtering = !!(filter.minMinutes || filter.maxMinutes || filter.include.length || filter.exclude.length)
+  const [showFilter, setShowFilter] = useState(filtering)
 
   const url = link?.url
   useEffect(() => {
@@ -74,14 +109,17 @@ export function FeedDialog({
   const hours = state.settings?.followEvery ?? 6
   const optsProblem = optionsProblem(opts)
   const tabsProblem = target?.channel && tabs.length === 0 ? 'Choose at least one tab to check.' : ''
+  const lenProblem = filterProblem(minLen, maxLen)
 
   const toggleTab = (t: ChannelTab) => setTabs((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : TABS.filter((x) => x === t || cur.includes(x))))
 
   const save = async () => {
-    if (!target || optsProblem || tabsProblem) return
+    if (!target || optsProblem || tabsProblem || lenProblem) return
     setSaving(true)
     try {
-      const res = feed ? await api.editFeed(feed.id, tabs, opts) : await api.followFeed({url: link?.url ?? target.url, title: link?.title ?? '', uploader: link?.uploader ?? '', tabs, options: opts})
+      const res = feed
+        ? await api.editFeed(feed.id, tabs, opts, filter)
+        : await api.followFeed({url: link?.url ?? target.url, title: link?.title ?? '', uploader: link?.uploader ?? '', tabs, options: opts, filter})
       if (res.error) return toast('error', res.error)
       if (feed) {
         toast('success', 'Saved')
@@ -117,10 +155,10 @@ export function FeedDialog({
         ) : (
           <>
             <span className="truncate" style={{flex: 1, minWidth: 0, color: 'var(--danger)', fontSize: 12.5}}>
-              {tabsProblem || optsProblem}
+              {tabsProblem || lenProblem || optsProblem}
             </span>
             <Button onClick={onClose}>Cancel</Button>
-            <Button variant="primary" icon={feed ? 'save' : 'bell'} loading={saving} disabled={!target || !!tabsProblem || !!optsProblem} onClick={() => void save()}>
+            <Button variant="primary" icon={feed ? 'save' : 'bell'} loading={saving} disabled={!target || !!tabsProblem || !!lenProblem || !!optsProblem} onClick={() => void save()}>
               {feed ? 'Save' : 'Follow'}
             </Button>
           </>
@@ -155,6 +193,34 @@ export function FeedDialog({
               {feed && <div className="hint">Videos already on a tab you add aren't downloaded.</div>}
             </div>
           )}
+          <div>
+            <button type="button" className="collapse-btn" aria-expanded={showFilter} onClick={() => setShowFilter((v) => !v)}>
+              <span className="chev">
+                <Icon name="chevronRight" size={16} />
+              </span>
+              <span className="opt-head">Only download some uploads</span>
+              {!showFilter && filtering && <span className="muted truncate">{filterSummary(filter)}</span>}
+            </button>
+            {showFilter && (
+              <div className="stack" style={{marginTop: 8}}>
+                <div className="grid2">
+                  <Field label="At least (minutes)" hint="Skips shorter videos. Empty for no limit.">
+                    <input type="number" min={0} step={1} inputMode="numeric" value={minLen} onChange={(e) => setMinLen(e.target.value)} placeholder="No minimum" />
+                  </Field>
+                  <Field label="At most (minutes)" hint="Skips longer ones, such as stream reruns.">
+                    <input type="number" min={0} step={1} inputMode="numeric" value={maxLen} onChange={(e) => setMaxLen(e.target.value)} placeholder="No maximum" />
+                  </Field>
+                  <Field label="Title contains one of" hint="Separate words with commas. Case doesn't matter.">
+                    <input type="text" value={include} onChange={(e) => setInclude(e.target.value)} placeholder="e.g. Episode, Part" />
+                  </Field>
+                  <Field label="Title doesn't contain" hint="Uploads with any of these are skipped.">
+                    <input type="text" value={exclude} onChange={(e) => setExclude(e.target.value)} placeholder="e.g. #shorts, Rerun" />
+                  </Field>
+                </div>
+                <div className="hint">Skipped uploads aren't downloaded later if you change this. Videos the site gives no length for pass the length limits.</div>
+              </div>
+            )}
+          </div>
           <OptionsPanel value={opts} onChange={setOpts} playlist feed mode="download" archiveOn={state.settings?.useArchive} />
         </div>
       )}

@@ -293,7 +293,7 @@ func TestArchivedVideosAreSkipped(t *testing.T) {
 	// "Download again" ignores the archive.
 	o := opts()
 	o.IgnoreArchive = true
-	if _, err := m.Edit(f.ID, nil, o); err != nil {
+	if _, err := m.Edit(f.ID, nil, o, Filter{}); err != nil {
 		t.Fatal(err)
 	}
 	fk.archive = map[string]bool{"youtube d": true}
@@ -398,7 +398,7 @@ func TestAddedTabIsNotedNotQueued(t *testing.T) {
 
 	fk.set(chanVids, "v2", "v1")
 	fk.set(chanHome+"/shorts", "s2", "s1")
-	if _, err := m.Edit(f.ID, []string{"shorts", "videos"}, opts()); err != nil {
+	if _, err := m.Edit(f.ID, []string{"shorts", "videos"}, opts(), Filter{}); err != nil {
 		t.Fatal(err)
 	}
 	if id := m.due(); id != f.ID {
@@ -416,7 +416,7 @@ func TestAddedTabIsNotedNotQueued(t *testing.T) {
 	if q := fk.lastQueued(); !reflect.DeepEqual(q, []string{"s3"}) {
 		t.Errorf("queued %v, want the new short", q)
 	}
-	if _, err := m.Edit(f.ID, nil, opts()); err == nil {
+	if _, err := m.Edit(f.ID, nil, opts(), Filter{}); err == nil {
 		t.Error("a channel was left with no tabs")
 	}
 }
