@@ -207,6 +207,8 @@ export interface AppState {
   dataDir: string
   /** A link the app was started with (a prem-dl: link from the Chrome helper), for the Download page. */
   openLink: string
+  /** A link the app was started with to follow (the Chrome helper's Follow). */
+  followLink: string
   /** runtime.GOOS: windows, linux, … */
   platform: string
   /** The desktop has no tray (Linux without one), so closing can't keep the app running. */

@@ -250,3 +250,25 @@ func TestChapterOptions(t *testing.T) {
 		t.Errorf("presets must not keep chapters: %v %v", err, s.Presets[0].Options.Chapters)
 	}
 }
+
+func TestPresetFor(t *testing.T) {
+	ps := []NamedPreset{{Name: "Tube", Sites: []string{"youtube.com"}}, {Name: "Music", Sites: []string{"music.youtube.com"}}}
+	for link, want := range map[string]string{
+		"https://music.youtube.com/watch?v=x": "Music",
+		"https://www.youtube.com/watch?v=x":   "Tube",
+		"https://youtube.com./watch?v=x":      "Tube",
+		"https://notyoutube.com/x":            "",
+		"https://vimeo.com/1":                 "",
+	} {
+		got := ""
+		if p := PresetFor(link, ps); p != nil {
+			got = p.Name
+		}
+		if got != want {
+			t.Errorf("%s: %q, want %q", link, got, want)
+		}
+	}
+	if p := FindPreset(" music ", ps); p == nil || p.Name != "Music" {
+		t.Errorf("FindPreset: %+v", p)
+	}
+}

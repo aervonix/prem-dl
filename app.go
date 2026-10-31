@@ -19,6 +19,7 @@ import (
 	"yt-dlp-gui/internal/apperr"
 	"yt-dlp-gui/internal/follow"
 	"yt-dlp-gui/internal/jsc"
+	"yt-dlp-gui/internal/linkbridge"
 	"yt-dlp-gui/internal/queue"
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
@@ -196,6 +197,12 @@ func (a *App) startup(ctx context.Context) {
 	a.applyTheme(a.store.Get().Theme)
 	a.detectOnce.Do(func() { go a.detectTools() })
 	go removeStaleTemp()
+	if l := a.launch; l.Link != "" && l.Action == linkbridge.ActionDownload {
+		// Started by the Chrome helper's "Download now": no window needed to review it.
+		if err := a.quickDownload(l.Link, l.Preset); err != nil {
+			a.launch.Action = linkbridge.ActionOpen // shown on the Download page instead
+		}
+	}
 	go a.appUpdateLoop()
 	go a.startBackground(ctx)
 }
@@ -306,9 +313,13 @@ func (a *App) onSecondInstance(data options.SecondInstanceData) {
 	if l.Background && l.Link == "" {
 		return // the sign-in entry, while the app is already running
 	}
-	a.showWindow()
-	if l.Link != "" {
-		a.emit("app:open-url", l.Link)
+	if l.Link == "" {
+		a.showWindow()
+		return
+	}
+	if err := a.handleLink(linkbridge.Request{URL: l.Link, Action: l.Action, Preset: l.Preset}); err != nil {
+		a.showWindow()
+		a.emit("app:error", err.Error())
 	}
 }
 
@@ -338,24 +349,35 @@ type AppState struct {
 	Tools    ToolStatus        `json:"tools"`
 	DataDir  string            `json:"dataDir"`
 	OpenLink string            `json:"openLink"` // a link the app was started with, for the Download page
-	Platform string            `json:"platform"` // runtime.GOOS: the UI names the system's parts after it
-	NoTray   bool              `json:"noTray"`   // the desktop has no tray, so closing can't keep the app running
+	// FollowLink is a link the app was started with to follow (the Chrome helper's Follow).
+	FollowLink string `json:"followLink"`
+	Platform   string `json:"platform"` // runtime.GOOS: the UI names the system's parts after it
+	NoTray     bool   `json:"noTray"`   // the desktop has no tray, so closing can't keep the app running
 	// AppUpdate is the last successful check for a new Prem-dl, nil until one has run.
 	AppUpdate *AppUpdate `json:"appUpdate"`
+}
+
+// launchLink is the link the app was started with, when it was started to do action with it.
+func (a *App) launchLink(action string) string {
+	if a.launch.Action != action {
+		return ""
+	}
+	return a.launch.Link
 }
 
 // GetState returns settings, the queue and tool status in one call.
 func (a *App) GetState() AppState {
 	return AppState{
-		Version:  appVersion,
-		Settings: a.store.Get(),
-		Jobs:     a.q.List(),
-		Feeds:    a.feeds.List(),
-		Tools:    a.currentTools(),
-		DataDir:  a.dataDir,
-		OpenLink: a.launch.Link,
-		Platform: runtime.GOOS,
-		NoTray:   a.noTray.Load(),
+		Version:    appVersion,
+		Settings:   a.store.Get(),
+		Jobs:       a.q.List(),
+		Feeds:      a.feeds.List(),
+		Tools:      a.currentTools(),
+		DataDir:    a.dataDir,
+		OpenLink:   a.launchLink(linkbridge.ActionOpen),
+		FollowLink: a.launchLink(linkbridge.ActionFollow),
+		Platform:   runtime.GOOS,
+		NoTray:     a.noTray.Load(),
 		// The check runs after launch, so a page reloaded later still learns what it found.
 		AppUpdate: a.appUpdate.Load(),
 	}

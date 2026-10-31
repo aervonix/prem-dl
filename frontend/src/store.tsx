@@ -43,6 +43,8 @@ export interface State {
   section: {id: string; n: number} | null
   /** Links for the Download page: from the Chrome helper, a second launch, or dropped on the window. */
   incoming: {links: string[]; n: number} | null
+  /** A link to follow, from the Chrome helper; n changes with each one. */
+  follow: {url: string; n: number} | null
   /** A cookies.txt dropped on the window, for Settings to offer importing. */
   droppedCookies: {text: string; n: number} | null
 }
@@ -75,6 +77,7 @@ export const initial: State = {
   page: 'download',
   section: null,
   incoming: null,
+  follow: null,
   droppedCookies: null,
 }
 
@@ -96,6 +99,7 @@ export type Action =
   | {type: 'toastDone'; id: number}
   | {type: 'page'; page: Page; section?: string}
   | {type: 'incoming'; links: string[]}
+  | {type: 'follow'; url: string}
   | {type: 'droppedCookies'; text: string}
 
 // Jobs live in their own reducer and context: they change several times a second while
@@ -137,6 +141,7 @@ export function reducer(s: State, a: Action): State {
         tools: a.state.tools,
         appUpdate: a.state.appUpdate ?? s.appUpdate,
         ...(a.state.openLink ? {page: 'download' as const, incoming: {links: [a.state.openLink], n: (s.incoming?.n ?? 0) + 1}} : {}),
+        ...(a.state.followLink ? {page: 'following' as const, follow: {url: a.state.followLink, n: (s.follow?.n ?? 0) + 1}} : {}),
       }
     case 'initFailed':
       return {...s, ready: true, loadError: a.error}
@@ -173,6 +178,8 @@ export function reducer(s: State, a: Action): State {
       }
     case 'incoming':
       return {...s, page: 'download', incoming: {links: a.links, n: (s.incoming?.n ?? 0) + 1}}
+    case 'follow':
+      return {...s, page: 'following', follow: {url: a.url, n: (s.follow?.n ?? 0) + 1}}
     case 'droppedCookies':
       return {...s, page: 'settings', section: {id: 'cookies', n: (s.section?.n ?? 0) + 1}, droppedCookies: {text: a.text, n: (s.droppedCookies?.n ?? 0) + 1}}
   }
@@ -264,6 +271,12 @@ export function AppProvider({children}: {children: ReactNode}) {
         toast('info', `${plural(f.count, 'new video')} from ${f.title} added to the queue`, {label: 'View queue', run: () => dispatch({type: 'page', page: 'queue'})}),
       ),
       on('app:open-url', (url) => dispatch({type: 'incoming', links: [url]})),
+      on('app:follow-url', (url) => dispatch({type: 'follow', url})),
+      on('app:queued', (q) =>
+        q.skipped
+          ? toast('info', `${q.title || 'That video'} is already in the queue`)
+          : toast('success', `Added ${q.title || 'the download'} to the queue`, {label: 'View queue', run: () => dispatch({type: 'page', page: 'queue'})}),
+      ),
       on('app:navigate', (page) => {
         if ((PAGES as string[]).includes(page)) dispatch({type: 'page', page: page as Page})
       }),

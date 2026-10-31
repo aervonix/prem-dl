@@ -1,8 +1,12 @@
-// Opened by background.js as launch.html#<link> when Prem-dl isn't running. The prem-dl: link type
-// starts the app with the link; once the app answers on its port the link has arrived, so the tab
-// closes itself. The button is there in case Chrome wants a click before it opens an app.
+// Opened by background.js as launch.html#url=<link>&action=<action>&preset=<name> when Prem-dl
+// isn't running. The prem-dl: link type starts the app with the link; once the app answers on its
+// port the link has arrived, so the tab closes itself. The button is there in case Chrome wants a
+// click before it opens an app.
 const PORTS = [38719, 41853, 46379]
-const link = decodeURIComponent(location.hash.slice(1))
+const params = new URLSearchParams(location.hash.slice(1))
+const link = params.get('url') ?? ''
+const action = ['download', 'follow'].includes(params.get('action')) ? params.get('action') : 'open'
+const preset = params.get('preset') ?? ''
 const what = document.getElementById('what')
 const open = document.getElementById('open')
 const status = document.getElementById('status')
@@ -23,7 +27,8 @@ async function running() {
   return false
 }
 
-const launch = () => (location.href = 'prem-dl://open?url=' + encodeURIComponent(link))
+const launch = () =>
+  (location.href = `prem-dl://${action}?` + new URLSearchParams(action === 'download' && preset ? {url: link, preset} : {url: link}).toString())
 
 if (!/^https?:\/\//i.test(link)) {
   open.disabled = true

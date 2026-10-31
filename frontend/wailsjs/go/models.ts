@@ -245,6 +245,7 @@ export namespace main {
 	    tools: ToolStatus;
 	    dataDir: string;
 	    openLink: string;
+	    followLink: string;
 	    platform: string;
 	    noTray: boolean;
 	    appUpdate?: AppUpdate;
@@ -262,6 +263,7 @@ export namespace main {
 	        this.tools = this.convertValues(source["tools"], ToolStatus);
 	        this.dataDir = source["dataDir"];
 	        this.openLink = source["openLink"];
+	        this.followLink = source["followLink"];
 	        this.platform = source["platform"];
 	        this.noTray = source["noTray"];
 	        this.appUpdate = this.convertValues(source["appUpdate"], AppUpdate);

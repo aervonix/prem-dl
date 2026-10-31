@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -665,6 +666,37 @@ func WriteFileAtomic(path string, data []byte, perm os.FileMode) error {
 	if err := os.Rename(tmpName, path); err != nil {
 		os.Remove(tmpName)
 		return err
+	}
+	return nil
+}
+
+// PresetFor returns the preset whose sites cover link's host, or nil. A site also covers its
+// subdomains, and the longest match wins: music.youtube.com beats youtube.com. The Download page
+// does the same (frontend/src/presets.ts).
+func PresetFor(link string, presets []NamedPreset) *NamedPreset {
+	u, err := url.Parse(strings.TrimSpace(link))
+	if err != nil {
+		return nil
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	var best *NamedPreset
+	bestLen := 0
+	for i := range presets {
+		for _, site := range presets[i].Sites {
+			if (host == site || strings.HasSuffix(host, "."+site)) && len(site) > bestLen {
+				best, bestLen = &presets[i], len(site)
+			}
+		}
+	}
+	return best
+}
+
+// FindPreset returns the preset called name (ignoring case), or nil.
+func FindPreset(name string, presets []NamedPreset) *NamedPreset {
+	for i := range presets {
+		if strings.EqualFold(presets[i].Name, strings.TrimSpace(name)) {
+			return &presets[i]
+		}
 	}
 	return nil
 }

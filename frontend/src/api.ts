@@ -172,6 +172,10 @@ export interface BackendEvents {
   'feeds:update': T.Feed[]
   'feeds:found': T.FeedFound
   'app:open-url': string
+  /** The Chrome helper's "Follow": open the follow dialog for this link. */
+  'app:follow-url': string
+  /** The Chrome helper's "Download now" queued something (main.Queued; only sent as an event). */
+  'app:queued': {title: string; skipped: boolean}
   'app:confirm-close': CloseRequest
   /** Show a page: a click on a Windows notification. */
   'app:navigate': string

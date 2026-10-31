@@ -163,6 +163,16 @@ export function FollowingPage() {
     setDialog({link: {url, title: '', uploader: ''}, options: feedDefaults(settings.defaults)})
   }
 
+  // "Follow" from the Chrome helper's menu.
+  const follow = state.follow
+  useEffect(() => {
+    if (!follow || !settings) return
+    setOpenId('')
+    setDialog({link: {url: follow.url, title: '', uploader: ''}, options: feedDefaults(settings.defaults)})
+    // Only a new request opens it, not a change of settings.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [follow?.n, !!settings])
+
   const unfollow = async (f: Feed) => {
     setUnfollowing(null)
     try {

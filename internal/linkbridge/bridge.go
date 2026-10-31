@@ -1,6 +1,6 @@
 // Package linkbridge receives links from the companion Chrome extension while the app runs: its
-// toolbar button and "Download with Prem-dl" menu item post the page or link here, and the app
-// opens it on the Download page.
+// toolbar button and right-click menu post the page or link here, to open on the Download page,
+// to download at once with a preset, or to follow.
 //
 // It listens on a fixed loopback port so the extension can find it, and accepts requests only
 // from the extension's origin, which web pages can't fake. When no port is free, or the app isn't
@@ -25,8 +25,26 @@ const maxBody = 16 << 10
 type Server struct {
 	// Origin is the only Origin header accepted: chrome-extension://<id>.
 	Origin string
-	// Open is given each link. Its error is sent back for the extension to show.
-	Open func(link string) error
+	// Handle is given each link. Its error is sent back for the extension to show.
+	Handle func(Request) error
+	// Presets names the presets the extension's menu offers; every reply carries them.
+	Presets func() []string
+}
+
+// What a Request asks for.
+const (
+	ActionOpen     = ""         // put it on the Download page to review
+	ActionDownload = "download" // queue it now, with Preset's options
+	ActionFollow   = "follow"   // open the follow dialog for it
+)
+
+// Request is a link from the extension.
+type Request struct {
+	URL    string `json:"url"`
+	Action string `json:"action"`
+	// Preset names the preset a download uses; "" for the default options (or the preset of
+	// the link's site).
+	Preset string `json:"preset"`
 }
 
 // Listen takes the first free port in Ports.
@@ -42,15 +60,12 @@ func Listen() (net.Listener, error) {
 	return nil, errors.Join(errs...)
 }
 
-type request struct {
-	URL string `json:"url"`
-}
-
 // reply always names the app, so the extension can tell it reached Prem-dl and not some other
 // program that happens to use the port.
 type reply struct {
-	App   string `json:"app"`
-	Error string `json:"error,omitempty"`
+	App     string   `json:"app"`
+	Error   string   `json:"error,omitempty"`
+	Presets []string `json:"presets"`
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -71,24 +86,37 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodOptions:
 		w.WriteHeader(http.StatusNoContent)
+	case r.Method == http.MethodPost && r.URL.Path == "/hello":
+		// The extension asks when it starts, to build its menu.
+		s.send(w, http.StatusOK, "")
 	case r.Method == http.MethodPost && r.URL.Path == "/open":
-		var req request
+		var req Request
 		if err := json.NewDecoder(io.LimitReader(r.Body, maxBody)).Decode(&req); err != nil || req.URL == "" {
-			send(w, http.StatusBadRequest, "No link was sent.")
+			s.send(w, http.StatusBadRequest, "No link was sent.")
 			return
 		}
-		if err := s.Open(req.URL); err != nil {
-			send(w, http.StatusBadRequest, err.Error())
+		switch req.Action {
+		case ActionOpen, ActionDownload, ActionFollow:
+		default:
+			s.send(w, http.StatusBadRequest, "This Prem-dl doesn't know that action. Is it up to date?")
 			return
 		}
-		send(w, http.StatusOK, "")
+		if err := s.Handle(req); err != nil {
+			s.send(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.send(w, http.StatusOK, "")
 	default:
 		http.NotFound(w, r)
 	}
 }
 
-func send(w http.ResponseWriter, status int, msg string) {
+func (s *Server) send(w http.ResponseWriter, status int, msg string) {
+	presets := []string{}
+	if s.Presets != nil {
+		presets = append(presets, s.Presets()...)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(reply{App: "prem-dl", Error: msg})
+	_ = json.NewEncoder(w).Encode(reply{App: "prem-dl", Error: msg, Presets: presets})
 }

@@ -12,8 +12,10 @@ import (
 	"yt-dlp-gui/internal/cookiebridge"
 	"yt-dlp-gui/internal/linkbridge"
 	"yt-dlp-gui/internal/queue"
+	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
 	"yt-dlp-gui/internal/ytdlp"
+	"yt-dlp-gui/internal/ytweb"
 )
 
 // Everything that works while the window is in the background or hidden: the tray icon, the
@@ -173,7 +175,11 @@ func (a *App) startLinkBridge() {
 		return
 	}
 	srv := &http.Server{
-		Handler:           &linkbridge.Server{Origin: "chrome-extension://" + cookiebridge.ExtensionID, Open: a.openLink},
+		Handler: &linkbridge.Server{
+			Origin:  "chrome-extension://" + cookiebridge.ExtensionID,
+			Handle:  a.handleLink,
+			Presets: a.presetNames,
+		},
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	go func() { _ = srv.Serve(ln) }()
@@ -191,6 +197,103 @@ func (a *App) openLink(raw string) error {
 	}
 	a.showWindow()
 	a.emit("app:open-url", link)
+	return nil
+}
+
+// handleLink does what the Chrome helper asks with a link: open it, download it now, or follow it.
+func (a *App) handleLink(r linkbridge.Request) error {
+	switch r.Action {
+	case linkbridge.ActionDownload:
+		return a.quickDownload(r.URL, r.Preset)
+	case linkbridge.ActionFollow:
+		link, err := ytdlp.NormalizeURL(r.URL)
+		if err != nil {
+			return err
+		}
+		a.showWindow()
+		a.emit("app:follow-url", link)
+		return nil
+	}
+	return a.openLink(r.URL)
+}
+
+// presetNames are the presets the helper's menu offers "Download as" for.
+func (a *App) presetNames() []string {
+	ps := a.store.Get().Presets
+	names := make([]string, 0, len(ps))
+	for _, p := range ps {
+		names = append(names, p.Name)
+	}
+	return names
+}
+
+// Queued says a quick download was added, for the page's toast.
+type Queued struct {
+	Title   string `json:"title"`
+	Skipped bool   `json:"skipped"` // it was already in the queue
+}
+
+// quickDownload queues a link at once, without the Download page: the helper's "Download now"
+// and "Download as <preset>". preset "" takes the default options, or the preset of the link's
+// site, as the Download page would. The link is analysed first (in the background, so the helper
+// hears back at once), which also lets the download start from that analysis; a playlist or
+// channel is opened on the Download page instead, to pick from rather than take whole.
+func (a *App) quickDownload(raw, preset string) error {
+	link, err := ytdlp.NormalizeURL(raw)
+	if err != nil {
+		return err
+	}
+	s := a.store.Get()
+	opts := s.Defaults
+	if preset != "" {
+		p := settings.FindPreset(preset, s.Presets)
+		if p == nil {
+			return fmt.Errorf("Prem-dl has no preset called %q any more", preset)
+		}
+		opts = p.Options
+	} else if p := settings.PresetFor(link, s.Presets); p != nil {
+		opts = p.Options
+	}
+	if ytweb.Handles(link) {
+		return a.openLink(link) // a YouTube channel or playlist
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(a.root, 2*time.Minute)
+		defer cancel()
+		item := queue.NewJob{URL: link}
+		gen := a.infos.Gen()
+		if env, cleanup, err := a.buildEnv(ctx); err == nil {
+			res, err := ytdlp.Probe(ctx, env, link, true)
+			cleanup()
+			switch {
+			case ctx.Err() != nil:
+				return
+			case err == nil && res.Kind == "playlist":
+				_ = a.openLink(link)
+				return
+			case err == nil && res.Video != nil:
+				a.infos.PutFrom(gen, link, res)
+				v := res.Video
+				item = queue.NewJob{URL: v.URL, Title: v.Title, Uploader: v.Uploader, Thumbnail: v.ThumbnailSmall, Duration: v.Duration}
+				if item.URL == "" {
+					item.URL = link
+				}
+				if v.Upcoming {
+					opts.WaitForVideo = true
+				}
+			}
+			// Otherwise it is queued all the same: the queue shows why it fails, with its fixes.
+		}
+		jobs, skipped, err := a.q.Add([]queue.NewJob{item}, opts)
+		switch {
+		case err != nil:
+			a.emit("app:error", "Couldn't add the download: "+err.Error())
+		case len(jobs) > 0:
+			a.emit("app:queued", Queued{Title: jobs[0].Title})
+		case skipped > 0:
+			a.emit("app:queued", Queued{Title: item.Title, Skipped: true})
+		}
+	}()
 	return nil
 }
 

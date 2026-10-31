@@ -29,9 +29,11 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
   kept across searches, so you can collect videos from several.
 - **Lots of links at once.** Paste several links, one per line, and they're all queued. Playlists are
   expanded for you. You can also drop links, or a `.txt` file of them, anywhere on the window.
-- **Send links from Chrome.** With the helper extension, right-click a page or a link and choose
-  **Download with Prem-dl**, or click its toolbar button. Prem-dl opens the link, starting first if
-  it isn't running.
+- **Send links from Chrome.** With the helper extension, click its toolbar button, or right-click a
+  page or a link: **Open in Prem-dl** to review it, **Download now** (or **Download as** one of your
+  presets) to queue it straight away, or **Follow this channel or playlist** on YouTube. Prem-dl
+  starts first if it isn't running. A playlist or channel sent with Download now opens for review
+  instead, so nothing big is queued by surprise.
 - **Quality.** Best, 4K down to 360p, each with about how big the file will be, or audio only
   (MP3, M4A, Opus, AAC, FLAC, WAV or the original stream). Or pick an exact format from a table of
   resolution, codec, bitrate and size. Container can be automatic, MP4, MKV or WebM. Within the
@@ -105,8 +107,9 @@ instead. You set it up once:
 3. In Chrome, turn on **Developer mode** (top right), click **Load unpacked** and choose that folder.
    Use the Chrome profile you're signed in to YouTube with.
 
-The same helper puts **Download with Prem-dl** on Chrome's toolbar and right-click menu. If you
-added it before that existed, click the reload arrow on it in `chrome://extensions` once.
+The same helper puts Prem-dl on Chrome's toolbar and right-click menu. If you added it before
+the menu had Download now and Follow, click the reload arrow on it in
+`chrome://extensions` once.
 
 After that, click **Get cookies from Chrome** whenever you need fresh cookies. Chrome opens a page
 asking whether to share your YouTube cookies; click Allow and approve Chrome's own prompt.

@@ -28,6 +28,10 @@ func TestParseLaunch(t *testing.T) {
 		{[]string{"prem-dl://open?url=file%3A%2F%2F%2FC%3A%2Fx"}, launchArgs{}},
 		{[]string{"prem-dl://open?url=--exec%3Dcalc"}, launchArgs{}},
 		{[]string{"prem-dl://open"}, launchArgs{}},
+		// The Chrome helper's quick actions; anything else opens the link.
+		{[]string{"prem-dl://download?url=https%3A%2F%2Fyoutu.be%2Fx&preset=Music"}, launchArgs{Link: "https://youtu.be/x", Action: "download", Preset: "Music"}},
+		{[]string{"prem-dl://follow?url=https%3A%2F%2Fwww.youtube.com%2F%40chan"}, launchArgs{Link: "https://www.youtube.com/@chan", Action: "follow"}},
+		{[]string{"prem-dl://erase?url=https%3A%2F%2Fyoutu.be%2Fx"}, launchArgs{Link: "https://youtu.be/x"}},
 		// Windows adds its own arguments when a notification starts the app.
 		{[]string{"-Embedding"}, launchArgs{}},
 		{[]string{"--background", video, "https://example.com/second"}, launchArgs{Link: video, Background: true}},
