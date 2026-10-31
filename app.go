@@ -68,7 +68,9 @@ type App struct {
 	ahead *prefetcher
 
 	browseMu     sync.Mutex
-	browseCancel context.CancelFunc // set while BrowseFeed lists a channel
+	browseCancel context.CancelFunc // set while BrowseFeed lists a channel through yt-dlp
+	browseFeed   string             // the followed feed whose tabs browseTabs reads
+	browseTabs   map[string]feedTab // its tabs read page by page, as the view asks for them
 
 	searchMu     sync.Mutex
 	searchCancel context.CancelFunc // set while Search runs

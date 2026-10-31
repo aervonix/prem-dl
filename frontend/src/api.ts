@@ -148,6 +148,8 @@ export const api = {
   pauseFeed: App.PauseFeed,
   /** List a followed feed's videos: a channel tab ('' = the first followed one), up to limit (0 = all). */
   browseFeed: (id: string, tab: T.ChannelTab | '', limit: number) => cast<T.ProbeResponse>(App.BrowseFeed(id, tab, limit)),
+  /** Read a browseFeed listing on to `want` entries in all (0 = to the end) and return the new ones. */
+  moreFeedEntries: (listing: number, want: number) => cast<T.ListingPart>(App.MoreFeedEntries(listing, want)),
   cancelBrowse: App.CancelBrowse,
   /** YouTube results for query from the 1-based position first: at most count, fewer when one page of YouTube's holds fewer. */
   search: (query: string, filter: T.SearchFilter, first: number, count: number) =>

@@ -130,6 +130,10 @@ export function MoreEntries(arg1) {
   return window['go']['main']['App']['MoreEntries'](arg1);
 }
 
+export function MoreFeedEntries(arg1, arg2) {
+  return window['go']['main']['App']['MoreFeedEntries'](arg1, arg2);
+}
+
 export function MoveJobToTop(arg1) {
   return window['go']['main']['App']['MoveJobToTop'](arg1);
 }

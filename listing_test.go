@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/ytdlp"
@@ -168,5 +169,75 @@ func TestListingThatCantStartIsLeftToYtdlp(t *testing.T) {
 	}
 	if _, _, ok := a.startListing(ctx, cancel, "https://www.youtube.com/watch?v=dQw4w9WgXcQ"); ok {
 		t.Error("a video was listed")
+	}
+}
+
+// A followed channel's view reads only as far as it asks: the continuation is fetched when
+// "Show more" wants it, not before.
+func TestPacedListingReadsOnlyWhatIsAsked(t *testing.T) {
+	inner := fakeChannel(t, nil)
+	var mu sync.Mutex
+	posts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			mu.Lock()
+			posts++
+			mu.Unlock()
+		}
+		req, _ := http.NewRequestWithContext(r.Context(), r.Method, inner.URL+r.URL.RequestURI(), r.Body)
+		req.Header = r.Header.Clone()
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return
+		}
+		defer resp.Body.Close()
+		w.WriteHeader(resp.StatusCode)
+		_, _ = io.Copy(w, resp.Body)
+	}))
+	t.Cleanup(srv.Close)
+	a := listingApp(t, srv.URL)
+	countPosts := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return posts
+	}
+
+	ctx, cancel := context.WithCancel(a.root)
+	defer cancel()
+	l := newListing(1, true, 30)
+	res, ok := a.readListing(ctx, cancel, "https://www.youtube.com/@kurzgesagt/videos", l)
+	if !ok || len(res.Playlist.Entries) != 30 {
+		t.Fatalf("first page: %v %+v", ok, res)
+	}
+	a.browseTabs = map[string]feedTab{"videos": {l: l, cancel: cancel}}
+	waitUntil := func(what string, cond func() bool) {
+		t.Helper()
+		for i := 0; i < 200 && !cond(); i++ {
+			time.Sleep(5 * time.Millisecond)
+		}
+		if !cond() {
+			t.Fatal(what)
+		}
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := countPosts(); n != 0 {
+		t.Fatalf("read on to the continuation (%d requests) before anyone asked", n)
+	}
+	part := a.MoreFeedEntries(1, 60)
+	waitUntil("continuation read", func() bool { return countPosts() == 1 })
+	var rest []ytdlp.PlaylistEntry
+	rest = append(rest, part.Entries...)
+	for !part.Done && len(rest) < 30 {
+		part = a.MoreFeedEntries(1, 60)
+		rest = append(rest, part.Entries...)
+	}
+	if len(rest) != 30 || rest[0].Index != 31 {
+		t.Errorf("show more: %d entries", len(rest))
+	}
+	if part := a.MoreFeedEntries(1, 0); !part.Done {
+		t.Errorf("the end of the channel isn't done: %+v", part)
+	}
+	if a.MoreFeedEntries(99, 0).Done != true {
+		t.Error("an unknown listing isn't done")
 	}
 }

@@ -31,13 +31,55 @@ type listing struct {
 	done    bool
 	err     string
 	wake    chan struct{} // closed, and replaced, when something arrives
+
+	// A paced listing (a followed channel's view) reads only as far as the page wants: the
+	// reader waits once it has want entries, until the page asks for more.
+	paced  bool
+	want   int           // 0 = all
+	got    int           // entries read so far
+	demand chan struct{} // closed, and replaced, when want grows
+}
+
+func newListing(id int64, paced bool, want int) *listing {
+	return &listing{id: id, wake: make(chan struct{}), paced: paced, want: want, demand: make(chan struct{})}
 }
 
 func (l *listing) add(es []ytdlp.PlaylistEntry) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.pending = append(l.pending, es...)
+	l.got += len(es)
 	l.signal()
+}
+
+// pace holds the reader while it has read what the page wants.
+func (l *listing) pace(ctx context.Context) {
+	for {
+		l.mu.Lock()
+		if !l.paced || l.want == 0 || l.got < l.want {
+			l.mu.Unlock()
+			return
+		}
+		d := l.demand
+		l.mu.Unlock()
+		select {
+		case <-d:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
+// ask raises how far a paced listing reads (0 = to the end).
+func (l *listing) ask(want int) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.want == 0 || (want != 0 && want <= l.want) {
+		return
+	}
+	l.want = want
+	close(l.demand)
+	l.demand = make(chan struct{})
 }
 
 func (l *listing) finish(err error) {
@@ -60,14 +102,25 @@ func (l *listing) signal() {
 // listNative), or nothing could be read; ctx is then left as it was. Otherwise the listing owns
 // ctx and calls cancel when it ends, and cancelling ctx stops it.
 func (a *App) startListing(ctx context.Context, cancel context.CancelFunc, link string) (res *ytdlp.ProbeResult, id int64, ok bool) {
-	s := a.store.Get()
-	if s.ExtraArgs != "" || !ytweb.Handles(link) {
+	a.listingMu.Lock()
+	a.listingSeq++
+	l := newListing(a.listingSeq, false, 0)
+	a.listingMu.Unlock()
+	if res, ok = a.readListing(ctx, cancel, link, l); !ok {
 		return nil, 0, false
 	}
 	a.listingMu.Lock()
-	a.listingSeq++
-	l := &listing{id: a.listingSeq, wake: make(chan struct{})}
+	a.listing = l
 	a.listingMu.Unlock()
+	return res, l.id, true
+}
+
+// readListing starts reading link into l, and returns its first page; see startListing.
+func (a *App) readListing(ctx context.Context, cancel context.CancelFunc, link string, l *listing) (res *ytdlp.ProbeResult, ok bool) {
+	s := a.store.Get()
+	if s.ExtraArgs != "" || !ytweb.Handles(link) {
+		return nil, false
+	}
 
 	first := make(chan *ytdlp.ProbeResult, 1)
 	failed := make(chan struct{})
@@ -76,10 +129,17 @@ func (a *App) startListing(ctx context.Context, cancel context.CancelFunc, link 
 		_, err := a.lister.List(ctx, ytweb.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, link, 0, func(p *ytdlp.ProbeResult) {
 			if !started {
 				started = true
+				if p.Playlist != nil {
+					l.mu.Lock()
+					l.got = len(p.Playlist.Entries)
+					l.mu.Unlock()
+				}
 				first <- p
+				l.pace(ctx)
 				return
 			}
 			l.add(p.Playlist.Entries)
+			l.pace(ctx)
 		})
 		if !started {
 			if ctx.Err() == nil {
@@ -96,12 +156,9 @@ func (a *App) startListing(ctx context.Context, cancel context.CancelFunc, link 
 	}()
 	select {
 	case p := <-first:
-		a.listingMu.Lock()
-		a.listing = l
-		a.listingMu.Unlock()
-		return p, l.id, true
+		return p, true
 	case <-failed:
-		return nil, 0, false
+		return nil, false
 	}
 }
 
@@ -119,6 +176,11 @@ func (a *App) MoreEntries(id int64) ListingPart {
 	if l == nil || l.id != id {
 		return ListingPart{Entries: []ytdlp.PlaylistEntry{}, Done: true}
 	}
+	return a.nextPart(l)
+}
+
+// nextPart returns what l has read since the last call, waiting for something.
+func (a *App) nextPart(l *listing) ListingPart {
 	deadline := time.After(moreWait)
 	for {
 		l.mu.Lock()

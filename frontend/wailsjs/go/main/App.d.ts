@@ -70,6 +70,8 @@ export function ListFeeds():Promise<Array<follow.Feed>>;
 
 export function MoreEntries(arg1:number):Promise<main.ListingPart>;
 
+export function MoreFeedEntries(arg1:number,arg2:number):Promise<main.ListingPart>;
+
 export function MoveJobToTop(arg1:string):Promise<void>;
 
 export function OpenChromeExtensions():Promise<void>;

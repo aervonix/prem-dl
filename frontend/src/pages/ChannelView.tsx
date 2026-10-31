@@ -19,6 +19,14 @@ interface Listing {
   limit: number
   loading: boolean
   error: AppError | null
+  /**
+   * Read page by page (without yt-dlp): the backend's listing, which reads on as far as `limit`
+   * when asked, so "Show more" carries on rather than reading the tab again from the top.
+   * 0 when the whole answer came at once.
+   */
+  listing: number
+  /** The listing has reached the end of the tab. */
+  done: boolean
 }
 
 /**
@@ -42,17 +50,26 @@ export function ChannelView({feed, onBack}: {feed: Feed; onBack: () => void}) {
     async (t: ChannelTab | '', limit: number) => {
       const id = ++request.current
       latest.current[t] = id
-      setLists((l) => ({...l, [t]: {entries: l[t]?.entries ?? [], limit, loading: true, error: null}}))
+      setLists((l) => ({...l, [t]: {entries: l[t]?.entries ?? [], limit, loading: true, error: null, listing: 0, done: false}}))
       let next: Listing | null
       try {
         const res = await api.browseFeed(feed.id, t, limit)
         if (latest.current[t] !== id) return // a newer request for this tab answers instead
+        const got = res.result?.playlist?.entries ?? []
         next = res.cancelled
           ? null // another tab started listing: this one lists again when it's opened
-          : {entries: res.result?.playlist?.entries ?? [], limit, loading: false, error: res.error ?? (res.result?.kind === 'video' ? notAList : null)}
+          : {
+              entries: got,
+              limit,
+              // A listing read page by page goes on loading (below) until it has `limit`.
+              loading: !!res.listing && (limit === 0 || got.length < limit),
+              error: res.error ?? (res.result?.kind === 'video' ? notAList : null),
+              listing: res.listing,
+              done: !res.listing && (limit === 0 || got.length < limit),
+            }
       } catch (e) {
         if (latest.current[t] !== id) return
-        next = {entries: [], limit, loading: false, error: {...notAList, title: 'Couldn’t list the videos', message: errMessage(e)}}
+        next = {entries: [], limit, loading: false, error: {...notAList, title: 'Couldn’t list the videos', message: errMessage(e)}, listing: 0, done: true}
       }
       setLists((l) => {
         const cur = l[t]
@@ -66,20 +83,61 @@ export function ChannelView({feed, onBack}: {feed: Feed; onBack: () => void}) {
     [feed.id],
   )
 
+  // A listing read page by page is pulled on until it has what was asked for.
+  const pulling = useRef(new Set<number>())
+  useEffect(() => {
+    for (const [t, cur] of Object.entries(lists)) {
+      if (!cur?.listing || cur.done || !cur.loading || pulling.current.has(cur.listing)) continue
+      const {listing, limit} = cur
+      pulling.current.add(listing)
+      api
+        .moreFeedEntries(listing, limit)
+        .then((part) =>
+          setLists((l) => {
+            const c = l[t]
+            if (!c || c.listing !== listing) return l // read again meanwhile
+            const entries = part.entries.length ? [...c.entries, ...part.entries] : c.entries
+            const done = part.done
+            const loading = !done && (c.limit === 0 || entries.length < c.limit)
+            const error = done && part.error && entries.length === 0 ? {...notAList, title: 'Couldn’t list the videos', message: part.error} : c.error
+            return {...l, [t]: {...c, entries, done, loading, error}}
+          }),
+        )
+        .catch(() => setLists((l) => (l[t]?.listing === listing ? {...l, [t]: {...l[t]!, loading: false, done: true}} : l)))
+        .finally(() => pulling.current.delete(listing))
+    }
+  }, [lists])
+
+  /** "Show more" (n more) or "Show all" (n = 0). */
+  const showMore = (n: number) => {
+    const cur = lists[tab]
+    if (!cur?.listing || cur.done) return void load(tab, n === 0 ? 0 : (cur?.limit ?? FIRST) + n)
+    const limit = n === 0 ? 0 : cur.entries.length + n
+    setLists((l) => ({...l, [tab]: {...cur, limit, loading: true}}))
+  }
+
   // Each tab is listed the first time it opens; switching back shows what was already read.
   const current = lists[tab]
   useEffect(() => {
     if (!lists[tab]) void load(tab, FIRST)
   }, [tab, lists, load])
   // Leaving the page stops a slow listing.
-  useEffect(() => () => void api.cancelBrowse(), [])
+  // (After a tick: StrictMode unmounts and mounts again at once, which must not stop it.)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      setTimeout(() => !mounted.current && void api.cancelBrowse(), 0)
+    }
+  }, [])
 
   const entries = useMemo(() => {
     const all = current?.entries ?? []
     const q = filter.trim().toLowerCase()
     return q ? all.filter((e) => e.title.toLowerCase().includes(q)) : all
   }, [current, filter])
-  const more = !!current && !current.loading && current.limit > 0 && current.entries.length >= current.limit
+  const more = !!current && !current.loading && !current.done && current.limit > 0 && current.entries.length >= current.limit
 
   // The grid works in indices of the current tab; the ticks themselves are kept by video ID.
   const selected = useMemo(() => new Set(entries.filter((e) => picked.has(e.id)).map((e) => e.index)), [entries, picked])
@@ -196,8 +254,8 @@ export function ChannelView({feed, onBack}: {feed: Feed; onBack: () => void}) {
             </>
           ) : (
             <>
-              <Button onClick={() => void load(tab, (current?.limit ?? FIRST) + MORE)}>Show more</Button>
-              <Button variant="ghost" onClick={() => void load(tab, 0)} title="Large channels can take a minute">
+              <Button onClick={() => showMore(MORE)}>Show more</Button>
+              <Button variant="ghost" onClick={() => showMore(0)} title="Large channels can take a minute">
                 Show all
               </Button>
             </>
