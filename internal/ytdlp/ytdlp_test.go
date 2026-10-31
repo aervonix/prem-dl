@@ -1110,3 +1110,47 @@ func TestChannelOrPlaylist(t *testing.T) {
 		}
 	}
 }
+
+func TestCompatibleSortsH264First(t *testing.T) {
+	e := testEnv()
+	o := e.Settings.Defaults
+	o.Compatible = true
+	for _, preset := range []string{"best", "720"} {
+		o.Preset = preset
+		if args := e.DownloadArgs(o, Target{URL: "https://example.com/v"}); !has(args, "--format-sort="+CompatibleSort) {
+			t.Errorf("%s: no compatible sort in %v", preset, args)
+		}
+	}
+	// WebM can't hold H.264, and audio has no video codec to prefer.
+	o.Preset, o.Container = "best", "webm"
+	if args := e.DownloadArgs(o, Target{URL: "https://example.com/v"}); !has(args, "--format-sort="+QualitySort) {
+		t.Errorf("webm: %v", args)
+	}
+	o.Preset, o.Container = "audio", ""
+	for _, a := range e.DownloadArgs(o, Target{URL: "https://example.com/v"}) {
+		if strings.HasPrefix(a, "--format-sort=") {
+			t.Errorf("audio got %s", a)
+		}
+	}
+}
+
+func TestSquareCoverOnlyForEmbeddedAudioCovers(t *testing.T) {
+	e := testEnv()
+	o := e.Settings.Defaults
+	o.Preset, o.EmbedThumbnail, o.SquareCover = "audio", true, true
+	ppa := "--postprocessor-args=ThumbnailsConvertor+FFmpeg_o:" + squareCrop
+	if args := e.DownloadArgs(o, Target{URL: "https://example.com/v"}); !has(args, ppa) || !has(args, "--convert-thumbnails=jpg") {
+		t.Errorf("audio with a cover: %v", args)
+	}
+	for name, change := range map[string]func(*settings.DownloadOptions){
+		"video":      func(o *settings.DownloadOptions) { o.Preset = "best" },
+		"no cover":   func(o *settings.DownloadOptions) { o.EmbedThumbnail = false },
+		"not chosen": func(o *settings.DownloadOptions) { o.SquareCover = false },
+	} {
+		oo := o
+		change(&oo)
+		if has(e.DownloadArgs(oo, Target{URL: "https://example.com/v"}), ppa) {
+			t.Errorf("%s: cropped anyway", name)
+		}
+	}
+}

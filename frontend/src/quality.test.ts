@@ -45,6 +45,19 @@ describe('pickVideo', () => {
   })
 })
 
+describe('compatible (ytdlp.CompatibleSort)', () => {
+  it('takes H.264 before resolution, but not a low format just for its AAC', () => {
+    // Observed with yt-dlp: 1080p avc1 + mp4a, not VP9 2160p, nor the 360p "18" that carries AAC.
+    expect(pickVideo(formats, 0, true)?.id).toBe('137')
+    expect(pickVideo(formats, 720, true)?.id).toBe('136')
+    expect(pickAudio(formats, '', true)?.id).toBe('141')
+    expect(pickAudio([a('251', 'opus', 160, 1), a('140', 'mp4a.40.2', 129, 1)], '', true)?.id).toBe('140')
+  })
+  it('estimates what it would download', () => {
+    expect(presetEstimate(video, 'best', '', true)).toEqual({format: formats[5], size: 77_200_000 + 6_858_879})
+  })
+})
+
 describe('pickAudio', () => {
   it('takes the highest bitrate', () => {
     expect(pickAudio(formats)?.id).toBe('141')

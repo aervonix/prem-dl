@@ -155,6 +155,12 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 		// WebP thumbnails can't be embedded in most containers.
 		a = append(a, "--convert-thumbnails=jpg")
 	}
+	if o.SquareCover && o.EmbedThumbnail && (o.Preset == "audio" || customAudio(o)) {
+		// Crops the middle square out while the thumbnail is converted (observed: YouTube's
+		// 1280x720 WebP became a 720x720 cover in the MP3). A thumbnail that is already a JPEG
+		// isn't converted, so it stays as it is; YouTube's best are WebP.
+		a = append(a, "--postprocessor-args=ThumbnailsConvertor+FFmpeg_o:"+squareCrop)
+	}
 	if o.WriteDescription {
 		a = append(a, "--write-description")
 	}
@@ -234,6 +240,24 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 // streams, VP9 at ~2.8 Mbps and AV1 at ~0.4 Mbps, and the default ranking picked the AV1 one.
 const QualitySort = "res,fps,hdr:12,vbr"
 
+// squareCrop is ffmpeg's arguments for a square JPEG from the middle of a picture. yt-dlp splits
+// them like a shell, so the expression is quoted for ffmpeg's filter parser inside.
+const squareCrop = `-c:v mjpeg -qmin 1 -qscale:v 1 -vf crop="'if(gt(ih,iw),iw,ih)':'if(gt(iw,ih),ih,iw)'"`
+
+// CompatibleSort is QualitySort for DownloadOptions.Compatible: H.264 video ahead of resolution
+// (anything else plays in fewer places, however sharp), and then AAC audio. The audio codec
+// comes after resolution, or a low progressive format carrying AAC (YouTube's 360p "18") would
+// beat 1080p H.264 with separate audio. Observed: 270+140, avc1 1080p + mp4a, where QualitySort
+// takes 625+251, VP9 2160p + Opus. quality.ts mirrors it.
+const CompatibleSort = "+vcodec:avc,res,fps,+acodec:m4a,hdr:12,vbr"
+
+func sortFor(o settings.DownloadOptions) string {
+	if o.Compatible && o.Container != "webm" {
+		return CompatibleSort
+	}
+	return QualitySort
+}
+
 // FormatArgs maps the quality preset onto yt-dlp's format selection flags.
 func FormatArgs(o settings.DownloadOptions) []string {
 	var a []string
@@ -255,12 +279,12 @@ func FormatArgs(o settings.DownloadOptions) []string {
 			return append(a, "--extract-audio")
 		}
 	case "best", "":
-		a = append(a, "--format="+withAudioLang("bv*+ba/b", o.AudioLang), "--format-sort="+QualitySort)
+		a = append(a, "--format="+withAudioLang("bv*+ba/b", o.AudioLang), "--format-sort="+sortFor(o))
 	default:
 		h := o.Preset
 		// "<=?" also admits formats whose height is unknown (some sites don't report it).
 		expr := fmt.Sprintf("bv*[height<=%[1]s]+ba/b[height<=%[1]s]/bv*[height<=?%[1]s]+ba/b[height<=?%[1]s]", h)
-		a = append(a, "--format="+withAudioLang(expr, o.AudioLang), "--format-sort="+QualitySort)
+		a = append(a, "--format="+withAudioLang(expr, o.AudioLang), "--format-sort="+sortFor(o))
 	}
 	switch o.Container {
 	case "":

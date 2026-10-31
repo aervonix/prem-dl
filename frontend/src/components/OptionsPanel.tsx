@@ -190,6 +190,14 @@ export function OptionsPanel({
                 label="Embed cover art"
                 description={value.container === 'webm' && !audioFile ? "WebM files can't hold cover art. Pick Auto, MP4 or MKV." : "Thumbnail as the file's cover image"}
               />
+              {audioFile && value.embedThumbnail && (
+                <Switch
+                  checked={value.squareCover}
+                  onChange={(v) => set('squareCover', v)}
+                  label="Square cover art"
+                  description="Crops the middle out of the 16:9 thumbnail, where YouTube puts the album art"
+                />
+              )}
               <Switch checked={value.writeThumbnail} onChange={(v) => set('writeThumbnail', v)} label="Save thumbnail file" />
               <Switch checked={value.writeDescription} onChange={(v) => set('writeDescription', v)} label="Save description (.description)" />
               <Switch checked={value.writeInfoJson} onChange={(v) => set('writeInfoJson', v)} label="Save info (.info.json)" />

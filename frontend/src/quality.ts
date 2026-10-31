@@ -48,22 +48,31 @@ function hdrRank(f: FormatInfo): number {
   return HDR_RANK[f.dynamicRange] ?? 0
 }
 
+// ytdlp.CompatibleSort's "+vcodec:avc" and "+acodec:m4a": H.264 and AAC first, the rest as equals.
+const isAvc = (f: FormatInfo) => (/^(avc|h264)/i.test(f.vcodec) ? 1 : 0)
+const isAac = (f: FormatInfo) => (/^(mp4a|aac)/i.test(f.acodec) ? 1 : 0)
+
 /**
- * The video stream "bv*[height<=h]" picks under ytdlp.QualitySort (res,fps,hdr:12,vbr). With no
- * stream at or below h it takes those of unknown height, as "<=?" does; 0 means no limit.
+ * The video stream "bv*[height<=h]" picks under ytdlp.QualitySort (res,fps,hdr:12,vbr), or with
+ * compatible ytdlp.CompatibleSort (H.264 first). With no stream at or below h it takes those of
+ * unknown height, as "<=?" does; 0 means no limit.
  */
-export function pickVideo(formats: FormatInfo[], maxHeight = 0): FormatInfo | undefined {
+export function pickVideo(formats: FormatInfo[], maxHeight = 0, compatible = false): FormatInfo | undefined {
   const video = formats.filter((f) => f.hasVideo)
   let pool = maxHeight > 0 ? video.filter((f) => f.height > 0 && f.height <= maxHeight) : video
   if (pool.length === 0 && maxHeight > 0) pool = video.filter((f) => !f.height)
-  return [...pool].sort((a, b) => b.height - a.height || b.fps - a.fps || hdrRank(b) - hdrRank(a) || (b.vbr || b.tbr) - (a.vbr || a.tbr))[0]
+  const codec = (a: FormatInfo, b: FormatInfo) => (compatible ? isAvc(b) - isAvc(a) : 0)
+  const audio = (a: FormatInfo, b: FormatInfo) => (compatible ? isAac(b) - isAac(a) : 0)
+  return [...pool].sort(
+    (a, b) => codec(a, b) || b.height - a.height || b.fps - a.fps || audio(a, b) || hdrRank(b) - hdrRank(a) || (b.vbr || b.tbr) - (a.vbr || a.tbr),
+  )[0]
 }
 
 /**
  * The audio stream "ba" picks: the track in lang when given (as withAudioLang does), else the
  * original track of a dubbed video, then the highest bitrate.
  */
-export function pickAudio(formats: FormatInfo[], lang = ''): FormatInfo | undefined {
+export function pickAudio(formats: FormatInfo[], lang = '', compatible = false): FormatInfo | undefined {
   let pool = formats.filter((f) => f.hasAudio && !f.hasVideo)
   const narrow = (keep: (f: FormatInfo) => boolean) => {
     const kept = pool.filter(keep)
@@ -71,22 +80,22 @@ export function pickAudio(formats: FormatInfo[], lang = ''): FormatInfo | undefi
     return kept.length > 0
   }
   if (!lang || !narrow((f) => f.language.startsWith(lang))) narrow((f) => /original/i.test(f.note))
-  return [...pool].sort((a, b) => (b.abr || b.tbr) - (a.abr || a.tbr))[0]
+  return [...pool].sort((a, b) => (compatible ? isAac(b) - isAac(a) : 0) || (b.abr || b.tbr) - (a.abr || a.tbr))[0]
 }
 
 /** About how big a format downloads: with the best audio added when it has none; 0 when unknown. */
-export function downloadSize(formats: FormatInfo[], f: FormatInfo, audioLang = ''): number {
+export function downloadSize(formats: FormatInfo[], f: FormatInfo, audioLang = '', compatible = false): number {
   if (!f.filesize) return 0
   if (!f.hasVideo || f.hasAudio) return f.filesize
-  const audio = pickAudio(formats, audioLang)
+  const audio = pickAudio(formats, audioLang, compatible)
   if (!audio) return f.filesize
   return audio.filesize ? f.filesize + audio.filesize : 0
 }
 
 /** What a video preset ("best" or a height) would download from this video, and about how big. */
-export function presetEstimate(video: VideoInfo, preset: string, audioLang = ''): {format?: FormatInfo; size: number} {
-  const format = pickVideo(video.formats, preset === 'best' ? 0 : Number(preset) || 0)
-  return {format, size: format ? downloadSize(video.formats, format, audioLang) : 0}
+export function presetEstimate(video: VideoInfo, preset: string, audioLang = '', compatible = false): {format?: FormatInfo; size: number} {
+  const format = pickVideo(video.formats, preset === 'best' ? 0 : Number(preset) || 0, compatible)
+  return {format, size: format ? downloadSize(video.formats, format, audioLang, compatible) : 0}
 }
 
 /** A video's formats for the format table, best first; audio-only ones by bitrate. */

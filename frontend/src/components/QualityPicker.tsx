@@ -3,7 +3,7 @@ import {bytes} from '../format'
 import {Icon} from '../icons'
 import {codecName, expressionFor, formatRows, isAudioFormat, PRESET_HEIGHTS, presetEstimate, downloadSize, resolutionLabel} from '../quality'
 import type {AudioFormat, DownloadOptions, FormatInfo, Preset, VideoInfo} from '../types'
-import {Field, Segmented} from './ui'
+import {Field, Segmented, Switch} from './ui'
 
 const languageNames = (() => {
   try {
@@ -167,6 +167,14 @@ export function QualityPicker({
           />
         </Field>
       )}
+      {!audioKind && !custom && value.container !== 'webm' && (
+        <Switch
+          checked={value.compatible}
+          onChange={(v) => set('compatible', v)}
+          label="Most compatible (H.264 + AAC)"
+          description="For video editors, TVs and older phones that won't play VP9, AV1 or Opus. On YouTube that means 1080p at most."
+        />
+      )}
     </div>
   )
 }
@@ -181,7 +189,7 @@ function VideoTiles({value, video, maxHeight, onPick}: {value: DownloadOptions; 
     {preset: 'best' as Preset, name: 'Best'},
     ...heights.map((h) => ({preset: String(h) as Preset, name: resolutionLabel(h)})),
   ].map((t) => {
-    const est = sized ? presetEstimate(video, t.preset, value.audioLang) : {size: 0}
+    const est = sized ? presetEstimate(video, t.preset, value.audioLang, value.compatible) : {size: 0}
     const f = est.format
     const tags: string[] = []
     if (f && t.preset === 'best') tags.push(resolutionLabel(f.height, f.fps))

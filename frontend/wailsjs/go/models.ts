@@ -942,11 +942,13 @@ export namespace settings {
 	    formatId: string;
 	    formatAudioOnly: boolean;
 	    container: string;
+	    compatible: boolean;
 	    audioFormat: string;
 	    audioQuality: string;
 	    subtitles: SubtitleOptions;
 	    embedMetadata: boolean;
 	    embedThumbnail: boolean;
+	    squareCover: boolean;
 	    embedChapters: boolean;
 	    writeDescription: boolean;
 	    writeInfoJson: boolean;
@@ -975,11 +977,13 @@ export namespace settings {
 	        this.formatId = source["formatId"];
 	        this.formatAudioOnly = source["formatAudioOnly"];
 	        this.container = source["container"];
+	        this.compatible = source["compatible"];
 	        this.audioFormat = source["audioFormat"];
 	        this.audioQuality = source["audioQuality"];
 	        this.subtitles = this.convertValues(source["subtitles"], SubtitleOptions);
 	        this.embedMetadata = source["embedMetadata"];
 	        this.embedThumbnail = source["embedThumbnail"];
+	        this.squareCover = source["squareCover"];
 	        this.embedChapters = source["embedChapters"];
 	        this.writeDescription = source["writeDescription"];
 	        this.writeInfoJson = source["writeInfoJson"];

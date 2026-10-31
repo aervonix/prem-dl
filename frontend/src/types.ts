@@ -29,11 +29,15 @@ export interface DownloadOptions {
   /** The custom format is audio only; it is saved as an audio file in its own codec. */
   formatAudioOnly: boolean
   container: '' | 'mp4' | 'mkv' | 'webm'
+  /** Prefer H.264 + AAC, which open in editors, TVs and older devices (1080p at most on YouTube). Video presets only. */
+  compatible: boolean
   audioFormat: AudioFormat
   audioQuality: string
   subtitles: SubtitleOptions
   embedMetadata: boolean
   embedThumbnail: boolean
+  /** Crop an audio download's cover art to a square (YouTube's thumbnails are 16:9). */
+  squareCover: boolean
   embedChapters: boolean
   writeDescription: boolean
   writeInfoJson: boolean

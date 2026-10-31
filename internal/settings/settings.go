@@ -37,14 +37,20 @@ type DownloadOptions struct {
 	// FormatAudioOnly: the custom format is audio only. It is saved as an audio file in its own
 	// codec (.opus, .m4a), which can hold cover art, where WebM can't.
 	FormatAudioOnly bool   `json:"formatAudioOnly"`
-	Container       string `json:"container"`    // "" | mp4 | mkv | webm
-	AudioFormat     string `json:"audioFormat"`  // best | mp3 | m4a | opus | flac | wav | aac
-	AudioQuality    string `json:"audioQuality"` // "0" (best) .. "10" (worst)
+	Container       string `json:"container"` // "" | mp4 | mkv | webm
+	// Compatible prefers H.264 video and AAC audio, which open in editors, TVs and older devices
+	// that refuse VP9, AV1 or Opus. On YouTube that means 1080p at most. Video presets only.
+	Compatible   bool   `json:"compatible"`
+	AudioFormat  string `json:"audioFormat"`  // best | mp3 | m4a | opus | flac | wav | aac
+	AudioQuality string `json:"audioQuality"` // "0" (best) .. "10" (worst)
 
 	Subtitles SubtitleOptions `json:"subtitles"`
 
-	EmbedMetadata    bool `json:"embedMetadata"`
-	EmbedThumbnail   bool `json:"embedThumbnail"`
+	EmbedMetadata  bool `json:"embedMetadata"`
+	EmbedThumbnail bool `json:"embedThumbnail"`
+	// SquareCover crops an audio download's cover art to a square: YouTube's thumbnails are
+	// 16:9, with the album art letterboxed inside.
+	SquareCover      bool `json:"squareCover"`
 	EmbedChapters    bool `json:"embedChapters"`
 	WriteDescription bool `json:"writeDescription"`
 	WriteInfoJSON    bool `json:"writeInfoJson"`
@@ -177,6 +183,7 @@ func StarterPresets() []NamedPreset {
 				Subtitles:         SubtitleOptions{Mode: "none", Langs: []string{"en"}},
 				EmbedMetadata:     true,
 				EmbedThumbnail:    true,
+				SquareCover:       true,
 				EmbedChapters:     true,
 				PlaylistFolder:    true,
 				PlaylistNumbering: true,
