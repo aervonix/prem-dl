@@ -119,6 +119,7 @@ type Settings struct {
 	NotifySystem        bool            `json:"notifySystem"`     // a Windows notification when one finishes while the app is in the background
 	CloseToTray         bool            `json:"closeToTray"`      // closing the window keeps the app running in the tray
 	StartWithWindows    bool            `json:"startWithWindows"` // start in the tray when the user signs in
+	KeepAwake           bool            `json:"keepAwake"`        // the computer doesn't sleep while downloads run
 	FollowEvery         int             `json:"followEvery"`      // hours between checks of followed channels; 0 = only when asked
 	ExtraArgs           string          `json:"extraArgs"`
 	Defaults            DownloadOptions `json:"defaults"`
@@ -145,6 +146,7 @@ func Default() Settings {
 		NotifySound:         true,
 		NotifyPopup:         true,
 		NotifySystem:        true,
+		KeepAwake:           true,
 		FollowEvery:         6,
 		Defaults: DownloadOptions{
 			Preset:            "best",

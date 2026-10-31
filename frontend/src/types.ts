@@ -108,6 +108,8 @@ export interface Settings {
   closeToTray: boolean
   /** Start in the tray when the user signs in to Windows. */
   startWithWindows: boolean
+  /** The computer doesn't go to sleep while downloads run (the screen may still turn off). */
+  keepAwake: boolean
   /** Hours between checks of followed channels and playlists: 0 (only when asked), 1, 3, 6, 12 or 24. */
   followEvery: number
   extraArgs: string

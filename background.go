@@ -68,6 +68,8 @@ func (a *App) startBackground(ctx context.Context) {
 // updateShell shows ov on the taskbar button and in the tray icon's tooltip. The icon is there
 // while the window is hidden, and always when closing is set to keep the app in the tray.
 func (a *App) updateShell(ov overview) {
+	// Not for a stream being waited for: that can be days away.
+	a.awake.Set(ov.Downloading > 0 && a.store.Get().KeepAwake)
 	sh := a.shell.Load()
 	if sh == nil {
 		return

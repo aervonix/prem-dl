@@ -184,6 +184,12 @@ export function GeneralTab({draft, upd}: TabProps) {
               label={words.startAtSignIn}
               description={state.noTray ? 'Opens Prem-dl when you sign in.' : `Starts ${words.inTray} when you sign in, without opening the window.`}
             />
+            <Switch
+              checked={draft.keepAwake}
+              onChange={(v) => upd({keepAwake: v})}
+              label="Keep the computer awake while downloading"
+              description="It won’t go to sleep until the downloads are done. The screen can still turn off, and closing a laptop’s lid still puts it to sleep."
+            />
           </div>
         </div>
       </Card>

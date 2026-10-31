@@ -106,6 +106,7 @@ type App struct {
 	launch   launchArgs
 	act      *activity
 	shell    atomic.Pointer[sys.Shell] // nil until started, or if there's no tray
+	awake    *sys.Awake                // keeps the computer from sleeping while downloads run
 	hidden   atomic.Bool               // the window is hidden, with the tray icon to bring it back
 	quitting atomic.Bool               // Quit from the tray: closing quits instead of hiding
 	toasts   atomic.Bool               // Windows notifications are set up
@@ -136,6 +137,7 @@ func NewApp(launch launchArgs) *App {
 		toolsFirst: make(chan struct{}),
 		launch:     launch,
 		infos:      ytdlp.NewInfoCache(),
+		awake:      sys.NewAwake(),
 		searcher:   ytweb.New(),
 		lister:     ytweb.NewLister(),
 	}
@@ -291,6 +293,7 @@ func (a *App) shutdown(ctx context.Context) {
 	a.feeds.Shutdown() // before the queue, so a check can't add to it while it shuts down
 	a.q.Shutdown()
 	a.stopChallengeSolver()
+	a.awake.Close()
 }
 
 // onSecondInstance gets the command line of a second launch: the user starting the app again, a
@@ -384,7 +387,7 @@ func (a *App) SaveSettings(s settings.Settings) SettingsResponse {
 		}
 		return SettingsResponse{Settings: prev, Error: err.Error()}
 	}
-	if saved.CloseToTray != prev.CloseToTray {
+	if saved.CloseToTray != prev.CloseToTray || saved.KeepAwake != prev.KeepAwake {
 		a.updateShell(a.act.current())
 	}
 	if saved.FollowEvery != prev.FollowEvery {

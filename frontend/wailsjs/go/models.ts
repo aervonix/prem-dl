@@ -1048,6 +1048,7 @@ export namespace settings {
 	    notifySystem: boolean;
 	    closeToTray: boolean;
 	    startWithWindows: boolean;
+	    keepAwake: boolean;
 	    followEvery: number;
 	    extraArgs: string;
 	    defaults: DownloadOptions;
@@ -1080,6 +1081,7 @@ export namespace settings {
 	        this.notifySystem = source["notifySystem"];
 	        this.closeToTray = source["closeToTray"];
 	        this.startWithWindows = source["startWithWindows"];
+	        this.keepAwake = source["keepAwake"];
 	        this.followEvery = source["followEvery"];
 	        this.extraArgs = source["extraArgs"];
 	        this.defaults = this.convertValues(source["defaults"], DownloadOptions);
