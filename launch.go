@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/netip"
 	"net/url"
 	"strings"
 
@@ -8,9 +9,8 @@ import (
 	"yt-dlp-gui/internal/ytdlp"
 )
 
-// urlScheme is the link type that opens Prem-dl on a link: prem-dl://open?url=<link>, or with
-// the Chrome helper's quick actions prem-dl://download?url=<link>&preset=<name> and
-// prem-dl://follow?url=<link>. The helper uses it to start the app when it isn't running (when it
+// urlScheme is the link type that opens Prem-dl on a link: prem-dl://open?url=<link>, or
+// prem-dl://follow?url=<link> for the follow dialog. The helper uses it to start the app when it isn't running (when it
 // is, it uses linkbridge). It is registered for the current user at startup.
 const urlScheme = "prem-dl"
 
@@ -21,8 +21,7 @@ const backgroundFlag = "--background"
 // launchArgs is what the app was started with, or what a second launch handed over.
 type launchArgs struct {
 	Link       string // a link to open on the Download page, already checked
-	Action     string // what to do with Link: a linkbridge action ("" = open it)
-	Preset     string // the preset a download action uses
+	Action     string // what to do with Link: open it ("") or follow it
 	Background bool   // stay in the tray
 }
 
@@ -37,9 +36,9 @@ func parseLaunch(args []string) launchArgs {
 			l.Background = true
 		case l.Link != "":
 		case strings.HasPrefix(strings.ToLower(a), urlScheme+":"):
-			l.Link, l.Action, l.Preset = schemeLink(a)
+			l.Link, l.Action = schemeLink(a)
 		case strings.HasPrefix(a, "http://") || strings.HasPrefix(a, "https://"):
-			if link, err := ytdlp.NormalizeURL(a); err == nil {
+			if link, err := ytdlp.NormalizeURL(a); err == nil && !localHost(link) {
 				l.Link = link
 			}
 		}
@@ -48,21 +47,43 @@ func parseLaunch(args []string) launchArgs {
 }
 
 // schemeLink takes the http(s) link out of a prem-dl: link, with what to do with it. link is ""
-// when there's none; an action other than open, download or follow opens it.
-func schemeLink(raw string) (link, action, preset string) {
+// when there's none.
+//
+// Any web page can open a prem-dl: link (once the browser has asked), so what one does has to be
+// harmless without the user's say-so: it opens the link for review, or the follow dialog. A
+// download (prem-dl://download, the helper's Download now while Prem-dl isn't running) goes to
+// the Download page too, and links to this computer or the local network are refused, so a page
+// can't make Prem-dl fetch them. The helper reaches a running Prem-dl through linkbridge, which only it can
+// use, and only there does Download now queue at once.
+func schemeLink(raw string) (link, action string) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return "", "", ""
+		return "", ""
 	}
-	q := u.Query()
-	if link, err = ytdlp.NormalizeURL(q.Get("url")); err != nil {
-		return "", "", ""
+	if link, err = ytdlp.NormalizeURL(u.Query().Get("url")); err != nil || localHost(link) {
+		return "", ""
 	}
-	switch strings.ToLower(u.Host) {
-	case linkbridge.ActionDownload:
-		return link, linkbridge.ActionDownload, q.Get("preset")
-	case linkbridge.ActionFollow:
-		return link, linkbridge.ActionFollow, ""
+	if strings.EqualFold(u.Host, linkbridge.ActionFollow) {
+		return link, linkbridge.ActionFollow
 	}
-	return link, linkbridge.ActionOpen, ""
+	return link, linkbridge.ActionOpen
+}
+
+// localHost reports whether link points at this computer or the local network: localhost, or
+// an address in a loopback, private or link-local range.
+func localHost(link string) bool {
+	u, err := url.Parse(link)
+	if err != nil {
+		return true
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	if err != nil {
+		return false // a name: what it resolves to is the site's business
+	}
+	ip = ip.Unmap()
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() || ip.IsLinkLocalMulticast()
 }

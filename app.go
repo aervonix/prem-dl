@@ -197,12 +197,6 @@ func (a *App) startup(ctx context.Context) {
 	a.applyTheme(a.store.Get().Theme)
 	a.detectOnce.Do(func() { go a.detectTools() })
 	go removeStaleTemp()
-	if l := a.launch; l.Link != "" && l.Action == linkbridge.ActionDownload {
-		// Started by the Chrome helper's "Download now": no window needed to review it.
-		if err := a.quickDownload(l.Link, l.Preset); err != nil {
-			a.launch.Action = linkbridge.ActionOpen // shown on the Download page instead
-		}
-	}
 	go a.appUpdateLoop()
 	go a.startBackground(ctx)
 }
@@ -317,7 +311,7 @@ func (a *App) onSecondInstance(data options.SecondInstanceData) {
 		a.showWindow()
 		return
 	}
-	if err := a.handleLink(linkbridge.Request{URL: l.Link, Action: l.Action, Preset: l.Preset}); err != nil {
+	if err := a.handleLink(linkbridge.Request{URL: l.Link, Action: l.Action}); err != nil {
 		a.showWindow()
 		a.emit("app:error", err.Error())
 	}

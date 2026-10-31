@@ -32,8 +32,9 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
 - **Send links from Chrome.** With the helper extension, click its toolbar button, or right-click a
   page or a link: **Open in Prem-dl** to review it, **Download now** (or **Download as** one of your
   presets) to queue it straight away, or **Follow this channel or playlist** on YouTube. Prem-dl
-  starts first if it isn't running. A playlist or channel sent with Download now opens for review
-  instead, so nothing big is queued by surprise.
+  starts first if it isn't running; Download now then opens the link for review, since any web
+  page can start Prem-dl that way. A playlist or channel sent with Download now opens for review
+  too, so nothing big is queued by surprise.
 - **Quality.** Best, 4K down to 360p, each with about how big the file will be, or audio only
   (MP3, M4A, Opus, AAC, FLAC, WAV or the original stream). Or pick an exact format from a table of
   resolution, codec, bitrate and size. Container can be automatic, MP4, MKV or WebM. Within the
