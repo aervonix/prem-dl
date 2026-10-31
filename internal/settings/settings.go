@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -249,8 +250,10 @@ var (
 	}
 )
 
-// ValidateOptions normalises the options in place and rejects values that would make
-// yt-dlp misbehave. The returned error message is shown to the user.
+// driveRe matches a Windows drive at the start of a path (C:\ or C:/): a preset file can come
+// from the other system.
+var driveRe = regexp.MustCompile(`^[A-Za-z]:[\\/]`)
+
 // checkTemplate refuses a file name template that would lose the extension or read as a flag.
 func checkTemplate(t string) error {
 	if !strings.Contains(t, "%(ext)s") {
@@ -262,11 +265,19 @@ func checkTemplate(t string) error {
 	return nil
 }
 
+// ValidateOptions normalises the options in place and rejects values that would make
+// yt-dlp misbehave. The returned error message is shown to the user.
 func ValidateOptions(o *DownloadOptions) error {
 	o.FilenameTemplate = strings.TrimSpace(o.FilenameTemplate)
 	if o.FilenameTemplate != "" {
 		if err := checkTemplate(o.FilenameTemplate); err != nil {
 			return err
+		}
+		// Options travel (presets, exported follows), so their template stays inside the
+		// download folder: Settings' own template is the place for anything else.
+		if filepath.IsAbs(o.FilenameTemplate) || strings.HasPrefix(o.FilenameTemplate, "/") || strings.HasPrefix(o.FilenameTemplate, `\`) || driveRe.MatchString(o.FilenameTemplate) ||
+			slices.Contains(strings.FieldsFunc(o.FilenameTemplate, func(r rune) bool { return r == '/' || r == '\\' }), "..") {
+			return errors.New("a preset's file name template stays inside the download folder: no full paths or ..")
 		}
 	}
 	if !oneOf(o.Preset, "best", "2160", "1440", "1080", "720", "480", "360", "audio", "custom") {
@@ -786,10 +797,11 @@ func (h ActiveHours) Open(now time.Time) (bool, time.Time) {
 	if in {
 		return true, time.Time{}
 	}
-	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	next := day.Add(time.Duration(from) * time.Minute)
+	// By the clock, not by adding minutes to midnight: on a day the clocks change, that's an
+	// hour off.
+	next := time.Date(now.Year(), now.Month(), now.Day(), from/60, from%60, 0, 0, now.Location())
 	if !next.After(now) {
-		next = next.AddDate(0, 0, 1)
+		next = time.Date(now.Year(), now.Month(), now.Day()+1, from/60, from%60, 0, 0, now.Location())
 	}
 	return false, next
 }

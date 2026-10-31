@@ -670,14 +670,18 @@ func (m *Manager) check(id string) {
 	if len(fresh) > 0 {
 		added, err = m.deps.Enqueue(jobsFor(f, fresh, len(f.Tabs) > 0), f.Options)
 	}
+	var liveErr error
 	if len(live) > 0 && err == nil {
 		// Waited for, then recorded from the beginning (a check can come an hour in).
 		o := f.Options
 		o.WaitForVideo, o.LiveFromStart = true, true
-		var n int
-		if n, err = m.deps.Enqueue(jobsFor(f, live, len(f.Tabs) > 0), o); err == nil {
+		// A failure here leaves the uploads above queued: they are noted all the same, and only
+		// the streams are tried again next time.
+		if n, lerr := m.deps.Enqueue(jobsFor(f, live, len(f.Tabs) > 0), o); lerr == nil {
 			added += n
 			fresh = append(fresh, live...)
+		} else {
+			liveErr = lerr
 		}
 	}
 
@@ -702,6 +706,9 @@ func (m *Manager) check(id string) {
 	}
 	r.NewTabs = without(r.NewTabs, newTabs)
 	r.trim()
+	if liveErr != nil {
+		r.Error = toAppError(liveErr)
+	}
 	r.LastNew = added
 	r.Queued += added
 	if added > 0 {
@@ -733,13 +740,13 @@ func waiting(e ytdlp.PlaylistEntry) bool {
 // the queue all that time (and YouTube lists placeholders months ahead).
 const soonWindow = 48 * time.Hour
 
-// soon reports whether a stream is live, or due within soonWindow. One whose time the listing
-// doesn't give counts as soon: the queue waits for it all the same.
+// soon reports whether a stream is live, or due within soonWindow. One whose start the listing
+// doesn't give isn't: it is taken once it's over, as without RecordLive.
 func soon(e ytdlp.PlaylistEntry) bool {
-	if e.LiveStatus == "is_live" || e.Timestamp <= 0 {
+	if e.LiveStatus == "is_live" {
 		return true
 	}
-	return time.Unix(e.Timestamp, 0).Before(now().Add(soonWindow))
+	return e.ReleaseTimestamp > 0 && time.Unix(e.ReleaseTimestamp, 0).Before(now().Add(soonWindow))
 }
 
 // item is a listed video and the channel tab it was found on ("" when not a channel).

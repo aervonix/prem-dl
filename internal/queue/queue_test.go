@@ -79,6 +79,21 @@ func fakeYtdlp(url string) {
 		time.Sleep(1500 * time.Millisecond)
 	case strings.HasSuffix(url, "/already"):
 		p("[download] " + filepath.Join(os.TempDir(), "old.mp4") + " has already been downloaded")
+	case strings.HasSuffix(url, "/latefail"):
+		// The merge works; embedding the cover afterwards fails in ffmpeg.
+		if slices.Contains(os.Args, "--merge-output-format=mkv") {
+			p("RERUN-AS-MKV")
+		}
+		p("YTGUI_PP Merger|started")
+		p("YTGUI_PP Merger|finished")
+		p("YTGUI_PP EmbedThumbnail|started")
+		fmt.Fprintln(os.Stderr, "ERROR: Postprocessing: Conversion failed!")
+		os.Exit(1)
+	case strings.HasSuffix(url, "/slowvp8"):
+		if !slices.Contains(os.Args, "--merge-output-format=mkv") {
+			time.Sleep(800 * time.Millisecond)
+		}
+		fakeYtdlp("https://fake.test/vp8")
 	case strings.HasSuffix(url, "/vp8"):
 		// VP8 + Vorbis: merging into MP4 fails (yt-dlp's real output); into MKV it works.
 		if slices.Contains(os.Args, "--merge-output-format=mkv") {
@@ -289,12 +304,16 @@ func TestNotEnoughSpaceStopsTheDownload(t *testing.T) {
 	start := time.Now()
 	waitFor(t, "failure", func() bool { return h.status(j.ID) == StatusFailed })
 	got, _ := h.m.Get(j.ID)
-	if got.Error == nil || got.Error.Code != "disk_full" || !strings.Contains(got.Error.Message, "3.0 GB") || !strings.Contains(got.Error.Message, "1.0 GB") {
+	if got.Error == nil || got.Error.Code != "disk_full" || !strings.Contains(got.Error.Message, "3.0 GB") || !strings.Contains(got.Error.Message, "6.0 GB") || !strings.Contains(got.Error.Message, "1.0 GB") {
 		t.Fatalf("error %+v", got.Error)
 	}
 	if asked != h.dir || time.Since(start) > 20*time.Second {
 		t.Errorf("asked about %q; took %v", asked, time.Since(start))
 	}
+	// A merge needs the streams and the result at once: 4 GB isn't enough for 3 GB.
+	h.m.deps.FreeSpace = func(string) (uint64, error) { return 4_000_000_000, nil }
+	k := h.add(t, "/b/big")
+	waitFor(t, "failure", func() bool { return h.status(k.ID) == StatusFailed })
 	// One that fits goes ahead.
 	h.m.deps.FreeSpace = func(string) (uint64, error) { return 1 << 40, nil }
 	ok := h.add(t, "/ok")
@@ -316,6 +335,29 @@ func TestAutoMergeFallsBackToMKV(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitFor(t, "failure", func() bool { return h.status(jobs[0].ID) == StatusFailed })
+}
+
+// Only a failure during the merge means MP4 couldn't hold the streams.
+func TestNoMKVRunAfterAMergeThatWorked(t *testing.T) {
+	h := newHarness(t, 1)
+	j := h.add(t, "/latefail")
+	waitFor(t, "failure", func() bool { return h.status(j.ID) == StatusFailed })
+	time.Sleep(100 * time.Millisecond)
+	if slices.Contains(h.m.Log(j.ID), "RERUN-AS-MKV") {
+		t.Fatal("a failure after the merge re-ran the whole download into MKV")
+	}
+}
+
+// Start now holds while the job it started runs, so the job's own re-run (MKV) goes ahead.
+func TestStartNowLastsWhileItsJobRuns(t *testing.T) {
+	h := newHarness(t, 1)
+	now := time.Now()
+	h.settings.ActiveHours = settings.ActiveHours{On: true, From: now.Add(2 * time.Hour).Format("15:04"), To: now.Add(3 * time.Hour).Format("15:04")}
+	j := h.add(t, "/slowvp8")
+	h.m.StartNow()
+	waitFor(t, "start", func() bool { return h.status(j.ID) != StatusQueued })
+	h.m.Kick() // a settings save, another job finishing
+	waitFor(t, "completion", func() bool { return h.status(j.ID) == StatusCompleted })
 }
 
 func TestArchiveSkipSaysSo(t *testing.T) {

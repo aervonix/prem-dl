@@ -1401,6 +1401,7 @@ export namespace ytdlp {
 	    extractor: string;
 	    viewCount: number;
 	    timestamp: number;
+	    releaseTimestamp: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new PlaylistEntry(source);
@@ -1422,6 +1423,7 @@ export namespace ytdlp {
 	        this.extractor = source["extractor"];
 	        this.viewCount = source["viewCount"];
 	        this.timestamp = source["timestamp"];
+	        this.releaseTimestamp = source["releaseTimestamp"];
 	    }
 	}
 	export class PlaylistInfo {

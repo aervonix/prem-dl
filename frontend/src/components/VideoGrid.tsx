@@ -149,16 +149,20 @@ const Card = memo(function Card({
   )
 })
 
+const byIndex = (e: PlaylistEntry) => e.index
+
 /**
  * The first entries of a long list, and an element to put after them that brings the next lot
  * when it scrolls near. A new list (fewer entries than before, or another first entry) starts
  * again; one that grows keeps what's shown.
  */
-export function useSteps<T>(entries: T[]): {shown: T[]; sentinel: ReactNode} {
+export function useSteps<T>(entries: T[], key: (t: T) => string | number): {shown: T[]; sentinel: ReactNode} {
   const [limit, setLimit] = useState(STEP)
-  const [was, setWas] = useState({first: entries[0], n: entries.length})
-  if (entries[0] !== was.first || entries.length < was.n) {
-    setWas({first: entries[0], n: entries.length})
+  // By key, not object: a job's object is replaced on every progress tick.
+  const first = entries.length > 0 ? key(entries[0]) : undefined
+  const [was, setWas] = useState({first, n: entries.length})
+  if (first !== was.first || entries.length < was.n) {
+    setWas({first, n: entries.length})
     setLimit(STEP)
   } else if (entries.length !== was.n) {
     setWas({first: was.first, n: entries.length})
@@ -222,7 +226,7 @@ export const VideoGrid = memo(function VideoGrid({
   const list = useRef(entries)
   list.current = entries
 
-  const {shown, sentinel} = useSteps(entries)
+  const {shown, sentinel} = useSteps(entries, byIndex)
 
   const onPick = useCallback(
     (index: number, range: boolean) => {

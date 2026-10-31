@@ -13,7 +13,7 @@ const {VideoGrid} = await import('./VideoGrid')
 function entry(index: number): PlaylistEntry {
   return {
     index, id: `v${index}`, title: `Video ${index}`, url: `https://www.youtube.com/watch?v=v${index}`, uploader: '', thumbnail: '',
-    duration: 0, group: '', unavailable: false, isPlaylist: false, liveStatus: '', extractor: 'youtube', viewCount: 0, timestamp: 0,
+    duration: 0, group: '', unavailable: false, isPlaylist: false, liveStatus: '', extractor: 'youtube', viewCount: 0, timestamp: 0, releaseTimestamp: 0,
   }
 }
 const range = (from: number, to: number) => Array.from({length: to - from + 1}, (_, i) => entry(from + i))

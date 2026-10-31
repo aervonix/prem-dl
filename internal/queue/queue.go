@@ -696,8 +696,10 @@ func (m *Manager) scheduleLocked() {
 			nextRetry = r
 		}
 	}
-	if !waiting {
-		m.anyTime = false // "Start now" lasts until the queue has run dry
+	if !waiting && running == 0 {
+		// "Start now" lasts until the queue has run dry: a running job that comes back (a retry,
+		// the MKV re-run) still goes ahead.
+		m.anyTime = false
 	}
 	if open, opens := s.ActiveHours.Open(now); !open && !m.anyTime {
 		// Outside the download hours: nothing new starts until they open.
@@ -1135,8 +1137,10 @@ func (h *lineHandler) handle(line string, isErr bool) {
 			j.ETA = snap.ETA
 		})
 	case ytdlp.KindPost:
-		if parsed.PostName == "Merger" && parsed.PostStat == "started" {
-			h.merging = true
+		if parsed.PostName == "Merger" {
+			// Only a failure during the merge means MP4 couldn't hold the streams; a later step
+			// (cover art, metadata) failing is something else, and the streams are gone by then.
+			h.merging = parsed.PostStat == "started"
 		}
 		if parsed.PostStat == "started" {
 			stage := ytdlp.PostStage(parsed.PostName)
@@ -1201,11 +1205,20 @@ func (h *lineHandler) checkSpace() {
 	}
 	free, err := h.m.deps.FreeSpace(dir)
 	// A little over the estimate: sizes are approximate, and the drive shouldn't end up full.
-	if err != nil || uint64(need)+uint64(need)/20 <= free {
+	// Merging writes the result while the streams are still there, so a merge needs twice.
+	want := uint64(need) + uint64(need)/20
+	if h.tracker.Merges() {
+		want = 2 * uint64(need)
+	}
+	if err != nil || want <= free {
 		return
 	}
-	failure := apperr.New("disk_full", "Not enough space",
-		fmt.Sprintf("This download needs about %s, and the drive of %s has %s free.", humanBytes(uint64(need)), dir, humanBytes(free)),
+	msg := fmt.Sprintf("This download needs about %s, and the drive of %s has %s free.", humanBytes(want), dir, humanBytes(free))
+	if h.tracker.Merges() {
+		msg = fmt.Sprintf("This download is about %s, and needs as much again while its video and audio are joined: %s in all. The drive of %s has %s free.",
+			humanBytes(uint64(need)), humanBytes(want), dir, humanBytes(free))
+	}
+	failure := apperr.New("disk_full", "Not enough space", msg,
 		"Free some space or choose another download folder, then try again.", apperr.ActionSettings)
 	failure.Retryable = true
 	h.m.mu.Lock()

@@ -6,7 +6,7 @@ import type {DownloadOptions, SubMode, VideoInfo} from '../types'
 import {PartPicker} from './PartPicker'
 import {QualityPicker} from './QualityPicker'
 import {Button, Chip, Field, Segmented, Switch} from './ui'
-import {TEMPLATES, templateProblem} from '../templates'
+import {TEMPLATES, optionTemplateProblem} from '../templates'
 
 const COMMON_LANGS = ['en', 'es', 'fr', 'de', 'pt', 'it', 'ja', 'ko', 'zh-Hans', 'ru', 'ar', 'hi']
 
@@ -332,14 +332,14 @@ export function optionsProblem(o: DownloadOptions): string {
   if (o.sectionStart && s === null) return 'The start time isn’t a valid time.'
   if (o.sectionEnd && e === null) return 'The end time isn’t a valid time.'
   if (s !== null && e !== null && s >= e) return 'The start time must be before the end time.'
-  return templateProblem(o.filenameTemplate)
+  return optionTemplateProblem(o.filenameTemplate)
 }
 
 /** File names for these options: Settings' template, one of the named ones, or a custom one. */
 function TemplateField({value, onChange}: {value: string; onChange: (t: string) => void}) {
   const named = value === '' || TEMPLATES.some((t) => t.value === value)
   const [custom, setCustom] = useState(!named)
-  const problem = templateProblem(value)
+  const problem = optionTemplateProblem(value)
   return (
     <Field label="File names" hint={problem ? <span style={{color: 'var(--danger)'}}>{problem}</span> : 'Leave on Settings to use the template from General settings.'}>
       <div className="stack" style={{gap: 6}}>

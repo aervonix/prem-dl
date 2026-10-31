@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest'
 import {ago, basename, bytes, compactCount, dirname, duration, eta, goTime, hostOf, parseTime, plural, span, speed, startsAt, uploadDate, hoursOpen} from './format'
+import {optionTemplateProblem} from './templates'
 
 describe('bytes', () => {
   it('prints whole bytes and one decimal above', () => {
@@ -194,5 +195,13 @@ describe('hoursOpen', () => {
     expect(hoursOpen(night, at(12))).toEqual({open: false, opens: '23:00'})
     expect(hoursOpen({on: true, from: '09:00', to: '17:00'}, at(17))).toEqual({open: false, opens: '09:00'})
     expect(hoursOpen({on: false, from: '09:00', to: '17:00'}, at(20)).open).toBe(true)
+  })
+})
+
+describe('optionTemplateProblem', () => {
+  it('keeps a preset template inside the download folder', () => {
+    for (const bad of ['/tmp/%(title)s.%(ext)s', 'C:\\x\\%(title)s.%(ext)s', '../%(title)s.%(ext)s', 'a\\..\\%(title)s.%(ext)s']) expect(optionTemplateProblem(bad)).not.toBe('')
+    expect(optionTemplateProblem('%(channel)s/%(title)s.%(ext)s')).toBe('')
+    expect(optionTemplateProblem('%(title)s')).toMatch(/ext/)
   })
 })

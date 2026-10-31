@@ -74,6 +74,7 @@ function savedView(): View {
 }
 
 const NONE: PlaylistEntry[] = []
+const entryIndex = (e: PlaylistEntry) => e.index
 
 const PlaylistRow = memo(function PlaylistRow({entry, checked, onToggle, onOpen}: {entry: PlaylistEntry; checked: boolean; onToggle: (index: number) => void; onOpen: (url: string) => void}) {
   if (entry.isPlaylist && !entry.unavailable) {
@@ -712,7 +713,7 @@ export function DownloadPage() {
   }, [playlistUrl, state.feeds])
 
   const rows = playlist ? visible : []
-  const listRows = useSteps(view === 'list' ? rows : NONE)
+  const listRows = useSteps(view === 'list' ? rows : NONE, entryIndex)
   let lastGroup = ''
 
   return (

@@ -20,18 +20,20 @@ import (
 
 // entry is one result, named and shaped like yt-dlp's flat entries.
 type entry struct {
-	Type         string  `json:"_type"`
-	IEKey        string  `json:"ie_key,omitempty"`
-	ID           string  `json:"id,omitempty"`
-	URL          string  `json:"url"`
-	Title        string  `json:"title,omitempty"`
-	Uploader     string  `json:"uploader,omitempty"`
-	Thumbnails   []thumb `json:"thumbnails,omitempty"`
-	Duration     float64 `json:"duration,omitempty"`
-	ViewCount    *int64  `json:"view_count,omitempty"`
-	Timestamp    int64   `json:"timestamp,omitempty"`
-	LiveStatus   string  `json:"live_status,omitempty"`
-	Availability string  `json:"availability,omitempty"`
+	Type       string  `json:"_type"`
+	IEKey      string  `json:"ie_key,omitempty"`
+	ID         string  `json:"id,omitempty"`
+	URL        string  `json:"url"`
+	Title      string  `json:"title,omitempty"`
+	Uploader   string  `json:"uploader,omitempty"`
+	Thumbnails []thumb `json:"thumbnails,omitempty"`
+	Duration   float64 `json:"duration,omitempty"`
+	ViewCount  *int64  `json:"view_count,omitempty"`
+	Timestamp  int64   `json:"timestamp,omitempty"`
+	// ReleaseTimestamp is when a scheduled stream or premiere starts, as yt-dlp gives it.
+	ReleaseTimestamp int64  `json:"release_timestamp,omitempty"`
+	LiveStatus       string `json:"live_status,omitempty"`
+	Availability     string `json:"availability,omitempty"`
 }
 
 type thumb struct {
@@ -455,7 +457,7 @@ func (x extractor) video(r map[string]any) entry {
 	if timeText == "" {
 		timeText = text(get(reel, "timestampText"))
 	}
-	_, upcoming := toInt(get(r, "upcomingEventData", "startTime"))
+	starts, upcoming := toInt(get(r, "upcomingEventData", "startTime"))
 
 	live := ""
 	switch {
@@ -472,6 +474,9 @@ func (x extractor) video(r map[string]any) entry {
 		Thumbnails: thumbnails(list(r, "thumbnail", "thumbnails")),
 		Timestamp:  x.timestamp(timeText),
 		LiveStatus: live,
+	}
+	if upcoming {
+		e.ReleaseTimestamp = int64(starts)
 	}
 	e.Uploader = firstText(r, "ownerText", "shortBylineText")
 	if e.Uploader == "" {

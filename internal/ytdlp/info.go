@@ -112,6 +112,8 @@ type PlaylistEntry struct {
 	Extractor string `json:"extractor"`
 	ViewCount int64  `json:"viewCount"` // 0 when the listing doesn't say
 	Timestamp int64  `json:"timestamp"` // upload time, Unix seconds; 0 when unknown
+	// ReleaseTimestamp is when a scheduled stream or premiere starts, Unix seconds; 0 when unknown.
+	ReleaseTimestamp int64 `json:"releaseTimestamp"`
 }
 
 // PlaylistInfo describes a playlist, channel or similar collection.
@@ -342,7 +344,7 @@ func collectEntries(entries []json.RawMessage, group string, depth int, out *[]P
 			ID: r.ID, Title: r.Title, URL: u, Uploader: r.uploader(),
 			Thumbnail: pickThumb(&r, thumbSmall), Duration: r.Duration, Group: group,
 			IsPlaylist: isCollection(&r, u), LiveStatus: r.LiveStatus, Extractor: r.IEKey,
-			ViewCount: int64(r.ViewCount), Timestamp: int64(r.Timestamp),
+			ViewCount: int64(r.ViewCount), Timestamp: int64(r.Timestamp), ReleaseTimestamp: int64(r.Release),
 		}
 		if entry.Title == "" {
 			entry.Title = entry.ID

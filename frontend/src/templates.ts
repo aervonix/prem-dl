@@ -15,3 +15,10 @@ export function templateProblem(t: string): string {
   if (v.startsWith('-')) return "The template can't start with a dash."
   return ''
 }
+
+/** templateProblem for a preset's or download's own template, which stays in the download folder (settings.ValidateOptions). */
+export function optionTemplateProblem(t: string): string {
+  const v = t.trim()
+  if (/^([\\/]|[A-Za-z]:[\\/])/.test(v) || v.split(/[\\/]/).includes('..')) return 'Here the template stays inside the download folder: no full paths or ..'
+  return templateProblem(v)
+}

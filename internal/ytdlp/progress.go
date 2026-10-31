@@ -258,6 +258,9 @@ func (t *Tracker) SetStreams(s []Stream) { t.streams = s }
 // SetPlan records the whole-download size estimate.
 func (t *Tracker) SetPlan(p Plan) { t.planTotal = p.Size() }
 
+// Merges reports whether the download is several streams merged into one file afterwards.
+func (t *Tracker) Merges() bool { return len(t.streams) > 1 }
+
 // Planned is the download's expected size in bytes, from the streams when all their sizes are
 // known, else the plan's estimate; 0 when unknown. A cut downloads part of it, so it says 0.
 func (t *Tracker) Planned() int64 {

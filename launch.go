@@ -3,6 +3,7 @@ package main
 import (
 	"net/netip"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"yt-dlp-gui/internal/linkbridge"
@@ -80,10 +81,45 @@ func localHost(link string) bool {
 	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
 		return true
 	}
-	ip, err := netip.ParseAddr(host)
+	ip, err := netip.ParseAddr(strings.Trim(host, "[]"))
 	if err != nil {
-		return false // a name: what it resolves to is the site's business
+		var ok bool
+		if ip, ok = inetAton(host); !ok {
+			return false // a name: what it resolves to is the site's business
+		}
 	}
 	ip = ip.Unmap()
 	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() || ip.IsLinkLocalMulticast()
+}
+
+// inetAton reads the IPv4 forms the system's resolver also takes for an address, though
+// ParseAddr doesn't: fewer than four parts ("127.1"), one number ("2130706433"), hex ("0x7f.1")
+// and octal ("0177.0.0.1"). A host made only of such parts is one of these.
+func inetAton(host string) (netip.Addr, bool) {
+	parts := strings.Split(host, ".")
+	if len(parts) == 0 || len(parts) > 4 {
+		return netip.Addr{}, false
+	}
+	nums := make([]uint64, len(parts))
+	for i, p := range parts {
+		n, err := strconv.ParseUint(p, 0, 32) // 0x.. hex, 0.. octal, else decimal
+		if p == "" || err != nil {
+			return netip.Addr{}, false
+		}
+		nums[i] = n
+	}
+	// The last part fills the bytes the others don't: a.b.c.d, a.b.(16 bits), a.(24 bits), (32 bits).
+	var v uint64
+	for i, n := range nums[:len(nums)-1] {
+		if n > 255 {
+			return netip.Addr{}, false
+		}
+		v |= n << (24 - 8*i)
+	}
+	last := nums[len(nums)-1]
+	if bits := 32 - 8*(len(nums)-1); last >= 1<<bits {
+		return netip.Addr{}, false
+	}
+	v |= last
+	return netip.AddrFrom4([4]byte{byte(v >> 24), byte(v >> 16), byte(v >> 8), byte(v)}), true
 }

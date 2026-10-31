@@ -315,6 +315,8 @@ export interface PlaylistEntry {
   viewCount: number
   /** Upload time in Unix seconds; 0 when unknown. */
   timestamp: number
+  /** When a scheduled stream or premiere starts, Unix seconds; 0 when unknown. */
+  releaseTimestamp: number
 }
 
 export interface PlaylistInfo {

@@ -315,3 +315,18 @@ func TestActiveHoursOpen(t *testing.T) {
 		t.Error("25:00 accepted")
 	}
 }
+
+func TestOptionTemplateStaysInTheFolder(t *testing.T) {
+	for _, bad := range []string{"/tmp/%(title)s.%(ext)s", `C:\x\%(title)s.%(ext)s`, `\\host\s\%(title)s.%(ext)s`, "../%(title)s.%(ext)s", `a\..\%(title)s.%(ext)s`} {
+		o := Default().Defaults
+		o.FilenameTemplate = bad
+		if ValidateOptions(&o) == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+	o := Default().Defaults
+	o.FilenameTemplate = "%(channel)s/%(title)s..%(ext)s"
+	if err := ValidateOptions(&o); err != nil {
+		t.Errorf("a subfolder: %v", err)
+	}
+}

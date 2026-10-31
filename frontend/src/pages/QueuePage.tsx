@@ -281,6 +281,8 @@ function LogModal({job, onClose}: {job: Job; onClose: () => void}) {
 let lastFilter: Filter = 'all'
 let lastSearch = ''
 
+const jobId = (j: Job) => j.id
+
 export function QueuePage() {
   const {state, go, toast, copy, attempt} = useApp()
   const jobs = useJobs()
@@ -411,7 +413,7 @@ export function QueuePage() {
   }, [])
 
   // A full queue (500) is made a few rows at a time as it scrolls into view.
-  const rows = useSteps(shown)
+  const rows = useSteps(shown, jobId)
 
   return (
     <div className="content" style={{maxWidth: 980}}>

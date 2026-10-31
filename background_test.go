@@ -38,6 +38,13 @@ func TestParseLaunch(t *testing.T) {
 		{[]string{"prem-dl://open?url=http%3A%2F%2Flocalhost%3A8080%2F"}, launchArgs{}},
 		{[]string{"prem-dl://open?url=http%3A%2F%2F%5B%3A%3A1%5D%2F"}, launchArgs{}},
 		{[]string{"http://127.0.0.1:631/admin"}, launchArgs{}},
+		// The forms the resolver also reads as addresses.
+		{[]string{"prem-dl://open?url=http%3A%2F%2F127.1%3A8080%2Fadmin"}, launchArgs{}},
+		{[]string{"prem-dl://open?url=http%3A%2F%2F2130706433%2F"}, launchArgs{}},
+		{[]string{"prem-dl://open?url=http%3A%2F%2F0x7f000001%2F"}, launchArgs{}},
+		{[]string{"prem-dl://open?url=http%3A%2F%2F0%2F"}, launchArgs{}},
+		{[]string{"prem-dl://open?url=http%3A%2F%2F0300.0250.1.1%2F"}, launchArgs{}},
+		{[]string{"prem-dl://open?url=http%3A%2F%2F8.8.8.8%2F"}, launchArgs{Link: "http://8.8.8.8/"}},
 		{[]string{"prem-dl://open?url=http%3A%2F%2F10.0.0.5.nip.io%2F"}, launchArgs{Link: "http://10.0.0.5.nip.io/"}},
 		// Windows adds its own arguments when a notification starts the app.
 		{[]string{"-Embedding"}, launchArgs{}},

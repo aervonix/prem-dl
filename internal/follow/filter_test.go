@@ -1,9 +1,12 @@
 package follow
 
 import (
+	"errors"
 	"testing"
 	"time"
 
+	"yt-dlp-gui/internal/queue"
+	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/ytdlp"
 )
 
@@ -85,9 +88,9 @@ func TestRecordLive(t *testing.T) {
 	f := follow(t, m, NewFeed{URL: plLink, RecordLive: true})
 	m.check(f.ID)
 	soon := entry("soon")
-	soon.LiveStatus, soon.Timestamp = "is_upcoming", now().Add(3*time.Hour).Unix()
+	soon.LiveStatus, soon.ReleaseTimestamp = "is_upcoming", now().Add(3*time.Hour).Unix()
 	later := entry("later")
-	later.LiveStatus, later.Timestamp = "is_upcoming", now().Add(30*24*time.Hour).Unix()
+	later.LiveStatus = "is_upcoming" // no start given: taken once it is over
 	fk.mu.Lock()
 	fk.lists[plLink] = append([]ytdlp.PlaylistEntry{soon, later}, fk.lists[plLink]...)
 	fk.mu.Unlock()
@@ -121,5 +124,35 @@ func TestRecordLive(t *testing.T) {
 	m.check(g.ID)
 	if fk.batches() != before {
 		t.Errorf("queued a stream without RecordLive")
+	}
+}
+
+// If queuing the streams fails, the uploads queued before them are still noted.
+func TestRecordLiveFailureKeepsUploadsNoted(t *testing.T) {
+	fk := newFake()
+	m := New(fk.deps(""))
+	fk.set(plLink, "old")
+	f := follow(t, m, NewFeed{URL: plLink, RecordLive: true})
+	m.check(f.ID)
+	stream := entry("stream")
+	stream.LiveStatus = "is_live"
+	fk.mu.Lock()
+	fk.lists[plLink] = append([]ytdlp.PlaylistEntry{entry("upload"), stream}, fk.lists[plLink]...)
+	fk.mu.Unlock()
+	// The second Enqueue (the stream) fails.
+	calls := 0
+	enqueue := m.deps.Enqueue
+	m.deps.Enqueue = func(items []queue.NewJob, o settings.DownloadOptions) (int, error) {
+		if calls++; calls == 2 {
+			return 0, errors.New("the queue is full")
+		}
+		return enqueue(items, o)
+	}
+	m.check(f.ID)
+	m.deps.Enqueue = enqueue
+	before := fk.batches()
+	m.check(f.ID)
+	if q := fk.lastQueued(); fk.batches() != before+1 || len(q) != 1 || q[0] != "stream" {
+		t.Errorf("the next check queued %v (batches %d -> %d), want only the stream", q, before, fk.batches())
 	}
 }
