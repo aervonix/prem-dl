@@ -7,41 +7,115 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"time"
 
 	wr "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"yt-dlp-gui/internal/apperr"
 	"yt-dlp-gui/internal/selfupdate"
+	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
 	"yt-dlp-gui/internal/ytdlp"
 )
 
-// Updating Prem-dl itself. A copy the installer put in place updates by downloading the new
-// Prem-dl-Setup.exe, starting it with /update and quitting: the installer waits for the app to
-// close, installs over it without asking anything and starts it again (project.nsi). Other
-// copies (the portable exe, dev builds) only point at the release page.
+// Updating Prem-dl itself, from the release server (internal/selfupdate). Each system has its own
+// channel there (selfupdate.Channel): Windows' is Prem-dl-Setup.exe, Linux's the AppImage.
+//
+//   - A Windows copy the installer put in place downloads the new Prem-dl-Setup.exe, starts it
+//     with /update and quits: the installer waits for the app to close, installs over it without
+//     asking anything and starts it again (project.nsi).
+//   - An AppImage downloads the new one next to itself, swaps it in and starts it again.
+//   - Other copies (the portable exe, the .deb, dev builds) only point at the release page.
+//
+// Release builds carry a build secret, traded on first run for this install's key (kept in the
+// data folder as update.key). A copy built from source has none and doesn't check.
 
 // uninstallName is the installer's uninstall entry (UNINST_KEY_NAME in project.nsi).
 const uninstallName = "Prem-dl"
+
+// releasePage is where a version's release notes and files are, for copies that can't install.
+func releasePage(version string) string {
+	return "https://github.com/aervonix/prem-dl/releases/tag/v" + version
+}
 
 // AppUpdate is what the last check found, sent as "app:update".
 type AppUpdate struct {
 	Current   string `json:"current"`
 	Latest    string `json:"latest"`
 	Available bool   `json:"available"`
-	Page      string `json:"page"`  // the release on GitHub
-	Notes     string `json:"notes"` // its description (Markdown)
-	Size      int64  `json:"size"`  // the installer's size
-	// CanInstall: this copy came from the installer, so the update can install itself.
+	Page      string `json:"page"`  // the release's page
+	Notes     string `json:"notes"` // its notes (Markdown)
+	Size      int64  `json:"size"`  // the download's size
+	// CanInstall: this copy can download the update and install it itself.
 	CanInstall bool   `json:"canInstall"`
 	Error      string `json:"error"`
 }
 
-func init() {
-	if base := os.Getenv("PREMDL_UPDATE_API"); devBuild && base != "" {
-		selfupdate.UseAPI(base)
+// errFromSource: this copy has no build secret, so it can't use the release server.
+var errFromSource = errors.New("this copy of Prem-dl was built from source, so it doesn't check for updates. Release builds do")
+
+// updater holds this install's connection to the release server.
+type updater struct {
+	mu     sync.Mutex
+	client *selfupdate.Client
+}
+
+// updateServer is the release server and build secret this copy uses. A dev build can be pointed
+// at a local server with PREMDL_UPDATE_API and PREMDL_BUILD_SECRET, with a key file of its own.
+func updateServer() (base, secret, keyName string) {
+	base, secret, keyName = selfupdate.APIURL, selfupdate.BuildSecret(), "update.key"
+	if devBuild {
+		if b := os.Getenv("PREMDL_UPDATE_API"); b != "" {
+			base, secret, keyName = b, os.Getenv("PREMDL_BUILD_SECRET"), "update-dev.key"
+		}
 	}
+	return base, secret, keyName
+}
+
+// updateClient returns a client with this install's key, enrolling first if there is none. A key
+// is checked once per start; one the server has dropped (revoked, or unused for 90 days) is
+// replaced by enrolling again. Offline, a stored key is used as it is.
+func (a *App) updateClient(ctx context.Context) (*selfupdate.Client, error) {
+	a.upd.mu.Lock()
+	defer a.upd.mu.Unlock()
+	if a.upd.client != nil {
+		return a.upd.client, nil
+	}
+	base, secret, keyName := updateServer()
+	pub, err := selfupdate.PublicKeyOf(selfupdate.ReleasePublicKey)
+	if err != nil {
+		return nil, err
+	}
+	hc := ytdlp.HTTPClient(a.store.Get().Proxy, 0)
+	keyFile := filepath.Join(a.dataDir, keyName)
+	c := &selfupdate.Client{Base: base, App: selfupdate.App, PublicKey: pub, HTTP: hc}
+	if raw, err := os.ReadFile(keyFile); err == nil && selfupdate.ValidKey(strings.TrimSpace(string(raw))) {
+		c.Key = strings.TrimSpace(string(raw))
+		ok, err := c.Ping(ctx)
+		if err != nil {
+			return c, nil // offline or busy: keep the key, and check it next start
+		}
+		if ok {
+			a.upd.client = c
+			return c, nil
+		}
+		_ = os.Remove(keyFile)
+	}
+	if secret == "" {
+		return nil, errFromSource
+	}
+	key, err := selfupdate.Enrol(ctx, hc, base, secret, runtime.GOOS, appVersion)
+	if err != nil {
+		return nil, err
+	}
+	if err := settings.WriteFileAtomic(keyFile, []byte(key+"\n"), 0o600); err != nil {
+		return nil, err
+	}
+	c.Key = key
+	a.upd.client = c
+	return c, nil
 }
 
 // updateDir holds a downloaded installer until the next start removes it.
@@ -62,6 +136,19 @@ func (a *App) installDir() string {
 	return sys.InstalledDir(uninstallName, exe)
 }
 
+// canInstall reports whether this copy can install r itself: an installed Windows copy and an
+// installer, or an AppImage it can replace and an AppImage.
+func (a *App) canInstall(r selfupdate.Release) bool {
+	name := strings.ToLower(r.FileName)
+	switch runtime.GOOS {
+	case "windows":
+		return strings.HasSuffix(name, ".exe") && a.installDir() != ""
+	case "linux":
+		return strings.HasSuffix(name, ".appimage") && appImagePath() != ""
+	}
+	return false
+}
+
 // CheckAppUpdate looks for a newer Prem-dl release.
 func (a *App) CheckAppUpdate() AppUpdate {
 	ctx, cancel := context.WithTimeout(a.root, 30*time.Second)
@@ -71,21 +158,45 @@ func (a *App) CheckAppUpdate() AppUpdate {
 
 func (a *App) checkAppUpdate(ctx context.Context) AppUpdate {
 	u := AppUpdate{Current: appVersion}
-	r, err := selfupdate.Latest(ctx, ytdlp.HTTPClient(a.store.Get().Proxy, 20*time.Second))
-	if err != nil {
-		u.Error = err.Error()
+	r, err := a.latestRelease(ctx)
+	switch {
+	case errors.Is(err, selfupdate.ErrNoRelease):
+		// Nothing published for this system yet: up to date.
+	case err != nil:
+		u.Error = updateMessage(err)
 		return u
+	default:
+		u.Latest, u.Notes, u.Size, u.Page = r.Version, r.Notes, r.Size, releasePage(r.Version)
+		u.Available = selfupdate.Newer(appVersion, r.Version)
+		u.CanInstall = u.Available && a.canInstall(r)
 	}
-	u.Latest, u.Page, u.Notes, u.Size = r.Version, r.Page, r.Notes, r.Size
-	// A Linux copy isn't told about a release without a Linux build.
-	u.Available = selfupdate.Newer(appVersion, r.Version) && r.HasBuildFor(runtime.GOOS)
-	u.CanInstall = u.Available && r.SetupURL != "" && r.SumsURL != "" && a.installDir() != ""
 	a.appUpdate.Store(&u)
 	a.emit("app:update", u)
 	return u
 }
 
+func (a *App) latestRelease(ctx context.Context) (selfupdate.Release, error) {
+	c, err := a.updateClient(ctx)
+	if err != nil {
+		return selfupdate.Release{}, err
+	}
+	return c.Latest(ctx, selfupdate.Channel(runtime.GOOS))
+}
+
+// updateMessage says what went wrong with a check, for Settings.
+func updateMessage(err error) string {
+	var off *selfupdate.OfflineError
+	switch {
+	case errors.As(err, &off):
+		return "couldn't reach the update server. Check your connection (and proxy) and try again."
+	case errors.Is(err, selfupdate.ErrNotAccepted):
+		return "the update server no longer accepts this copy. Download the newest Prem-dl from its release page."
+	}
+	return err.Error()
+}
+
 // appUpdateLoop checks for a new Prem-dl shortly after launch and twice a day after that.
+// Failures stay quiet here (offline, a source build): Settings shows them when asked.
 func (a *App) appUpdateLoop() {
 	// The installer the last update ran from; it has finished by now, or the next start gets it.
 	_ = os.RemoveAll(a.updateDir())
@@ -106,8 +217,10 @@ func (a *App) appUpdateLoop() {
 	}
 }
 
-// InstallAppUpdate downloads the newest installer, starts it and quits; the installer starts
-// the new version when it's done. Downloads must not be running, since quitting stops them.
+// InstallAppUpdate downloads the newest release, checks it against its signed manifest, and
+// installs it: Windows runs the installer and quits (it starts the new version when it's done),
+// an AppImage swaps itself and starts again. Downloads must not be running, since quitting
+// stops them.
 func (a *App) InstallAppUpdate() UpdateResult {
 	if !a.selfUpdating.CompareAndSwap(false, true) {
 		return UpdateResult{Error: apperr.New("busy", "Update already running", "Prem-dl is already being updated.", "", apperr.ActionNone)}
@@ -118,21 +231,16 @@ func (a *App) InstallAppUpdate() UpdateResult {
 			a.selfUpdating.Store(false)
 		}
 	}()
-
-	dir := a.installDir()
-	if dir == "" {
-		return UpdateResult{Error: apperr.New("not_installed", "Can't update this copy",
-			"This copy of Prem-dl wasn't installed with Prem-dl-Setup.exe, so it can't replace itself.",
-			"Download the new version from its release page.", apperr.ActionNone)}
-	}
 	if busy := a.selfUpdateBusy(); busy != nil {
 		return UpdateResult{Error: busy}
 	}
 
-	ctx, cancel := context.WithTimeout(a.root, 20*time.Minute)
+	ctx, cancel := context.WithTimeout(a.root, 30*time.Minute)
 	defer cancel()
-	client := ytdlp.HTTPClient(a.store.Get().Proxy, 20*time.Minute)
-	r, err := selfupdate.Latest(ctx, client)
+	r, err := a.latestRelease(ctx)
+	if errors.Is(err, selfupdate.ErrNoRelease) {
+		err = errors.New("no newer Prem-dl has been published for this system")
+	}
 	if err != nil {
 		return UpdateResult{Error: selfUpdateError(err)}
 	}
@@ -141,17 +249,32 @@ func (a *App) InstallAppUpdate() UpdateResult {
 		res.Error = apperr.New("up_to_date", "Already up to date", "Prem-dl "+appVersion+" is the newest version.", "", apperr.ActionNone)
 		return res
 	}
-	path, err := selfupdate.Download(ctx, client, r, a.updateDir(), func(done, total int64) {
-		a.emit("app:update-progress", map[string]int64{"done": done, "total": total})
-	})
+	if !a.canInstall(r) {
+		res.Error = apperr.New("not_installed", "Can't update this copy",
+			"This copy of Prem-dl can't replace itself (only the installed Windows version and the AppImage can).",
+			"Download the new version from its release page.", apperr.ActionNone)
+		return res
+	}
+	c, err := a.updateClient(ctx)
 	if err != nil {
 		res.Error = selfUpdateError(err)
 		return res
 	}
-	res.Path = path
+	dest, err := a.updateDest(r)
+	if err != nil {
+		res.Error = selfUpdateError(err)
+		return res
+	}
+	if err := c.Download(ctx, r, dest, func(done, total int64) {
+		a.emit("app:update-progress", map[string]int64{"done": done, "total": total})
+	}); err != nil {
+		res.Error = selfUpdateError(err)
+		return res
+	}
+	res.Path = dest
 
-	// Downloads may have started while the installer was downloading. Nothing new starts from
-	// here on; the hold is only released if the update can't go ahead.
+	// Downloads may have started meanwhile. Nothing new starts from here on; the hold is only
+	// released if the update can't go ahead.
 	if busy := a.selfUpdateBusy(); busy != nil {
 		res.Error = busy
 		return res
@@ -161,11 +284,10 @@ func (a *App) InstallAppUpdate() UpdateResult {
 		res.Error = downloadsRunning(n)
 		return res
 	}
-	// /D= must come last and stay unquoted, even with spaces in it.
-	if err := sys.StartCommandLine(path, `"`+path+`" /update /D=`+dir); err != nil {
+	if err := a.startUpdate(dest); err != nil {
 		a.q.Release()
-		res.Error = apperr.New("update_failed", "Couldn't start the installer", err.Error(),
-			"Run "+path+" yourself to install the update.", apperr.ActionNone)
+		res.Error = apperr.New("update_failed", "Couldn't install the update", err.Error(),
+			"Download the new version from its release page.", apperr.ActionNone)
 		return res
 	}
 	quitting = true
@@ -180,6 +302,28 @@ func (a *App) InstallAppUpdate() UpdateResult {
 		}
 	}()
 	return res
+}
+
+// updateDest is where the update downloads to: the installer in the update folder, or a new
+// AppImage beside the running one (the swap is a rename, so it must be on the same drive).
+func (a *App) updateDest(r selfupdate.Release) (string, error) {
+	if runtime.GOOS == "linux" {
+		img := appImagePath()
+		return filepath.Join(filepath.Dir(img), ".Prem-dl-"+r.Version+".AppImage"), nil
+	}
+	if err := os.MkdirAll(a.updateDir(), 0o700); err != nil {
+		return "", err
+	}
+	return filepath.Join(a.updateDir(), "Prem-dl-Setup-"+r.Version+".exe"), nil
+}
+
+// startUpdate hands over to the downloaded update; the app quits after it.
+func (a *App) startUpdate(path string) error {
+	if runtime.GOOS == "linux" {
+		return swapAppImage(path, appImagePath())
+	}
+	// /D= must come last and stay unquoted, even with spaces in it.
+	return sys.StartCommandLine(path, `"`+path+`" /update /D=`+a.installDir())
 }
 
 // selfUpdateBusy says why Prem-dl can't quit for an update right now, or returns nil.
@@ -201,13 +345,19 @@ func downloadsRunning(n int) *apperr.AppError {
 }
 
 func selfUpdateError(err error) *apperr.AppError {
+	var off *selfupdate.OfflineError
 	switch {
 	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
-		return apperr.New("update_timeout", "Update timed out", "Downloading the update took too long.", "Check your connection and try again.", apperr.ActionNone)
+		return apperr.New("update_timeout", "Update timed out", "Downloading the update took too long.", "Check your connection and try again; it carries on where it stopped.", apperr.ActionNone)
 	case errors.Is(err, os.ErrPermission):
 		return apperr.New("update_permission", "Can't save the update", err.Error(),
-			"Check that the app's data folder is writable and not locked by antivirus.", apperr.ActionNone)
+			"Check that the folder is writable and not locked by antivirus.", apperr.ActionNone)
+	case errors.As(err, &off):
+		return apperr.New("update_offline", "Couldn't reach the update server", err.Error(),
+			"Check your connection (and proxy) and try again; a download carries on where it stopped.", apperr.ActionNone)
+	case errors.Is(err, selfupdate.ErrVerify):
+		return apperr.New("update_unverified", "Update refused", err.Error(),
+			"Nothing was installed. Try again later, or download Prem-dl from its release page.", apperr.ActionNone)
 	}
-	return apperr.New("update_failed", "Couldn't update Prem-dl", err.Error(),
-		"Check your internet connection (and proxy) and try again.", apperr.ActionNone)
+	return apperr.New("update_failed", "Couldn't update Prem-dl", updateMessage(err), "Try again in a while.", apperr.ActionNone)
 }

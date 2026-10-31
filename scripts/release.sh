@@ -9,15 +9,24 @@
 #
 #   scripts/release.sh               # fetches the newest yt-dlp and ffmpeg first
 #   scripts/release.sh --skip-fetch  # uses what bundle/ already holds
+#   scripts/release.sh --no-updates  # a build without the build secret: it never checks for updates
+#
+# The build carries Prem-dl's build secret for the release server (internal/selfupdate), read
+# with the TrueRip API repo's scripts/project.py ($TRUERIP_API, default ~/Coding/API) and
+# written into a gitignored file for the build only. Publish the AppImage on the "linux"
+# channel afterwards (see CLAUDE.md, "Releases").
 set -euo pipefail
 umask 022 # package files must not be group-writable, whatever this machine uses
 
 skip_fetch=false
-case "${1:-}" in
-  --skip-fetch) skip_fetch=true ;;
-  "") ;;
-  *) echo "usage: $0 [--skip-fetch]" >&2; exit 2 ;;
-esac
+no_updates=false
+for arg in "$@"; do
+  case "$arg" in
+    --skip-fetch) skip_fetch=true ;;
+    --no-updates) no_updates=true ;;
+    *) echo "usage: $0 [--skip-fetch] [--no-updates]" >&2; exit 2 ;;
+  esac
+done
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
@@ -47,10 +56,12 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 out="$root/build/release"
-rm -rf "$out"
 mkdir -p "$out"
+# Only this script's files: release-windows.sh puts Windows' beside them.
+rm -f "$out"/prem-dl_*_amd64.deb "$out"/Prem-dl-x86_64.AppImage "$out"/SHA256SUMS-linux.txt
 stage=$(mktemp -d)
-trap 'rm -rf "$stage"' EXIT
+secret_file="$root/internal/selfupdate/secret_release.go"
+trap 'rm -rf "$stage"; rm -f "$secret_file"' EXIT
 
 if ! $skip_fetch || [ ! -f bundle/yt-dlp.zip ]; then
   step "Fetching yt-dlp and ffmpeg"
@@ -61,10 +72,21 @@ fi
 # Also fails when bundle/ holds another platform's tools (fetched on Windows): they don't run here.
 step "Checking the built-in tools unpack"
 go test -tags bundled . -run BuiltIn -count=1
+if $no_updates; then
+  echo "warning: --no-updates: this build never checks for updates." >&2
+else
+  api=${TRUERIP_API:-$HOME/Coding/API}
+  [ -f "$api/scripts/project.py" ] || fail "the TrueRip API repo isn't at $api (set TRUERIP_API), so the build can't get its build secret. --no-updates builds without it."
+  step "Writing the build secret"
+  (cd "$api" && uv run --project backend python scripts/project.py secret-file prem-dl --format raw --out -) | go run ./cmd/buildsecret
+fi
 step "Building Prem-dl"
 # -trimpath keeps this machine's folders (and the user name in them) out of the binary.
 wails build -tags "webkit2_41 bundled" -trimpath
+rm -f "$secret_file"
 [ -x "$bin" ] || fail "wails build made no build/bin/Prem-dl"
+# The secret is in there XORed: its plain form must not be.
+if grep -aq 'trb_' "$bin"; then fail "the build secret is readable in build/bin/Prem-dl"; fi
 
 # The desktop entry both packages carry. The .deb's Exec must read exactly as the app writes it
 # for /usr/bin/prem-dl (sys.SchemeCommand), or the app adds a user entry of its own.

@@ -451,13 +451,13 @@ export interface AppUpdate {
   current: string
   latest: string
   available: boolean
-  /** The release on GitHub. */
+  /** The release's page (notes and files), for copies that can't install it. */
   page: string
-  /** The release's description, as Markdown. */
+  /** The release's notes, as Markdown. */
   notes: string
-  /** The installer's size in bytes. */
+  /** The download's size in bytes. */
   size: number
-  /** This copy came from the installer, so the update can download and install itself. */
+  /** This copy can download the update and install it itself (the installed Windows version, the AppImage). */
   canInstall: boolean
   error: string
 }

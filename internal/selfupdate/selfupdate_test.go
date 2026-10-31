@@ -2,157 +2,273 @@ package selfupdate
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 )
 
-func TestNewer(t *testing.T) {
-	cases := []struct {
-		current, latest string
-		want            bool
-	}{
-		{"0.1.1", "v0.2.0", true},
-		{"0.1.1", "0.1.2", true},
-		{"0.1.1", "0.1.1", false},
-		{"0.1.1", "v0.1.1", false},
-		{"0.2", "0.2.0", false},
-		{"0.2.0", "0.2.1", true},
-		{"0.10.0", "0.9.9", false},
-		{"0.9.9", "0.10.0", true},
-		{"1.0.0", "0.9.0", false},
-		{"0.1.1", "nightly", false},
-		{"", "0.2.0", false},
-		{"0.1.1", "0.2.0-beta", false},
+func TestSemverCorpus(t *testing.T) {
+	raw, err := os.ReadFile("testdata/semver-corpus.json")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, c := range cases {
-		if got := Newer(c.current, c.latest); got != c.want {
-			t.Errorf("Newer(%q, %q) = %v, want %v", c.current, c.latest, got, c.want)
+	var c struct {
+		Ascending [][]string `json:"ascending"`
+		Invalid   []string   `json:"invalid"`
+	}
+	if err := json.Unmarshal(raw, &c); err != nil {
+		t.Fatal(err)
+	}
+	for i, group := range c.Ascending {
+		for _, v := range group {
+			if !ValidVersion(v) {
+				t.Errorf("%q should be valid", v)
+			}
+			for _, w := range group {
+				if Compare(v, w) != 0 {
+					t.Errorf("%q and %q should rank the same", v, w)
+				}
+			}
+			for _, later := range c.Ascending[i+1:] {
+				for _, w := range later {
+					if Compare(v, w) >= 0 || Compare(w, v) <= 0 {
+						t.Errorf("%q should rank below %q", v, w)
+					}
+				}
+			}
 		}
+	}
+	for _, v := range c.Invalid {
+		if ValidVersion(v) {
+			t.Errorf("%q should be invalid", v)
+		}
+	}
+	if !Newer("0.1.2", "0.1.3") || Newer("0.1.3", "0.1.3") || Newer("0.2.0", "0.1.9") || !Newer("0.2.0-beta", "0.2.0") || Newer("0.1.2", "v0.2.0") {
+		t.Error("Newer")
 	}
 }
 
-// fakeGitHub serves a release whose installer is setup and whose checksum list says sum.
-func fakeGitHub(t *testing.T, setup []byte, sum string) *httptest.Server {
-	t.Helper()
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/repos/" + Repo + "/releases/latest":
-			fmt.Fprintf(w, `{"tag_name":"v0.2.0","html_url":"https://github.com/%[1]s/releases/tag/v0.2.0","body":"New things",
-				"assets":[{"name":"Prem-dl.exe","browser_download_url":"%[2]s/plain","size":5},
-				{"name":"%[3]s","browser_download_url":"%[2]s/setup","size":%[4]d},
-				{"name":"%[5]s","browser_download_url":"%[2]s/sums","size":100}]}`,
-				Repo, srv.URL, SetupAsset, len(setup), SumsAsset)
-		case "/setup":
-			w.Write(setup)
-		case "/sums":
-			fmt.Fprintf(w, "0000  Prem-dl.exe\n%s  %s\n", sum, SetupAsset)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
+// server is a fake release server: one app, releases signed with a throwaway key.
+type server struct {
+	t        *testing.T
+	priv     ed25519.PrivateKey
+	pub      ed25519.PublicKey
+	mu       sync.Mutex
+	keys     map[string]bool
+	latest   map[string]string // channel -> manifest
+	sigs     map[string]string
+	files    map[string][]byte // version -> file
+	ranges   []string
+	breakAt  int // the download is cut after this many bytes (0: never)
+	enrolled int
+}
+
+const testSecret = "trb_AAAAAAAAAAAA_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+
+func newServer(t *testing.T) (*server, *httptest.Server) {
+	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
+	s := &server{t: t, priv: priv, pub: pub, keys: map[string]bool{}, latest: map[string]string{}, sigs: map[string]string{}, files: map[string][]byte{}}
+	srv := httptest.NewServer(s)
 	t.Cleanup(srv.Close)
-	old := apiBase
-	apiBase = srv.URL
-	t.Cleanup(func() { apiBase = old })
-	return srv
+	return s, srv
 }
 
-func sha(b []byte) string {
-	h := sha256.Sum256(b)
-	return hex.EncodeToString(h[:])
+func (s *server) publish(app, channel, version string, file []byte, tamper func(string) string) {
+	sum := sha256.Sum256(file)
+	m := fmt.Sprintf(`{"app":%q,"channel":%q,"date":"2026-10-31T12:00:00Z","file_name":"Prem-dl-Setup.exe","notes":"Fixes","sha256":%q,"size":%d,"version":%q}`,
+		app, channel, hex.EncodeToString(sum[:]), len(file), version)
+	sig := base64.StdEncoding.EncodeToString(ed25519.Sign(s.priv, []byte(m)))
+	if tamper != nil {
+		m = tamper(m)
+	}
+	s.mu.Lock()
+	s.latest[channel], s.sigs[channel], s.files[version] = m, sig, file
+	s.mu.Unlock()
 }
 
-func TestLatestAndDownload(t *testing.T) {
-	setup := []byte(strings.Repeat("installer", 50000))
-	srv := fakeGitHub(t, setup, sha(setup))
-
-	r, err := Latest(context.Background(), srv.Client())
-	if err != nil {
-		t.Fatal(err)
+func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if r.URL.Path == "/v1/enrol" && r.Method == http.MethodPost {
+		if auth != testSecret {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		s.enrolled++
+		key := fmt.Sprintf("tra_KKKKKKKKKKK%d_%043d", s.enrolled, s.enrolled)
+		s.keys[key] = true
+		w.WriteHeader(http.StatusCreated)
+		fmt.Fprintf(w, `{"key":%q}`, key)
+		return
 	}
-	if r.Version != "0.2.0" || r.Notes != "New things" || r.SetupURL != srv.URL+"/setup" || r.SumsURL != srv.URL+"/sums" || r.Size != int64(len(setup)) {
-		t.Fatalf("release = %+v", r)
+	if !s.keys[auth] {
+		w.WriteHeader(http.StatusNotFound)
+		return
 	}
-	if !strings.HasSuffix(r.Page, "/releases/tag/v0.2.0") {
-		t.Errorf("page = %q", r.Page)
-	}
-
-	dir := t.TempDir()
-	var lastDone int64
-	path, err := Download(context.Background(), srv.Client(), r, dir, func(done, total int64) { lastDone = done })
-	if err != nil {
-		t.Fatal(err)
-	}
-	if filepath.Base(path) != "Prem-dl-Setup-0.2.0.exe" {
-		t.Errorf("path = %s", path)
-	}
-	got, err := os.ReadFile(path)
-	if err != nil || string(got) != string(setup) {
-		t.Fatalf("installer not saved intact: %v", err)
-	}
-	if lastDone != int64(len(setup)) {
-		t.Errorf("last progress = %d, want %d", lastDone, len(setup))
+	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	switch {
+	case r.URL.Path == "/v1/ping":
+		_, _ = w.Write([]byte(`{}`))
+	case len(parts) == 4 && parts[1] == "releases" && parts[3] == "latest":
+		m, ok := s.latest[parts[2]]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"manifest": m, "signature": s.sigs[parts[2]]})
+	case len(parts) == 5 && parts[1] == "releases" && parts[4] == "download":
+		file, ok := s.files[parts[3]]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		from := 0
+		if rg := r.Header.Get("Range"); rg != "" {
+			s.ranges = append(s.ranges, rg)
+			from, _ = strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(rg, "bytes="), "-"))
+			w.WriteHeader(http.StatusPartialContent)
+		}
+		body := file[from:]
+		if s.breakAt > 0 && len(body) > s.breakAt {
+			body = body[:s.breakAt]
+			s.breakAt = 0
+			_, _ = w.Write(body)
+			panic(http.ErrAbortHandler) // the connection drops mid-download
+		}
+		_, _ = w.Write(body)
+	default:
+		w.WriteHeader(http.StatusNotFound)
 	}
 }
 
-func TestDownloadRejectsBadChecksum(t *testing.T) {
-	srv := fakeGitHub(t, []byte("tampered"), sha([]byte("original")))
-	r, err := Latest(context.Background(), srv.Client())
-	if err != nil {
-		t.Fatal(err)
+func TestEnrolCheckAndDownload(t *testing.T) {
+	s, srv := newServer(t)
+	ctx := context.Background()
+	if _, err := Enrol(ctx, srv.Client(), srv.URL, "trb_wrongwrongwr_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", "linux", "0.1.2"); !errors.Is(err, ErrNotAccepted) {
+		t.Fatalf("a wrong secret: %v", err)
 	}
-	dir := t.TempDir()
-	if _, err := Download(context.Background(), srv.Client(), r, dir, nil); err == nil || !strings.Contains(err.Error(), "checksum") {
-		t.Fatalf("err = %v, want a checksum error", err)
+	key, err := Enrol(ctx, srv.Client(), srv.URL, testSecret, "linux", "0.1.2")
+	if err != nil || !ValidKey(key) {
+		t.Fatalf("enrol: %q %v", key, err)
 	}
-	if left, _ := os.ReadDir(dir); len(left) != 0 {
-		t.Errorf("left behind: %v", left)
+	c := &Client{Base: srv.URL, App: App, Key: key, PublicKey: s.pub, HTTP: srv.Client()}
+	if ok, err := c.Ping(ctx); !ok || err != nil {
+		t.Fatalf("ping: %v %v", ok, err)
+	}
+	if _, err := c.Latest(ctx, "stable"); !errors.Is(err, ErrNoRelease) {
+		t.Fatalf("nothing published: %v", err)
+	}
+	file := []byte(strings.Repeat("setup bytes ", 50_000))
+	s.publish(App, "stable", "0.1.3", file, nil)
+	r, err := c.Latest(ctx, "stable")
+	if err != nil || r.Version != "0.1.3" || r.Size != int64(len(file)) || r.Notes != "Fixes" {
+		t.Fatalf("latest: %+v %v", r, err)
+	}
+
+	// The connection drops partway: the next try resumes from the .part.
+	dest := filepath.Join(t.TempDir(), "Prem-dl-Setup.exe")
+	s.mu.Lock()
+	s.breakAt = 200_000
+	s.mu.Unlock()
+	var last int64
+	if err := c.Download(ctx, r, dest, func(done, _ int64) { last = done }); err == nil {
+		t.Fatal("a cut download succeeded")
+	}
+	if err := c.Download(ctx, r, dest, func(done, _ int64) { last = done }); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	got, _ := os.ReadFile(dest)
+	if string(got) != string(file) || last != int64(len(file)) {
+		t.Fatalf("downloaded %d bytes, progress %d", len(got), last)
+	}
+	if len(s.ranges) != 1 || !strings.HasPrefix(s.ranges[0], "bytes=") {
+		t.Errorf("resumed with %v", s.ranges)
+	}
+	if _, err := os.Stat(dest + ".part"); err == nil {
+		t.Error("the .part stayed")
 	}
 }
 
-func TestDownloadNeedsChecksums(t *testing.T) {
-	r := Release{Version: "0.2.0", SetupURL: "http://127.0.0.1:1/setup"}
-	if _, err := Download(context.Background(), http.DefaultClient, r, t.TempDir(), nil); err == nil || !strings.Contains(err.Error(), "checksums") {
-		t.Fatalf("err = %v", err)
-	}
-}
-
-// A release only counts for Linux when it has a Linux build; for Windows, always.
-func TestLinuxBuilds(t *testing.T) {
-	for _, tc := range []struct {
-		assets []string
-		linux  bool
-	}{
-		{[]string{SetupAsset, SumsAsset, "Prem-dl.exe"}, false},
-		{[]string{SetupAsset, SumsAsset, AppImageAsset, LinuxSumsAsset}, true},
-		{[]string{SetupAsset, SumsAsset, "prem-dl_0.2.0_amd64.deb", LinuxSumsAsset}, true},
-		{[]string{"prem-dl_0.2.0_arm64.deb", "prem-dl.deb"}, false},
+func TestRefusesWhatDoesntVerify(t *testing.T) {
+	s, srv := newServer(t)
+	ctx := context.Background()
+	key, _ := Enrol(ctx, srv.Client(), srv.URL, testSecret, "", "")
+	c := &Client{Base: srv.URL, App: App, Key: key, PublicKey: s.pub, HTTP: srv.Client()}
+	for name, publish := range map[string]func(){
+		"changed after signing": func() {
+			s.publish(App, "stable", "0.1.3", []byte("x"), func(m string) string { return strings.Replace(m, "0.1.3", "9.9.9", 1) })
+		},
+		"another app": func() { s.publish("other-app", "stable", "0.1.3", []byte("x"), nil) },
+		"another channel": func() {
+			s.publish(App, "beta", "0.1.3", []byte("x"), nil)
+			s.latest["stable"], s.sigs["stable"] = s.latest["beta"], s.sigs["beta"]
+		},
+		"signed by another key": func() {
+			_, other, _ := ed25519.GenerateKey(rand.Reader)
+			s.priv = other
+			s.publish(App, "stable", "0.1.3", []byte("x"), nil)
+		},
 	} {
-		var assets []string
-		for _, a := range tc.assets {
-			assets = append(assets, fmt.Sprintf(`{"name":%q,"browser_download_url":"https://x.test/%s","size":1}`, a, a))
+		publish()
+		if _, err := c.Latest(ctx, "stable"); !errors.Is(err, ErrVerify) {
+			t.Errorf("%s: %v", name, err)
 		}
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, `{"tag_name":"v0.2.0","assets":[%s]}`, strings.Join(assets, ","))
-		}))
-		old := apiBase
-		apiBase = srv.URL
-		r, err := Latest(context.Background(), srv.Client())
-		apiBase = old
-		srv.Close()
-		if err != nil {
-			t.Fatal(err)
+	}
+}
+
+func TestDownloadMustMatchTheManifest(t *testing.T) {
+	s, srv := newServer(t)
+	ctx := context.Background()
+	key, _ := Enrol(ctx, srv.Client(), srv.URL, testSecret, "", "")
+	c := &Client{Base: srv.URL, App: App, Key: key, PublicKey: s.pub, HTTP: srv.Client()}
+	s.publish(App, "stable", "0.1.3", []byte("the real installer"), nil)
+	r, err := c.Latest(ctx, "stable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.files["0.1.3"] = []byte("a swapped installer!") // the same length, other bytes
+	dest := filepath.Join(t.TempDir(), "setup.exe")
+	if err := c.Download(ctx, r, dest, nil); err == nil {
+		t.Fatal("a file that doesn't match the manifest was kept")
+	}
+	for _, p := range []string{dest, dest + ".part"} {
+		if _, err := os.Stat(p); err == nil {
+			t.Errorf("%s is left behind", p)
 		}
-		if r.HasBuildFor("linux") != tc.linux || !r.HasBuildFor("windows") {
-			t.Errorf("%v: linux %v, windows %v", tc.assets, r.HasBuildFor("linux"), r.HasBuildFor("windows"))
-		}
+	}
+}
+
+func TestPingSaysWhenTheKeyIsGone(t *testing.T) {
+	s, srv := newServer(t)
+	key, _ := Enrol(context.Background(), srv.Client(), srv.URL, testSecret, "", "")
+	delete(s.keys, key)
+	c := &Client{Base: srv.URL, App: App, Key: key, PublicKey: s.pub, HTTP: srv.Client()}
+	if ok, err := c.Ping(context.Background()); ok || err != nil {
+		t.Errorf("a dropped key: %v %v", ok, err)
+	}
+	c.Base = "http://127.0.0.1:1"
+	var off *OfflineError
+	if _, err := c.Ping(context.Background()); !errors.As(err, &off) {
+		t.Errorf("unreachable: %v", err)
+	}
+}
+
+func TestEmbeddedPublicKeyDecodes(t *testing.T) {
+	if _, err := PublicKeyOf(ReleasePublicKey); err != nil {
+		t.Fatal(err)
 	}
 }

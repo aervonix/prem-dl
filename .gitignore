@@ -11,3 +11,8 @@ frontend/dist
 /build/release/
 /build/tools/
 /build/windows/installer/tmp/
+# the build secret of a release build (cmd/buildsecret writes it, the release scripts delete it)
+/internal/selfupdate/secret_release.go
+# Windows tools fetched on Linux (release-windows.sh), and this machine's while they are swapped out
+/build/bundle-windows/
+/build/bundle-host/

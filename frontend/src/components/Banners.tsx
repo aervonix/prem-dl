@@ -102,8 +102,8 @@ export function Banners() {
           </div>
         ) : app.canInstall ? (
           <>
-            You have {app.current}. Update now downloads the installer{app.size > 0 && ` (${bytes(app.size)})`}, checks it and restarts Prem-dl with the new version. Your settings, queue and
-            followed channels stay.
+            You have {app.current}. Update now downloads it{app.size > 0 && ` (${bytes(app.size)})`}, checks it against Prem-dl's release signature and restarts Prem-dl with the new
+            version. Your settings, queue and followed channels stay.
           </>
         ) : (
           <>You have {app.current}. Download the new version from its release page.</>

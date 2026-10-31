@@ -1,295 +1,343 @@
-// Package selfupdate finds newer Prem-dl releases on GitHub and downloads the installer from one.
-// Running the installer is the caller's job (app_update.go): it has to quit the app first.
+// Package selfupdate finds newer Prem-dl releases on the release server and downloads them,
+// checked against a manifest signed with Prem-dl's release key. Installing what it downloaded is
+// the caller's job (app_update.go): it has to quit the app first.
+//
+// The server (the TrueRip API) answers only to a key. Prem-dl's repository is public, so it
+// can't hold one: release builds carry a build secret instead (secret.go), and each install
+// trades it for its own key on first run (Enrol) and keeps that key in its data folder. A copy
+// built from source has no secret and doesn't check for updates.
+//
+// Nothing the server says is trusted on its own: a release is only taken when its manifest
+// verifies with the release public key built into the app, names this app and the channel
+// asked for, and the downloaded file matches the manifest's size and SHA-256. So even a
+// compromised server can't push an update; only the signing key, which never leaves the
+// release machine, can make one.
 package selfupdate
 
 import (
-	"bufio"
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
-	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Repo is where releases are published (scripts/release.ps1 builds their files).
-const Repo = "aervonix/prem-dl"
-
-// The files every release carries.
+// Where releases come from. The release public key is public by design: it only checks
+// signatures, and the private half stays on the release machine.
 const (
-	SetupAsset = "Prem-dl-Setup.exe"
-	SumsAsset  = "SHA256SUMS.txt"
+	APIURL           = "https://api.truerip.cc"
+	App              = "prem-dl"
+	ReleasePublicKey = "V+jVd5lCbXASLLOtszV1orMXoKgUh/XbFPamjn67I7E="
 )
 
-// The Linux files a release may carry (scripts/release.sh); the .deb's name has the version in it.
-const (
-	AppImageAsset  = "Prem-dl-x86_64.AppImage"
-	LinuxSumsAsset = "SHA256SUMS-linux.txt"
-)
-
-func isDeb(name string) bool {
-	return strings.HasPrefix(name, "prem-dl_") && strings.HasSuffix(name, "_amd64.deb")
-}
-
-// apiBase is GitHub's API; tests point it at a local server.
-var apiBase = "https://api.github.com"
-
-// UseAPI points the checks at another server that answers like GitHub's API, for trying the
-// update flow without publishing a release (dev builds only; see app_update.go).
-func UseAPI(base string) { apiBase = strings.TrimSuffix(base, "/") }
-
-// Release is the newest published release.
-type Release struct {
-	Version  string // without the leading "v"
-	Page     string // the release on github.com
-	Notes    string // its description, as Markdown
-	SetupURL string // "" if the release has no installer
-	Size     int64  // the installer's size
-	SumsURL  string
-	Linux    bool // it has a Linux build (the AppImage or the .deb)
-}
-
-// HasBuildFor reports whether the release has something for goos to install. Linux builds came
-// later and may be missing from a release; every release has the Windows ones.
-func (r Release) HasBuildFor(goos string) bool {
+// Channel is the release channel for a system: each release holds one file, so Windows' installer
+// and Linux's AppImage go out on channels of their own.
+func Channel(goos string) string {
 	if goos == "linux" {
-		return r.Linux
+		return "linux"
 	}
-	return true
+	return "stable"
 }
 
-// Latest asks GitHub for the newest release. Drafts and pre-releases are never "latest".
-func Latest(ctx context.Context, client *http.Client) (Release, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiBase+"/repos/"+Repo+"/releases/latest", nil)
-	if err != nil {
-		return Release{}, err
+var (
+	// ErrNoRelease: nothing is published on the channel (or the server doesn't know it).
+	ErrNoRelease = errors.New("no Prem-dl release has been published yet")
+	// ErrNotAccepted: the server turned the build secret, or this install's key, away.
+	ErrNotAccepted = errors.New("the update server doesn't accept this copy of Prem-dl")
+	// ErrVerify: the server's answer isn't signed by Prem-dl's release key, or doesn't match it.
+	ErrVerify = errors.New("the update didn't verify with Prem-dl's release key, so it was refused")
+)
+
+// OfflineError wraps a failure to reach the server: try again later, quietly.
+type OfflineError struct{ Err error }
+
+func (e *OfflineError) Error() string { return "couldn't reach the update server: " + e.Err.Error() }
+func (e *OfflineError) Unwrap() error { return e.Err }
+
+// Client talks to the release server with one install's key.
+type Client struct {
+	Base      string // https://api.truerip.cc
+	App       string
+	Key       string // this install's key (tra_...)
+	PublicKey ed25519.PublicKey
+	HTTP      *http.Client
+}
+
+// PublicKeyOf decodes a base64 release public key.
+func PublicKeyOf(b64 string) (ed25519.PublicKey, error) {
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil || len(raw) != ed25519.PublicKeySize {
+		return nil, errors.New("the release public key isn't a base64 Ed25519 key")
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "Prem-dl")
-	resp, err := client.Do(req)
+	return ed25519.PublicKey(raw), nil
+}
+
+var (
+	keyRe    = regexp.MustCompile(`^tra_[0-9A-Za-z]{12}_[0-9A-Za-z]{43}$`)
+	secretRe = regexp.MustCompile(`^trb_[0-9A-Za-z]{12}_[0-9A-Za-z_-]{43}$`)
+	labelRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+ -]{0,39}$`)
+	sha256Re = regexp.MustCompile(`^[0-9a-f]{64}$`)
+)
+
+// ValidKey reports whether s looks like an install key.
+func ValidKey(s string) bool { return keyRe.MatchString(s) }
+
+// ValidSecret reports whether s looks like a build secret.
+func ValidSecret(s string) bool { return secretRe.MatchString(s) }
+
+const userAgent = "Prem-dl"
+
+// Enrol trades the build secret for this install's own key (POST /v1/enrol). platform and
+// version describe the copy coarsely ("linux", "0.1.3"), nothing that tells machines apart.
+// ErrNotAccepted means the secret was revoked: carry on without updates.
+func Enrol(ctx context.Context, hc *http.Client, base, secret, platform, version string) (string, error) {
+	body := map[string]string{}
+	if labelRe.MatchString(platform) {
+		body["platform"] = platform
+	}
+	if labelRe.MatchString(version) {
+		body["app_version"] = version
+	}
+	data, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimSuffix(base, "/")+"/v1/enrol", bytes.NewReader(data))
 	if err != nil {
-		return Release{}, fmt.Errorf("checking for updates: %w", err)
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+secret)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := hc.Do(req)
+	if err != nil {
+		return "", &OfflineError{err}
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-		return Release{}, errors.New("GitHub rate-limited the update check; try again in a while")
+	switch resp.StatusCode {
+	case http.StatusCreated:
+	case http.StatusNotFound:
+		return "", ErrNotAccepted
+	case http.StatusTooManyRequests:
+		return "", &OfflineError{errors.New("too many new installs at once; it tries again later")}
+	default:
+		return "", fmt.Errorf("the update server answered %s", resp.Status)
 	}
-	if resp.StatusCode == http.StatusNotFound {
-		// Also what a private repository looks like from outside.
-		return Release{}, errors.New("no published Prem-dl release was found")
+	var out struct {
+		Key string `json:"key"`
 	}
-	if resp.StatusCode != http.StatusOK {
-		return Release{}, fmt.Errorf("update check failed: GitHub answered %s", resp.Status)
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 16<<10)).Decode(&out); err != nil || !ValidKey(out.Key) {
+		return "", errors.New("the update server gave no key")
 	}
-	var body struct {
-		Tag    string `json:"tag_name"`
-		Page   string `json:"html_url"`
-		Notes  string `json:"body"`
-		Assets []struct {
-			Name string `json:"name"`
-			URL  string `json:"browser_download_url"`
-			Size int64  `json:"size"`
-		} `json:"assets"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&body); err != nil {
-		return Release{}, fmt.Errorf("reading update info: %w", err)
-	}
-	if body.Tag == "" {
-		return Release{}, errors.New("update info had no version")
-	}
-	r := Release{Version: strings.TrimPrefix(body.Tag, "v"), Page: body.Page, Notes: body.Notes}
-	if r.Page == "" {
-		r.Page = "https://github.com/" + Repo + "/releases/tag/" + body.Tag
-	}
-	for _, a := range body.Assets {
-		switch a.Name {
-		case SetupAsset:
-			r.SetupURL, r.Size = a.URL, a.Size
-		case SumsAsset:
-			r.SumsURL = a.URL
-		case AppImageAsset:
-			r.Linux = true
-		default:
-			r.Linux = r.Linux || isDeb(a.Name)
-		}
-	}
-	return r, nil
+	return out.Key, nil
 }
 
-// Newer reports whether latest is a later version than current. Versions are dotted numbers
-// ("0.1.1", "v0.2"); a missing part counts as 0 and anything unreadable is never newer.
-func Newer(current, latest string) bool {
-	c, ok1 := parse(current)
-	l, ok2 := parse(latest)
-	if !ok1 || !ok2 {
-		return false
-	}
-	for i := 0; i < len(c) || i < len(l); i++ {
-		var a, b int
-		if i < len(c) {
-			a = c[i]
-		}
-		if i < len(l) {
-			b = l[i]
-		}
-		if a != b {
-			return b > a
-		}
-	}
-	return false
-}
-
-func parse(v string) ([]int, bool) {
-	v = strings.TrimPrefix(strings.TrimSpace(v), "v")
-	if v == "" {
-		return nil, false
-	}
-	var out []int
-	for _, p := range strings.Split(v, ".") {
-		n, err := strconv.Atoi(p)
-		if err != nil || n < 0 {
-			return nil, false
-		}
-		out = append(out, n)
-	}
-	return out, true
-}
-
-// ProgressFunc reports bytes downloaded so far and the total (0 when unknown).
-type ProgressFunc func(done, total int64)
-
-// Download saves the release's installer in dir and checks it against the release's SHA-256
-// list. It returns the installer's path; nothing is left behind when it fails.
-func Download(ctx context.Context, client *http.Client, r Release, dir string, progress ProgressFunc) (string, error) {
-	if r.SetupURL == "" {
-		return "", errors.New("this release has no installer")
-	}
-	if r.SumsURL == "" {
-		return "", errors.New("this release has no checksums, so its installer can't be checked")
-	}
-	sums, err := fetch(ctx, client, r.SumsURL, 64<<10)
-	if err != nil {
-		return "", err
-	}
-	want, ok := checksum(sums, SetupAsset)
-	if !ok {
-		return "", fmt.Errorf("%s doesn't list %s", SumsAsset, SetupAsset)
-	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	dest := filepath.Join(dir, "Prem-dl-Setup-"+r.Version+".exe")
-	part := dest + ".part"
-	got, err := downloadTo(ctx, client, r.SetupURL, part, progress)
-	if err != nil {
-		os.Remove(part)
-		return "", err
-	}
-	if got != want {
-		os.Remove(part)
-		return "", errors.New("the downloaded installer doesn't match the release's checksum; try again")
-	}
-	_ = os.Remove(dest)
-	if err := os.Rename(part, dest); err != nil {
-		os.Remove(part)
-		return "", err
-	}
-	return dest, nil
-}
-
-func checksum(sums []byte, name string) (string, bool) {
-	sc := bufio.NewScanner(bytes.NewReader(sums))
-	for sc.Scan() {
-		f := strings.Fields(sc.Text())
-		if len(f) == 2 && strings.TrimPrefix(f[1], "*") == name {
-			return strings.ToLower(f[0]), true
-		}
-	}
-	return "", false
-}
-
-func get(ctx context.Context, client *http.Client, u string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+func (c *Client) request(ctx context.Context, path string, header http.Header) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSuffix(c.Base, "/")+path, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "Prem-dl")
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("downloading %s: %w", fileOf(u), err)
+	for k, v := range header {
+		req.Header[k] = v
 	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("downloading %s: server answered %s", fileOf(u), resp.Status)
+	req.Header.Set("Authorization", "Bearer "+c.Key)
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, &OfflineError{err}
 	}
 	return resp, nil
 }
 
-func fetch(ctx context.Context, client *http.Client, u string, limit int64) ([]byte, error) {
-	resp, err := get(ctx, client, u)
+// Ping checks the key once (GET /v1/ping): false means the server dropped it (revoked, or
+// unused for 90 days), and the install should enrol again.
+func (c *Client) Ping(ctx context.Context) (bool, error) {
+	resp, err := c.request(ctx, "/v1/ping", nil)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	defer resp.Body.Close()
-	return io.ReadAll(io.LimitReader(resp.Body, limit))
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound:
+		return false, nil
+	}
+	return false, fmt.Errorf("the update server answered %s", resp.Status)
 }
 
-func downloadTo(ctx context.Context, client *http.Client, u, path string, progress ProgressFunc) (string, error) {
-	resp, err := get(ctx, client, u)
+// Release is a verified release: its fields come from the signed manifest.
+type Release struct {
+	Version  string
+	Channel  string
+	FileName string
+	Size     int64
+	SHA256   string
+	Notes    string // Markdown
+	Date     string
+}
+
+// Latest returns the newest release on channel, verified. ErrNoRelease when there is none.
+func (c *Client) Latest(ctx context.Context, channel string) (Release, error) {
+	resp, err := c.request(ctx, "/v1/releases/"+url.PathEscape(channel)+"/latest", nil)
 	if err != nil {
-		return "", err
+		return Release{}, err
 	}
 	defer resp.Body.Close()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-	if err != nil {
-		return "", err
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusNotFound:
+		return Release{}, ErrNoRelease
+	default:
+		return Release{}, fmt.Errorf("the update server answered %s", resp.Status)
 	}
-	h := sha256.New()
-	var done int64
-	var last time.Time
-	buf := make([]byte, 64<<10)
-	var copyErr error
-	for {
-		n, rerr := resp.Body.Read(buf)
-		if n > 0 {
-			if _, werr := f.Write(buf[:n]); werr != nil {
-				copyErr = werr
+	var body struct {
+		Manifest  string `json:"manifest"`
+		Signature string `json:"signature"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err != nil {
+		return Release{}, fmt.Errorf("reading the update server's answer: %w", err)
+	}
+	return Verify(c.PublicKey, c.App, channel, body.Manifest, body.Signature)
+}
+
+// Verify checks a manifest's signature over its exact bytes, then that it is this app's and
+// this channel's, and returns what it says. Nothing is read from it before the signature holds.
+func Verify(pub ed25519.PublicKey, app, channel, manifest, signature string) (Release, error) {
+	sig, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil || len(sig) != ed25519.SignatureSize || !ed25519.Verify(pub, []byte(manifest), sig) {
+		return Release{}, ErrVerify
+	}
+	var m struct {
+		App      string `json:"app"`
+		Channel  string `json:"channel"`
+		Date     string `json:"date"`
+		FileName string `json:"file_name"`
+		Notes    string `json:"notes"`
+		SHA256   string `json:"sha256"`
+		Size     *int64 `json:"size"`
+		Version  string `json:"version"`
+	}
+	if err := json.Unmarshal([]byte(manifest), &m); err != nil {
+		return Release{}, ErrVerify
+	}
+	if m.App != app || m.Channel != channel || !sha256Re.MatchString(m.SHA256) || m.Size == nil || *m.Size <= 0 || !ValidVersion(m.Version) {
+		return Release{}, ErrVerify
+	}
+	return Release{Version: m.Version, Channel: m.Channel, FileName: m.FileName, Size: *m.Size, SHA256: m.SHA256, Notes: m.Notes, Date: m.Date}, nil
+}
+
+// ProgressFunc reports bytes downloaded so far and the total.
+type ProgressFunc func(done, total int64)
+
+// Download saves r's file as dest, resuming dest+".part" when an earlier try left one, and
+// checks its size and SHA-256 against the signed manifest. On a mismatch nothing is kept.
+func (c *Client) Download(ctx context.Context, r Release, dest string, progress ProgressFunc) error {
+	part := dest + ".part"
+	var have int64
+	if fi, err := os.Stat(part); err == nil {
+		have = fi.Size()
+	}
+	if have > r.Size {
+		_ = os.Remove(part)
+		have = 0
+	}
+	if have < r.Size {
+		h := http.Header{}
+		if have > 0 {
+			h.Set("Range", "bytes="+strconv.FormatInt(have, 10)+"-")
+		}
+		resp, err := c.request(ctx, "/v1/releases/"+url.PathEscape(r.Channel)+"/"+url.PathEscape(r.Version)+"/download", h)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		switch resp.StatusCode {
+		case http.StatusOK:
+			have = 0 // the server sent it all: start over
+		case http.StatusPartialContent:
+		case http.StatusNotFound:
+			return errors.New("the update was withdrawn while it downloaded; check again later")
+		default:
+			return fmt.Errorf("downloading the update: the server answered %s", resp.Status)
+		}
+		flags := os.O_CREATE | os.O_WRONLY
+		if have == 0 {
+			flags |= os.O_TRUNC
+		}
+		f, err := os.OpenFile(part, flags, 0o600)
+		if err != nil {
+			return err
+		}
+		if _, err := f.Seek(have, io.SeekStart); err != nil {
+			f.Close()
+			return err
+		}
+		buf := make([]byte, 256<<10)
+		var last time.Time
+		var copyErr error
+		for {
+			n, rerr := resp.Body.Read(buf)
+			if n > 0 {
+				if _, werr := f.Write(buf[:n]); werr != nil {
+					copyErr = werr
+					break
+				}
+				have += int64(n)
+				if have > r.Size {
+					break
+				}
+			}
+			if progress != nil && (time.Since(last) > 100*time.Millisecond || rerr == io.EOF) {
+				last = time.Now()
+				progress(have, r.Size)
+			}
+			if rerr == io.EOF {
 				break
 			}
-			h.Write(buf[:n])
-			done += int64(n)
+			if rerr != nil {
+				copyErr = &OfflineError{rerr}
+				break
+			}
 		}
-		if progress != nil && (time.Since(last) > 100*time.Millisecond || rerr == io.EOF) {
-			last = time.Now()
-			progress(done, resp.ContentLength)
+		if err := f.Close(); copyErr == nil {
+			copyErr = err
 		}
-		if rerr == io.EOF {
-			break
-		}
-		if rerr != nil {
-			copyErr = rerr
-			break
+		if copyErr != nil {
+			return copyErr // the .part stays: the next try resumes it
 		}
 	}
-	closeErr := f.Close()
-	if copyErr != nil {
-		return "", fmt.Errorf("downloading %s: %w", fileOf(u), copyErr)
+	sum, size, err := hashFile(part)
+	if err != nil {
+		return err
 	}
-	if closeErr != nil {
-		return "", closeErr
+	if size != r.Size || sum != r.SHA256 {
+		_ = os.Remove(part)
+		return errors.New("the downloaded update doesn't match its signed manifest, so it was deleted; try again")
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	_ = os.Remove(dest)
+	return os.Rename(part, dest)
 }
 
-// fileOf is the last element of a download URL, for error messages.
-func fileOf(u string) string {
-	return u[strings.LastIndex(u, "/")+1:]
+func hashFile(path string) (string, int64, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", 0, err
+	}
+	defer f.Close()
+	h := sha256.New()
+	n, err := io.Copy(h, f)
+	if err != nil {
+		return "", 0, err
+	}
+	return hex.EncodeToString(h.Sum(nil)), n, nil
 }

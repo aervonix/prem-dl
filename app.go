@@ -109,6 +109,7 @@ type App struct {
 	shell    atomic.Pointer[sys.Shell] // nil until started, or if there's no tray
 	awake    *sys.Awake                // keeps the computer from sleeping while downloads run
 	m3u      playlistFiles             // playlist files written beside downloaded playlists
+	upd      updater                   // this install's connection to the release server
 	hidden   atomic.Bool               // the window is hidden, with the tray icon to bring it back
 	quitting atomic.Bool               // Quit from the tray: closing quits instead of hiding
 	toasts   atomic.Bool               // Windows notifications are set up

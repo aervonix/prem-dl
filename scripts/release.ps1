@@ -5,7 +5,13 @@
 #
 #   .\scripts\release.ps1             # fetches the newest yt-dlp and ffmpeg first
 #   .\scripts\release.ps1 -SkipFetch  # uses what bundle\ already holds
-param([switch]$SkipFetch)
+#   .\scripts\release.ps1 -NoUpdates  # a build without the build secret: it never checks for updates
+#
+# The build carries Prem-dl's build secret for the release server (internal\selfupdate): from
+# $env:PREMDL_BUILD_SECRET when set, else read with the TrueRip API repo's scripts\project.py
+# ($env:TRUERIP_API, default ~\Coding\API). It goes into a gitignored file for the build only.
+# Publish Prem-dl-Setup.exe on the "stable" channel afterwards (see CLAUDE.md, "Releases").
+param([switch]$SkipFetch, [switch]$NoUpdates)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -48,8 +54,31 @@ if (-not $SkipFetch -or -not (Test-Path 'bundle\yt-dlp.zip')) {
 if (-not (Test-Path 'bundle\ffmpeg.zip')) { throw "bundle\ffmpeg.zip is missing; releases must carry ffmpeg. Run without -SkipFetch." }
 # Also fails when bundle\ holds another platform's tools (fetched on Linux): they don't run here.
 Run 'Checking the built-in tools unpack' { go test -tags bundled . -run BuiltIn -count=1 }
-# -trimpath keeps this PC's folders (and the user name in them) out of the exe.
-Run 'Building Prem-dl.exe and Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis }
+$secretFile = Join-Path $root 'internal\selfupdate\secret_release.go'
+try {
+    if ($NoUpdates) {
+        Write-Warning '-NoUpdates: this build never checks for updates.'
+    } elseif ($env:PREMDL_BUILD_SECRET) {
+        Run 'Writing the build secret' { $env:PREMDL_BUILD_SECRET | go run ./cmd/buildsecret }
+    } else {
+        $api = if ($env:TRUERIP_API) { $env:TRUERIP_API } else { Join-Path $HOME 'Coding\API' }
+        if (-not (Test-Path (Join-Path $api 'scripts\project.py'))) {
+            throw "The TrueRip API repo isn't at $api (set TRUERIP_API, or PREMDL_BUILD_SECRET), so the build can't get its build secret. -NoUpdates builds without it."
+        }
+        Run 'Writing the build secret' {
+            Push-Location $api
+            try { $s = uv run --project backend python scripts/project.py secret-file prem-dl --format raw --out - } finally { Pop-Location }
+            if ($LASTEXITCODE -ne 0) { throw 'project.py secret-file failed' }
+            $s | go run ./cmd/buildsecret
+        }
+    }
+    # -trimpath keeps this PC's folders (and the user name in them) out of the exe.
+    Run 'Building Prem-dl.exe and Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis }
+} finally {
+    Remove-Item $secretFile -ErrorAction SilentlyContinue
+}
+# The secret is in there XORed: its plain form must not be.
+if (Select-String -Path $exe -Pattern 'trb_' -SimpleMatch -Quiet) { throw 'The build secret is readable in build\bin\Prem-dl.exe' }
 Copy-Item $exe, (Join-Path $bin 'Prem-dl-Setup.exe') $out
 # wails fills in its template with this build's values; the template is what's committed.
 git checkout -- build/windows/installer/wails_tools.nsh
