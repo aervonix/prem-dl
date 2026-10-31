@@ -32,7 +32,9 @@ type exportFeed struct {
 	Tabs     []string                 `json:"tabs"`
 	Options  settings.DownloadOptions `json:"options"`
 	Filter   Filter                   `json:"filter"`
-	Paused   bool                     `json:"paused"`
+	// RecordLive: see Feed.RecordLive.
+	RecordLive bool `json:"recordLive"`
+	Paused     bool `json:"paused"`
 }
 
 // Export writes feeds as a file Import reads back: links, tabs, options and filters. What each
@@ -40,7 +42,7 @@ type exportFeed struct {
 func Export(feeds []Feed) ([]byte, error) {
 	out := exported{Format: exportFormat, Version: 1, Feeds: []exportFeed{}}
 	for _, f := range feeds {
-		out.Feeds = append(out.Feeds, exportFeed{URL: f.URL, Title: f.Title, Uploader: f.Uploader, Tabs: f.Tabs, Options: f.Options, Filter: f.Filter, Paused: f.Paused})
+		out.Feeds = append(out.Feeds, exportFeed{URL: f.URL, Title: f.Title, Uploader: f.Uploader, Tabs: f.Tabs, Options: f.Options, Filter: f.Filter, RecordLive: f.RecordLive, Paused: f.Paused})
 	}
 	return json.MarshalIndent(out, "", "  ")
 }
@@ -73,7 +75,7 @@ func ParseImport(data []byte) ([]Imported, error) {
 		}
 		for _, f := range e.Feeds {
 			out = append(out, Imported{
-				NewFeed: NewFeed{URL: f.URL, Title: f.Title, Uploader: f.Uploader, Tabs: f.Tabs, Options: f.Options, Filter: f.Filter},
+				NewFeed: NewFeed{URL: f.URL, Title: f.Title, Uploader: f.Uploader, Tabs: f.Tabs, Options: f.Options, Filter: f.Filter, RecordLive: f.RecordLive},
 				Paused:  f.Paused, HasOptions: true,
 			})
 		}

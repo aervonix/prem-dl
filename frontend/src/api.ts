@@ -146,8 +146,8 @@ export const api = {
   listFeeds: () => cast<T.Feed[]>(App.ListFeeds()),
   inspectFeed: (url: string) => cast<T.TargetResponse>(App.InspectFeed(url)),
   followFeed: (f: T.NewFeed) => cast<T.FeedResponse>(App.FollowFeed(f as unknown as follow.NewFeed)),
-  editFeed: (id: string, tabs: T.ChannelTab[], opts: T.DownloadOptions, filter: T.FeedFilter) =>
-    cast<T.FeedResponse>(App.EditFeed(id, tabs, opts as unknown as settings.DownloadOptions, filter)),
+  editFeed: (id: string, tabs: T.ChannelTab[], opts: T.DownloadOptions, filter: T.FeedFilter, recordLive: boolean) =>
+    cast<T.FeedResponse>(App.EditFeed(id, tabs, opts as unknown as settings.DownloadOptions, filter, recordLive)),
   unfollowFeed: App.UnfollowFeed,
   /** Follow what a file lists (a Prem-dl export, Takeout's subscriptions.csv, OPML), chosen in a dialog. */
   importFeeds: () => cast<T.ImportResult>(App.ImportFeeds()),

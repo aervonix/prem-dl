@@ -99,8 +99,8 @@ func (a *App) FollowFeed(nf follow.NewFeed) FeedResponse {
 }
 
 // EditFeed changes a feed's download options and, for a channel, which tabs are checked.
-func (a *App) EditFeed(id string, tabs []string, opts settings.DownloadOptions, filter follow.Filter) FeedResponse {
-	f, err := a.feeds.Edit(id, tabs, opts, filter)
+func (a *App) EditFeed(id string, tabs []string, opts settings.DownloadOptions, filter follow.Filter, recordLive bool) FeedResponse {
+	f, err := a.feeds.Edit(id, tabs, opts, filter, recordLive)
 	if err != nil {
 		return FeedResponse{Error: err.Error()}
 	}

@@ -39,7 +39,11 @@ type Feed struct {
 	Tabs    []string                 `json:"tabs"`
 	Options settings.DownloadOptions `json:"options"`
 	Filter  Filter                   `json:"filter"`
-	Paused  bool                     `json:"paused"`
+	// RecordLive queues a stream as soon as a check sees it scheduled or live, recorded from its
+	// start, instead of waiting for it to end and taking the replay (which can be cut, edited or
+	// made members-only).
+	RecordLive bool `json:"recordLive"`
+	Paused     bool `json:"paused"`
 
 	AddedAt   time.Time `json:"addedAt" ts_type:"string"`
 	LastCheck time.Time `json:"lastCheck" ts_type:"string"` // when the last check ended; zero before the first
@@ -61,6 +65,8 @@ type NewFeed struct {
 	Tabs     []string                 `json:"tabs"`
 	Options  settings.DownloadOptions `json:"options"`
 	Filter   Filter                   `json:"filter"`
+	// RecordLive: see Feed.RecordLive.
+	RecordLive bool `json:"recordLive"`
 }
 
 // Filter narrows what a check queues: a busy channel's long stream reruns, say, or only the
@@ -317,7 +323,7 @@ func (m *Manager) Follow(nf NewFeed) (Feed, error) {
 	}
 	f := Feed{
 		ID: newID(), URL: t.URL, Title: feedTitle(nf, t.Channel), Uploader: strings.TrimSpace(nf.Uploader),
-		Tabs: tabs, Options: opts, Filter: filter, AddedAt: now(),
+		Tabs: tabs, Options: opts, Filter: filter, RecordLive: nf.RecordLive, AddedAt: now(),
 	}
 	m.mu.Lock()
 	if m.findURLLocked(t.URL) != nil {
@@ -402,7 +408,7 @@ func oneVideoOnly(o *settings.DownloadOptions) {
 
 // Edit changes the download options and filter of a feed, and for a channel which tabs are
 // checked.
-func (m *Manager) Edit(id string, tabs []string, opts settings.DownloadOptions, filter Filter) (Feed, error) {
+func (m *Manager) Edit(id string, tabs []string, opts settings.DownloadOptions, filter Filter, recordLive bool) (Feed, error) {
 	if err := settings.ValidateOptions(&opts); err != nil {
 		return Feed{}, err
 	}
@@ -434,6 +440,7 @@ func (m *Manager) Edit(id string, tabs []string, opts settings.DownloadOptions, 
 		}
 		r.Options = opts
 		r.Filter = filter
+		r.RecordLive = recordLive
 		out = cloneFeed(r.Feed)
 		return nil
 	})
@@ -631,12 +638,15 @@ func (m *Manager) check(id string) {
 		r.Title, r.AutoTitle = name, false
 	}
 	// What's there at the baseline, or on a tab added since, is old: it is noted, not queued.
-	var fresh []ytdlp.PlaylistEntry
+	var fresh, live []ytdlp.PlaylistEntry
 	var skip []string
 	for _, it := range entries {
 		e := it.PlaylistEntry
 		switch {
-		case r.seen[e.ID] || waiting(e):
+		case r.seen[e.ID]:
+		case waiting(e) && f.RecordLive && f.Ready && !contains(newTabs, it.tab) && f.Filter.allows(e) && soon(e):
+			live = append(live, e)
+		case waiting(e):
 		case !f.Ready || contains(newTabs, it.tab), archive[strings.ToLower(e.Extractor)+" "+e.ID], !f.Filter.allows(e):
 			skip = append(skip, e.ID)
 		default:
@@ -659,6 +669,16 @@ func (m *Manager) check(id string) {
 	added := 0
 	if len(fresh) > 0 {
 		added, err = m.deps.Enqueue(jobsFor(f, fresh, len(f.Tabs) > 0), f.Options)
+	}
+	if len(live) > 0 && err == nil {
+		// Waited for, then recorded from the beginning (a check can come an hour in).
+		o := f.Options
+		o.WaitForVideo, o.LiveFromStart = true, true
+		var n int
+		if n, err = m.deps.Enqueue(jobsFor(f, live, len(f.Tabs) > 0), o); err == nil {
+			added += n
+			fresh = append(fresh, live...)
+		}
 	}
 
 	m.mu.Lock()
@@ -707,6 +727,19 @@ func (m *Manager) check(id string) {
 // left unnoted, so it is queued once it's over.
 func waiting(e ytdlp.PlaylistEntry) bool {
 	return e.LiveStatus == "is_upcoming" || e.LiveStatus == "is_live"
+}
+
+// soonWindow is how far ahead a scheduled stream is recorded from: one weeks away would sit in
+// the queue all that time (and YouTube lists placeholders months ahead).
+const soonWindow = 48 * time.Hour
+
+// soon reports whether a stream is live, or due within soonWindow. One whose time the listing
+// doesn't give counts as soon: the queue waits for it all the same.
+func soon(e ytdlp.PlaylistEntry) bool {
+	if e.LiveStatus == "is_live" || e.Timestamp <= 0 {
+		return true
+	}
+	return time.Unix(e.Timestamp, 0).Before(now().Add(soonWindow))
 }
 
 // item is a listed video and the channel tab it was found on ("" when not a channel).

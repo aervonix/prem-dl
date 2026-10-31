@@ -2,6 +2,7 @@ package follow
 
 import (
 	"testing"
+	"time"
 
 	"yt-dlp-gui/internal/ytdlp"
 )
@@ -62,7 +63,7 @@ func TestCheckQueuesOnlyWhatTheFilterAllows(t *testing.T) {
 		t.Fatalf("queued %v", q)
 	}
 	// Loosening the filter later doesn't bring the skipped one back.
-	if _, err := m.Edit(f.ID, nil, opts(), Filter{}); err != nil {
+	if _, err := m.Edit(f.ID, nil, opts(), Filter{}, false); err != nil {
 		t.Fatal(err)
 	}
 	before := fk.batches()
@@ -72,5 +73,53 @@ func TestCheckQueuesOnlyWhatTheFilterAllows(t *testing.T) {
 	}
 	if got := get(t, m, f.ID); got.Filter.Include == nil || got.Filter.Exclude == nil {
 		t.Errorf("filter lists should be empty, not null: %+v", got.Filter)
+	}
+}
+
+// With RecordLive a scheduled stream is queued at once, waited for and recorded from its start,
+// and noted, so its replay isn't queued later.
+func TestRecordLive(t *testing.T) {
+	fk := newFake()
+	m := New(fk.deps(""))
+	fk.set(plLink, "old")
+	f := follow(t, m, NewFeed{URL: plLink, RecordLive: true})
+	m.check(f.ID)
+	soon := entry("soon")
+	soon.LiveStatus, soon.Timestamp = "is_upcoming", now().Add(3*time.Hour).Unix()
+	later := entry("later")
+	later.LiveStatus, later.Timestamp = "is_upcoming", now().Add(30*24*time.Hour).Unix()
+	fk.mu.Lock()
+	fk.lists[plLink] = append([]ytdlp.PlaylistEntry{soon, later}, fk.lists[plLink]...)
+	fk.mu.Unlock()
+	m.check(f.ID)
+	if q := fk.lastQueued(); len(q) != 1 || q[0] != "soon" {
+		t.Fatalf("queued %v", q)
+	}
+	fk.mu.Lock()
+	o := fk.opts[len(fk.opts)-1]
+	fk.mu.Unlock()
+	if !o.WaitForVideo || !o.LiveFromStart {
+		t.Errorf("options %+v", o)
+	}
+	// The stream ends: its replay was noted with it.
+	fk.mu.Lock()
+	fk.lists[plLink][0].LiveStatus = "was_live"
+	fk.mu.Unlock()
+	before := fk.batches()
+	m.check(f.ID)
+	if fk.batches() != before {
+		t.Errorf("the replay was queued too: %v", fk.lastQueued())
+	}
+	// Without it, a stream waits to be over, as before.
+	g := follow(t, m, NewFeed{URL: "https://www.youtube.com/playlist?list=PLother"})
+	fk.set("https://www.youtube.com/playlist?list=PLother", "x")
+	m.check(g.ID)
+	fk.mu.Lock()
+	fk.lists["https://www.youtube.com/playlist?list=PLother"] = append([]ytdlp.PlaylistEntry{soon}, fk.lists["https://www.youtube.com/playlist?list=PLother"]...)
+	fk.mu.Unlock()
+	before = fk.batches()
+	m.check(g.ID)
+	if fk.batches() != before {
+		t.Errorf("queued a stream without RecordLive")
 	}
 }

@@ -15,7 +15,7 @@ function shortLink(url: string): string {
 import {useApp} from '../store'
 import type {ChannelTab, DownloadOptions, Feed, FeedFilter, FeedTarget} from '../types'
 import {OptionsPanel, optionsProblem} from './OptionsPanel'
-import {Button, Chip, Field, Modal, Spinner} from './ui'
+import {Button, Chip, Field, Modal, Spinner, Switch} from './ui'
 
 const NO_FILTER: FeedFilter = {minMinutes: 0, maxMinutes: 0, include: [], exclude: []}
 
@@ -85,6 +85,7 @@ export function FeedDialog({
   const filter: FeedFilter = {minMinutes: Number(minLen || 0), maxMinutes: Number(maxLen || 0), include: words(include), exclude: words(exclude)}
   const filtering = !!(filter.minMinutes || filter.maxMinutes || filter.include.length || filter.exclude.length)
   const [showFilter, setShowFilter] = useState(filtering)
+  const [recordLive, setRecordLive] = useState(feed?.recordLive ?? false)
 
   const url = link?.url
   useEffect(() => {
@@ -118,8 +119,8 @@ export function FeedDialog({
     setSaving(true)
     try {
       const res = feed
-        ? await api.editFeed(feed.id, tabs, opts, filter)
-        : await api.followFeed({url: link?.url ?? target.url, title: link?.title ?? '', uploader: link?.uploader ?? '', tabs, options: opts, filter})
+        ? await api.editFeed(feed.id, tabs, opts, filter, recordLive)
+        : await api.followFeed({url: link?.url ?? target.url, title: link?.title ?? '', uploader: link?.uploader ?? '', tabs, options: opts, filter, recordLive})
       if (res.error) return toast('error', res.error)
       if (feed) {
         toast('success', 'Saved')
@@ -194,6 +195,12 @@ export function FeedDialog({
               {feed && <div className="hint">Videos already on a tab you add aren't downloaded.</div>}
             </div>
           )}
+          <Switch
+            checked={recordLive}
+            onChange={setRecordLive}
+            label="Record live streams as they happen"
+            description="A stream is added as soon as a check sees it scheduled (up to two days ahead) or live, and recorded from its start, rather than taking the replay once it ends, which can be cut or made members-only."
+          />
           <div>
             <button type="button" className="collapse-btn" aria-expanded={showFilter} onClick={() => setShowFilter((v) => !v)}>
               <span className="chev">

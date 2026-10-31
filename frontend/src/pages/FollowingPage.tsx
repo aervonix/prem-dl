@@ -108,7 +108,7 @@ const FeedRow = memo(function FeedRow({
           </div>
         </button>
         <div className="jsub truncate">
-          {[what, optionsSummary(feed.options), filterSummary(feed.filter)].filter(Boolean).join(' · ')}
+          {[what, optionsSummary(feed.options), filterSummary(feed.filter), feed.recordLive ? 'records streams live' : ''].filter(Boolean).join(' · ')}
         </div>
         <div className="feed-status">
           {feed.checking && <Spinner />}

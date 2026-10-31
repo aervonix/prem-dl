@@ -55,6 +55,7 @@ export namespace follow {
 	    tabs: string[];
 	    options: settings.DownloadOptions;
 	    filter: Filter;
+	    recordLive: boolean;
 	    paused: boolean;
 	    addedAt: string;
 	    lastCheck: string;
@@ -78,6 +79,7 @@ export namespace follow {
 	        this.tabs = source["tabs"];
 	        this.options = this.convertValues(source["options"], settings.DownloadOptions);
 	        this.filter = this.convertValues(source["filter"], Filter);
+	        this.recordLive = source["recordLive"];
 	        this.paused = source["paused"];
 	        this.addedAt = source["addedAt"];
 	        this.lastCheck = source["lastCheck"];
@@ -115,6 +117,7 @@ export namespace follow {
 	    tabs: string[];
 	    options: settings.DownloadOptions;
 	    filter: Filter;
+	    recordLive: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new NewFeed(source);
@@ -128,6 +131,7 @@ export namespace follow {
 	        this.tabs = source["tabs"];
 	        this.options = this.convertValues(source["options"], settings.DownloadOptions);
 	        this.filter = this.convertValues(source["filter"], Filter);
+	        this.recordLive = source["recordLive"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

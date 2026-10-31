@@ -22,6 +22,7 @@ type fake struct {
 	errs    map[string]error
 	limits  map[string]int // the limit each link was last listed with
 	queued  [][]queue.NewJob
+	opts    []settings.DownloadOptions // each batch's options
 	enqErr  error
 	archive map[string]bool
 	every   time.Duration
@@ -56,6 +57,7 @@ func (f *fake) deps(path string) Deps {
 				return 0, f.enqErr
 			}
 			f.queued = append(f.queued, items)
+			f.opts = append(f.opts, opts)
 			return len(items), nil
 		},
 		Archive: func() map[string]bool { return f.archive },
@@ -293,7 +295,7 @@ func TestArchivedVideosAreSkipped(t *testing.T) {
 	// "Download again" ignores the archive.
 	o := opts()
 	o.IgnoreArchive = true
-	if _, err := m.Edit(f.ID, nil, o, Filter{}); err != nil {
+	if _, err := m.Edit(f.ID, nil, o, Filter{}, false); err != nil {
 		t.Fatal(err)
 	}
 	fk.archive = map[string]bool{"youtube d": true}
@@ -398,7 +400,7 @@ func TestAddedTabIsNotedNotQueued(t *testing.T) {
 
 	fk.set(chanVids, "v2", "v1")
 	fk.set(chanHome+"/shorts", "s2", "s1")
-	if _, err := m.Edit(f.ID, []string{"shorts", "videos"}, opts(), Filter{}); err != nil {
+	if _, err := m.Edit(f.ID, []string{"shorts", "videos"}, opts(), Filter{}, false); err != nil {
 		t.Fatal(err)
 	}
 	if id := m.due(); id != f.ID {
@@ -416,7 +418,7 @@ func TestAddedTabIsNotedNotQueued(t *testing.T) {
 	if q := fk.lastQueued(); !reflect.DeepEqual(q, []string{"s3"}) {
 		t.Errorf("queued %v, want the new short", q)
 	}
-	if _, err := m.Edit(f.ID, nil, opts(), Filter{}); err == nil {
+	if _, err := m.Edit(f.ID, nil, opts(), Filter{}, false); err == nil {
 		t.Error("a channel was left with no tabs")
 	}
 }

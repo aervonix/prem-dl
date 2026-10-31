@@ -36,7 +36,7 @@ export function ConfirmClose():Promise<void>;
 
 export function CopyText(arg1:string):Promise<void>;
 
-export function EditFeed(arg1:string,arg2:Array<string>,arg3:settings.DownloadOptions,arg4:follow.Filter):Promise<main.FeedResponse>;
+export function EditFeed(arg1:string,arg2:Array<string>,arg3:settings.DownloadOptions,arg4:follow.Filter,arg5:boolean):Promise<main.FeedResponse>;
 
 export function Enqueue(arg1:Array<queue.NewJob>,arg2:settings.DownloadOptions):Promise<main.EnqueueResponse>;
 

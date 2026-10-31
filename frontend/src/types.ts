@@ -497,6 +497,8 @@ export interface Feed {
   tabs: ChannelTab[]
   options: DownloadOptions
   filter: FeedFilter
+  /** Queue streams as soon as they're scheduled or live, recorded from the start, not their replay. */
+  recordLive: boolean
   paused: boolean
   addedAt: string
   /** When the last check ended; Go's zero time (year 1) before the first. */
@@ -556,6 +558,7 @@ export interface NewFeed {
   tabs: ChannelTab[]
   options: DownloadOptions
   filter: FeedFilter
+  recordLive: boolean
 }
 
 /** How a link would be followed (follow.Target). */
