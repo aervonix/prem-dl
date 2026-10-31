@@ -227,8 +227,7 @@ func (m *Manager) Follow(nf NewFeed) (Feed, error) {
 	if err := settings.ValidateOptions(&opts); err != nil {
 		return Feed{}, err
 	}
-	// Choices that only make sense for one video.
-	opts.SectionStart, opts.SectionEnd, opts.LiveFromStart = "", "", false
+	oneVideoOnly(&opts)
 	if opts.Preset == "custom" {
 		return Feed{}, errors.New("a format picked from one video's list can't be used for new uploads. Choose a quality preset")
 	}
@@ -318,6 +317,14 @@ func (m *Manager) SetPaused(id string, paused bool) error {
 	return err
 }
 
+// oneVideoOnly clears the choices that only make sense for one video: picked chapters would cut
+// every new upload down to those titles. The audio language stays, since it falls back to the
+// default track where a video has none in it.
+func oneVideoOnly(o *settings.DownloadOptions) {
+	o.SectionStart, o.SectionEnd, o.LiveFromStart, o.WaitForVideo = "", "", false, false
+	o.Chapters = []string{}
+}
+
 // Edit changes the download options of a feed, and for a channel which tabs are checked.
 func (m *Manager) Edit(id string, tabs []string, opts settings.DownloadOptions) (Feed, error) {
 	if err := settings.ValidateOptions(&opts); err != nil {
@@ -326,7 +333,7 @@ func (m *Manager) Edit(id string, tabs []string, opts settings.DownloadOptions) 
 	if opts.Preset == "custom" {
 		return Feed{}, errors.New("choose a quality preset")
 	}
-	opts.SectionStart, opts.SectionEnd, opts.LiveFromStart = "", "", false
+	oneVideoOnly(&opts)
 	var out Feed
 	err := m.update(id, func(r *record) error {
 		if len(r.Tabs) > 0 {
@@ -512,7 +519,7 @@ func (m *Manager) check(id string) {
 	f := cloneFeed(r.Feed)
 	newTabs := append([]string{}, r.NewTabs...)
 	m.mu.Unlock()
-	m.changed()
+	m.emit() // Checking isn't saved, so nothing on disk changes
 
 	entries, name, err := m.listFeed(f, newTabs)
 	var archive map[string]bool
@@ -762,13 +769,18 @@ func feedTitle(nf NewFeed, channel bool) string {
 
 // changed tells the UI and saves.
 func (m *Manager) changed() {
+	m.emit()
+	m.save()
+}
+
+// emit sends the list to the page without saving it.
+func (m *Manager) emit() {
 	if m.deps.Emit != nil {
 		// The list is read under emitMu, so a later event always carries a later list.
 		m.emitMu.Lock()
 		m.deps.Emit("feeds:update", m.List())
 		m.emitMu.Unlock()
 	}
-	m.save()
 }
 
 type persisted struct {
@@ -792,7 +804,8 @@ func (m *Manager) save() {
 	gen := m.gen
 	p := persisted{Version: 1, Feeds: make([]*record, 0, len(m.feeds))}
 	for _, r := range m.feeds {
-		c := &record{Feed: cloneFeed(r.Feed), Seen: append([]string{}, r.Seen...)}
+		c := &record{Feed: cloneFeed(r.Feed), Seen: append([]string{}, r.Seen...),
+			NewTabs: append([]string(nil), r.NewTabs...), AutoTitle: r.AutoTitle}
 		c.Checking = false
 		p.Feeds = append(p.Feeds, c)
 	}
