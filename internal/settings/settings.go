@@ -70,6 +70,8 @@ type DownloadOptions struct {
 	FilenameTemplate  string `json:"filenameTemplate"`
 	PlaylistFolder    bool   `json:"playlistFolder"`
 	PlaylistNumbering bool   `json:"playlistNumbering"`
+	// PlaylistFile writes "<Playlist>.m3u8" beside a playlist's videos, in playlist order.
+	PlaylistFile bool `json:"playlistFile"`
 	// IgnoreArchive downloads the video even when the download archive lists it.
 	IgnoreArchive bool `json:"ignoreArchive"`
 	// SponsorBlockMark marks the SponsorBlock segments as chapters instead of cutting them out.
@@ -190,6 +192,7 @@ func StarterPresets() []NamedPreset {
 				EmbedChapters:     true,
 				PlaylistFolder:    true,
 				PlaylistNumbering: true,
+				PlaylistFile:      true,
 			},
 		},
 		{

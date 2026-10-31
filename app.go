@@ -108,6 +108,7 @@ type App struct {
 	act      *activity
 	shell    atomic.Pointer[sys.Shell] // nil until started, or if there's no tray
 	awake    *sys.Awake                // keeps the computer from sleeping while downloads run
+	m3u      playlistFiles             // playlist files written beside downloaded playlists
 	hidden   atomic.Bool               // the window is hidden, with the tray icon to bring it back
 	quitting atomic.Bool               // Quit from the tray: closing quits instead of hiding
 	toasts   atomic.Bool               // Windows notifications are set up
@@ -151,6 +152,7 @@ func NewApp(launch launchArgs) *App {
 		Observe: func(changed []queue.Job, removed []string) {
 			a.act.observe(changed, removed)
 			a.ahead.wake()
+			go a.m3u.finished(changed)
 		},
 		StatePath: filepath.Join(dir, "queue.json"),
 		FreeSpace: sys.FreeSpace,

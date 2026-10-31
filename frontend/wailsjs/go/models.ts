@@ -981,6 +981,7 @@ export namespace settings {
 	    filenameTemplate: string;
 	    playlistFolder: boolean;
 	    playlistNumbering: boolean;
+	    playlistFile: boolean;
 	    ignoreArchive: boolean;
 	    sponsorBlockMark: boolean;
 	    splitChapters: boolean;
@@ -1017,6 +1018,7 @@ export namespace settings {
 	        this.filenameTemplate = source["filenameTemplate"];
 	        this.playlistFolder = source["playlistFolder"];
 	        this.playlistNumbering = source["playlistNumbering"];
+	        this.playlistFile = source["playlistFile"];
 	        this.ignoreArchive = source["ignoreArchive"];
 	        this.sponsorBlockMark = source["sponsorBlockMark"];
 	        this.splitChapters = source["splitChapters"];

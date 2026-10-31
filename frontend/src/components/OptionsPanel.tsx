@@ -267,6 +267,12 @@ export function OptionsPanel({
               <div className="grid2">
                 <Switch checked={value.playlistFolder} onChange={(v) => set('playlistFolder', v)} label="Put playlists in their own folder" />
                 <Switch checked={value.playlistNumbering} onChange={(v) => set('playlistNumbering', v)} label="Number files by playlist position" description="01 - Title, 02 - Title…" />
+                <Switch
+                  checked={value.playlistFile}
+                  onChange={(v) => set('playlistFile', v)}
+                  label="Write a playlist file (.m3u8)"
+                  description="Players such as VLC or foobar then play the folder in playlist order"
+                />
               </div>
             ) : null}
 

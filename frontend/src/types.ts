@@ -52,6 +52,8 @@ export interface DownloadOptions {
   outputDir: string
   playlistFolder: boolean
   playlistNumbering: boolean
+  /** Write "<Playlist>.m3u8" beside a playlist's videos, in playlist order. */
+  playlistFile: boolean
   /** Download even when the download archive lists the video. */
   ignoreArchive: boolean
   /** Mark the SponsorBlock segments as chapters instead of cutting them out. */
