@@ -207,6 +207,24 @@ describe('AppProvider', () => {
     expect(ctx.state.loadError).toBe('no backend')
   })
 
+  it('applies changes that arrive before the first state on top of it', async () => {
+    act(() => root.unmount())
+    let resolve: (st: ReturnType<typeof appState>) => void = () => {}
+    mocked.getState.mockReturnValue(new Promise((r) => (resolve = r)))
+    root = createRoot(host)
+    await act(async () =>
+      root.render(
+        <AppProvider>
+          <Probe />
+        </AppProvider>,
+      ),
+    )
+    await emit('jobs:remove', ['a']) // removed after the snapshot below was taken
+    await emit('jobs:update', [job('c', 3)])
+    await act(async () => resolve({...appState(), jobs: [job('a', 1), job('b', 2)]}))
+    expect(jobs.map((j) => j.id)).toEqual(['b', 'c'])
+  })
+
   it('lists jobs in queue order as events arrive', async () => {
     await emit('jobs:update', [job('b', 2), job('a', 1)])
     expect(jobs.map((j) => j.id)).toEqual(['a', 'b'])

@@ -554,8 +554,10 @@ export function DownloadPage() {
 
   // ---- enqueue ----
   const problem = opts ? optionsProblem(opts) : ''
+  // Numbers are padded to the playlist's length ("001 - "), which is known once it is all read.
+  const waitsForCount = !!playlist && reading && !!opts?.playlistNumbering
   const download = async () => {
-    if (!opts || !result) return
+    if (!opts || !result || waitsForCount) return
     if (problem) return toast('error', problem)
     let items: NewJob[] = []
     let options = opts
@@ -935,6 +937,8 @@ export function DownloadPage() {
             <div className="info truncate">
               {problem ? (
                 <span style={{color: 'var(--danger)'}}>{problem}</span>
+              ) : waitsForCount && selectedEntries.length > 0 ? (
+                'Numbered files wait until the whole list is read…'
               ) : playlist ? (
                 selectedEntries.length === 0 ? (
                   'Tick the videos you want, or Select all'
@@ -959,7 +963,7 @@ export function DownloadPage() {
               }}>
               Clear
             </Button>
-            <Button variant="primary" size="lg" icon={video?.upcoming ? 'clock' : 'download'} loading={adding} disabled={!!problem || (!!playlist && selectedEntries.length === 0)} onClick={() => void download()}>
+            <Button variant="primary" size="lg" icon={video?.upcoming ? 'clock' : 'download'} loading={adding} disabled={!!problem || waitsForCount || (!!playlist && selectedEntries.length === 0)} onClick={() => void download()}>
               {playlist ? `Download ${selectedEntries.length}` : video?.upcoming ? 'Wait for it' : 'Download'}
             </Button>
           </div>

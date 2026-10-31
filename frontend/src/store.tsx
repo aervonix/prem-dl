@@ -236,19 +236,30 @@ export function AppProvider({children}: {children: ReactNode}) {
   // Initial load + backend events.
   useEffect(() => {
     let cancelled = false
+    // Changes that arrive while the first snapshot is on its way are applied after it, or the
+    // older snapshot would undo them (a removed job coming back, tools stuck on "checking").
+    let early: Action[] | null = []
+    const change = (a: Action) => (early ? early.push(a) : dispatch(a))
+    const settle = (a: Action) => {
+      if (cancelled) return
+      dispatch(a)
+      const pending = early ?? []
+      early = null
+      pending.forEach(dispatch)
+    }
     api
       .getState()
-      .then((st) => !cancelled && dispatch({type: 'init', state: st}))
-      .catch((e) => !cancelled && dispatch({type: 'initFailed', error: errMessage(e)}))
+      .then((st) => settle({type: 'init', state: st}))
+      .catch((e) => settle({type: 'initFailed', error: errMessage(e)}))
 
     const offs = [
-      on('jobs:update', (jobs) => dispatch({type: 'jobs', jobs})),
-      on('jobs:remove', (ids) => dispatch({type: 'jobsRemoved', ids})),
-      on('tools:status', (tools) => dispatch({type: 'tools', tools})),
-      on('app:update', (info) => dispatch({type: 'appUpdate', info})),
+      on('jobs:update', (jobs) => change({type: 'jobs', jobs})),
+      on('jobs:remove', (ids) => change({type: 'jobsRemoved', ids})),
+      on('tools:status', (tools) => change({type: 'tools', tools})),
+      on('app:update', (info) => change({type: 'appUpdate', info})),
       on('app:update-progress', (p) => updatingApp.current && dispatch({type: 'appUpdateProgress', p})),
-      on('settings:changed', (settings) => dispatch({type: 'settings', settings})),
-      on('feeds:update', (feeds) => dispatch({type: 'feeds', feeds})),
+      on('settings:changed', (settings) => change({type: 'settings', settings})),
+      on('feeds:update', (feeds) => change({type: 'feeds', feeds})),
       on('feeds:found', (f) =>
         toast('info', `${plural(f.count, 'new video')} from ${f.title} added to the queue`, {label: 'View queue', run: () => dispatch({type: 'page', page: 'queue'})}),
       ),
