@@ -73,7 +73,8 @@ try {
         }
     }
     # -trimpath keeps this PC's folders (and the user name in them) out of the exe.
-    Run 'Building Prem-dl.exe and Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis }
+    # The update target (internal\selfupdate): the installer is what Windows copies update to.
+    Run 'Building Prem-dl.exe and Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis -ldflags '-X yt-dlp-gui/internal/selfupdate.buildTarget=windows-x64' }
 } finally {
     Remove-Item $secretFile -ErrorAction SilentlyContinue
 }

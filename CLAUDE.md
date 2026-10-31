@@ -234,15 +234,21 @@ go test . ./internal/queue ./internal/ytdlp ./internal/follow ./internal/ytweb -
   per start, enrolled again when dropped). A source build has no secret and never checks. A
   release is taken only when its manifest verifies with the embedded `ReleasePublicKey` (Ed25519
   over the manifest's exact bytes), names `prem-dl` and the channel, and the download matches its
-  size and SHA-256 (resumed from `.part` with Range). One file per release, so one channel per
-  system (`selfupdate.Channel`): `stable` = `Prem-dl-Setup.exe`, `linux` = the AppImage. Installed
+  size and SHA-256 (resumed from `.part` with Range). Releases go on `stable` with one build per
+  target, and each release build has its target baked in (`-ldflags -X
+  yt-dlp-gui/internal/selfupdate.buildTarget=...`, by the release scripts): `windows-x64`
+  (`Prem-dl-Setup.exe`; the portable exe carries it too), `linux-x64-appimage`, `linux-x64-deb`
+  (release.sh builds the Linux binary once per package). It asks `latest?target=` and takes its
+  own build or one for any platform whose file fits (`FileFits`), never another target's. 0.1.3
+  had no targets (Windows asks `stable`, Linux `linux`): 0.1.4 goes out also as an any-platform
+  build on each of those to carry them across; later versions are targeted only. Installed
   Windows copies (the uninstall entry's `uninstall.exe` next to the exe) run the new setup as
   `/update /D=<dir>`; an AppImage downloads beside `$APPIMAGE`, renames over it and starts it once
   this process has exited (`swapAppImage`); the .deb and portable copies link to the release page.
   Try it in dev against the local API (`scripts/dev.sh`, `project.py --target local`):
   `PREMDL_UPDATE_API=http://127.0.0.1:8001`, `PREMDL_BUILD_SECRET` from `project.py --target local
-  secret-file prem-dl --format raw --out -`, `PREMDL_TEST_APPIMAGE` = a scratch file to swap (dev
-  builds only; the key is `update-dev.key`). The signing key is `~/.truerip/release-keys/prem-dl.key`:
+  secret-file prem-dl --format raw --out -`, `PREMDL_BUILD_TARGET`, `PREMDL_TEST_APPIMAGE` = a
+  scratch file to swap (dev builds only; the key is `update-dev.key`). The signing key is `~/.truerip/release-keys/prem-dl.key`:
   never in a repo, and losing it means no install can be updated again.
 - Editing Go files while `wails dev` runs triggers rebuilds that drop the bridge; wait for port 34115.
 - `wails dev`'s Vite can keep serving old `frontend/wailsjs` bindings after `wails generate module`
@@ -367,17 +373,20 @@ binary where `trb_` is readable. `release-windows.sh` can't run the Windows tool
 new `Prem-dl.exe` on Windows once before publishing. `release.ps1` still builds on Windows.
 
 Publish with the API repo's `project.py` (`~/Coding/API`, `P="uv run --project backend python
-scripts/project.py"`), one file per channel, then the GitHub release with all files:
+scripts/project.py"`), one build per target in one release, then the GitHub release with all files:
 
 ```bash
-$P publish prem-dl stable build/release/Prem-dl-Setup.exe --version X.Y.Z --notes-file build/notes/X.Y.Z.md
-$P publish prem-dl linux build/release/Prem-dl-x86_64.AppImage --version X.Y.Z --notes-file build/notes/X.Y.Z.md
+$P publish prem-dl stable windows-x64=build/release/Prem-dl-Setup.exe \
+    linux-x64-appimage=build/release/Prem-dl-x86_64.AppImage \
+    linux-x64-deb=build/release/prem-dl_X.Y.Z_amd64.deb --version X.Y.Z --notes-file build/notes/X.Y.Z.md
 # gh also holds another account: hand aervonix's token to this one command (never print it)
 GH_TOKEN="$(gh auth token --user aervonix)" gh release create vX.Y.Z build/release/* --repo aervonix/prem-dl --title "Prem-dl X.Y.Z" --notes-file build/notes/X.Y.Z.md
 ```
 
 Installs see a release as soon as it's on its channel; a bad one is yanked
-(`$P yank prem-dl <channel> X.Y.Z`) and fixed with a higher version, never replaced.
+(`$P yank prem-dl stable X.Y.Z`, or one build with `--build <target>`) and fixed with a higher
+version, never replaced. Every version carries all three targets: a target missing from one
+falls back to an older version's build, or to an any-platform build (only 0.1.4's crossing).
 
 ## Windows environment notes
 

@@ -87,7 +87,8 @@ fi
 
 step "Building Prem-dl.exe and Prem-dl-Setup.exe"
 # -trimpath keeps this machine's folders (and the user name in them) out of the exe.
-wails build -platform windows/amd64 -tags bundled -trimpath -nsis
+# The update target (internal/selfupdate): the installer is what Windows copies update to.
+wails build -platform windows/amd64 -tags bundled -trimpath -nsis -ldflags "-X yt-dlp-gui/internal/selfupdate.buildTarget=windows-x64"
 restore
 trap - EXIT
 
@@ -97,6 +98,7 @@ setup="$root/build/bin/Prem-dl-Setup.exe"
 # The secret is in there XORed: its plain form must not be.
 # (The updater's own pattern for a secret, trb_[0-9A-Za-z]{12}_..., is in there too: look for a real one.)
 if grep -aqE 'trb_[0-9A-Za-z]{12}_' "$exe"; then fail "the build secret is readable in Prem-dl.exe"; fi
+go version -m "$exe" | grep -q 'selfupdate.buildTarget=windows-x64' || fail "Prem-dl.exe doesn't carry its update target"
 cp "$exe" "$setup" "$out/"
 (cd "$out" && sha256sum Prem-dl.exe Prem-dl-Setup.exe > SHA256SUMS.txt)
 

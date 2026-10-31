@@ -20,8 +20,9 @@ import (
 	"yt-dlp-gui/internal/ytdlp"
 )
 
-// Updating Prem-dl itself, from the release server (internal/selfupdate). Each system has its own
-// channel there (selfupdate.Channel): Windows' is Prem-dl-Setup.exe, Linux's the AppImage.
+// Updating Prem-dl itself, from the release server (internal/selfupdate). A release on the
+// "stable" channel has one build per target, and each release build knows its own (baked in by
+// the release scripts): windows-x64 (Prem-dl-Setup.exe), linux-x64-appimage, linux-x64-deb.
 //
 //   - A Windows copy the installer put in place downloads the new Prem-dl-Setup.exe, starts it
 //     with /update and quits: the installer waits for the app to close, installs over it without
@@ -62,16 +63,23 @@ type updater struct {
 	client *selfupdate.Client
 }
 
-// updateServer is the release server and build secret this copy uses. A dev build can be pointed
-// at a local server with PREMDL_UPDATE_API and PREMDL_BUILD_SECRET, with a key file of its own.
-func updateServer() (base, secret, keyName string) {
-	base, secret, keyName = selfupdate.APIURL, selfupdate.BuildSecret(), "update.key"
+// updateServer is the release server, build secret and target this copy uses. A dev build can be
+// pointed at a local server with PREMDL_UPDATE_API, PREMDL_BUILD_SECRET and PREMDL_BUILD_TARGET,
+// with a key file of its own.
+func updateServer() (base, secret, target, keyName string) {
+	base, secret, target, keyName = selfupdate.APIURL, selfupdate.BuildSecret(), selfupdate.BuildTarget(), "update.key"
 	if devBuild {
 		if b := os.Getenv("PREMDL_UPDATE_API"); b != "" {
-			base, secret, keyName = b, os.Getenv("PREMDL_BUILD_SECRET"), "update-dev.key"
+			base, secret, target, keyName = b, os.Getenv("PREMDL_BUILD_SECRET"), os.Getenv("PREMDL_BUILD_TARGET"), "update-dev.key"
 		}
 	}
-	return base, secret, keyName
+	return base, secret, target, keyName
+}
+
+// updateTarget is this copy's build target ("" built from source).
+func updateTarget() string {
+	_, _, target, _ := updateServer()
+	return target
 }
 
 // updateClient returns a client with this install's key, enrolling first if there is none. A key
@@ -83,14 +91,14 @@ func (a *App) updateClient(ctx context.Context) (*selfupdate.Client, error) {
 	if a.upd.client != nil {
 		return a.upd.client, nil
 	}
-	base, secret, keyName := updateServer()
+	base, secret, target, keyName := updateServer()
 	pub, err := selfupdate.PublicKeyOf(selfupdate.ReleasePublicKey)
 	if err != nil {
 		return nil, err
 	}
 	hc := ytdlp.HTTPClient(a.store.Get().Proxy, 0)
 	keyFile := filepath.Join(a.dataDir, keyName)
-	c := &selfupdate.Client{Base: base, App: selfupdate.App, PublicKey: pub, HTTP: hc}
+	c := &selfupdate.Client{Base: base, App: selfupdate.App, Target: target, PublicKey: pub, HTTP: hc}
 	if raw, err := os.ReadFile(keyFile); err == nil && selfupdate.ValidKey(strings.TrimSpace(string(raw))) {
 		c.Key = strings.TrimSpace(string(raw))
 		ok, err := c.Ping(ctx)
@@ -136,15 +144,26 @@ func (a *App) installDir() string {
 	return sys.InstalledDir(uninstallName, exe)
 }
 
-// canInstall reports whether this copy can install r itself: an installed Windows copy and an
-// installer, or an AppImage it can replace and an AppImage.
+// forThisBuild reports whether r is an update for this kind of build. The server answers with
+// this target's build or a build for any platform; the latter names no system, so its file has to
+// fit (an .exe is no update for an AppImage).
+func forThisBuild(r selfupdate.Release) bool {
+	target := updateTarget()
+	return target == "" || r.Target == target || selfupdate.FileFits(target, r.FileName)
+}
+
+// canInstall reports whether this copy can install r itself: an installed Windows copy, or an
+// AppImage it can replace. A .deb needs root, and the portable exe has nothing to run.
 func (a *App) canInstall(r selfupdate.Release) bool {
-	name := strings.ToLower(r.FileName)
-	switch runtime.GOOS {
-	case "windows":
-		return strings.HasSuffix(name, ".exe") && a.installDir() != ""
-	case "linux":
-		return strings.HasSuffix(name, ".appimage") && appImagePath() != ""
+	target := updateTarget()
+	if !forThisBuild(r) || !selfupdate.FileFits(target, r.FileName) {
+		return false
+	}
+	switch target {
+	case selfupdate.TargetWindows:
+		return a.installDir() != ""
+	case selfupdate.TargetAppImage:
+		return appImagePath() != ""
 	}
 	return false
 }
@@ -167,7 +186,7 @@ func (a *App) checkAppUpdate(ctx context.Context) AppUpdate {
 		return u
 	default:
 		u.Latest, u.Notes, u.Size, u.Page = r.Version, r.Notes, r.Size, releasePage(r.Version)
-		u.Available = selfupdate.Newer(appVersion, r.Version)
+		u.Available = selfupdate.Newer(appVersion, r.Version) && forThisBuild(r)
 		u.CanInstall = u.Available && a.canInstall(r)
 	}
 	a.appUpdate.Store(&u)
@@ -180,7 +199,7 @@ func (a *App) latestRelease(ctx context.Context) (selfupdate.Release, error) {
 	if err != nil {
 		return selfupdate.Release{}, err
 	}
-	return c.Latest(ctx, selfupdate.Channel(runtime.GOOS))
+	return c.Latest(ctx, selfupdate.Channel)
 }
 
 // updateMessage says what went wrong with a check, for Settings.

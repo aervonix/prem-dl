@@ -42,13 +42,42 @@ const (
 	ReleasePublicKey = "V+jVd5lCbXASLLOtszV1orMXoKgUh/XbFPamjn67I7E="
 )
 
-// Channel is the release channel for a system: each release holds one file, so Windows' installer
-// and Linux's AppImage go out on channels of their own.
-func Channel(goos string) string {
-	if goos == "linux" {
-		return "linux"
+// Channel is where releases are published. A release has one build per target (TargetWindows,
+// TargetAppImage, TargetDeb), and each build asks for its own.
+const Channel = "stable"
+
+// The targets: what each kind of release build is, baked into it by the release scripts.
+const (
+	TargetWindows  = "windows-x64"        // Prem-dl.exe and Prem-dl-Setup.exe; the installer is published
+	TargetAppImage = "linux-x64-appimage" // Prem-dl-x86_64.AppImage
+	TargetDeb      = "linux-x64-deb"      // prem-dl_<v>_amd64.deb
+)
+
+// buildTarget is set by the release scripts (-ldflags "-X yt-dlp-gui/internal/selfupdate.buildTarget=...").
+// Built from source, a copy has none.
+var buildTarget string
+
+// BuildTarget is the kind of build this is, or "" when it was built from source.
+func BuildTarget() string {
+	if !targetRe.MatchString(buildTarget) {
+		return ""
 	}
-	return "stable"
+	return buildTarget
+}
+
+// FileFits reports whether a release file is the kind target installs: a manifest for "any
+// platform" (no target) names no system, so its file has to say it.
+func FileFits(target, fileName string) bool {
+	name := strings.ToLower(fileName)
+	switch target {
+	case TargetWindows:
+		return strings.HasSuffix(name, ".exe")
+	case TargetAppImage:
+		return strings.HasSuffix(name, ".appimage")
+	case TargetDeb:
+		return strings.HasSuffix(name, ".deb")
+	}
+	return false
 }
 
 var (
@@ -70,6 +99,7 @@ func (e *OfflineError) Unwrap() error { return e.Err }
 type Client struct {
 	Base      string // https://api.truerip.cc
 	App       string
+	Target    string // this build's target; "" asks only for builds for any platform
 	Key       string // this install's key (tra_...)
 	PublicKey ed25519.PublicKey
 	HTTP      *http.Client
@@ -89,6 +119,7 @@ var (
 	secretRe = regexp.MustCompile(`^trb_[0-9A-Za-z]{12}_[0-9A-Za-z_-]{43}$`)
 	labelRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+ -]{0,39}$`)
 	sha256Re = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	targetRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,39}$`)
 )
 
 // ValidKey reports whether s looks like an install key.
@@ -179,6 +210,7 @@ func (c *Client) Ping(ctx context.Context) (bool, error) {
 type Release struct {
 	Version  string
 	Channel  string
+	Target   string // the build's target; "" for a build for any platform
 	FileName string
 	Size     int64
 	SHA256   string
@@ -186,9 +218,14 @@ type Release struct {
 	Date     string
 }
 
-// Latest returns the newest release on channel, verified. ErrNoRelease when there is none.
+// Latest returns the newest release on channel for this build's target (or for any platform),
+// verified. ErrNoRelease when there is none.
 func (c *Client) Latest(ctx context.Context, channel string) (Release, error) {
-	resp, err := c.request(ctx, "/v1/releases/"+url.PathEscape(channel)+"/latest", nil)
+	path := "/v1/releases/" + url.PathEscape(channel) + "/latest"
+	if c.Target != "" {
+		path += "?" + url.Values{"target": {c.Target}}.Encode()
+	}
+	resp, err := c.request(ctx, path, nil)
 	if err != nil {
 		return Release{}, err
 	}
@@ -207,12 +244,13 @@ func (c *Client) Latest(ctx context.Context, channel string) (Release, error) {
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&body); err != nil {
 		return Release{}, fmt.Errorf("reading the update server's answer: %w", err)
 	}
-	return Verify(c.PublicKey, c.App, channel, body.Manifest, body.Signature)
+	return Verify(c.PublicKey, c.App, channel, c.Target, body.Manifest, body.Signature)
 }
 
-// Verify checks a manifest's signature over its exact bytes, then that it is this app's and
-// this channel's, and returns what it says. Nothing is read from it before the signature holds.
-func Verify(pub ed25519.PublicKey, app, channel, manifest, signature string) (Release, error) {
+// Verify checks a manifest's signature over its exact bytes, then that it is this app's and this
+// channel's, and for target or for any platform (never another target's build), and returns what
+// it says. Nothing is read from it before the signature holds.
+func Verify(pub ed25519.PublicKey, app, channel, target, manifest, signature string) (Release, error) {
 	sig, err := base64.StdEncoding.DecodeString(signature)
 	if err != nil || len(sig) != ed25519.SignatureSize || !ed25519.Verify(pub, []byte(manifest), sig) {
 		return Release{}, ErrVerify
@@ -225,15 +263,17 @@ func Verify(pub ed25519.PublicKey, app, channel, manifest, signature string) (Re
 		Notes    string `json:"notes"`
 		SHA256   string `json:"sha256"`
 		Size     *int64 `json:"size"`
+		Target   string `json:"target"`
 		Version  string `json:"version"`
 	}
 	if err := json.Unmarshal([]byte(manifest), &m); err != nil {
 		return Release{}, ErrVerify
 	}
-	if m.App != app || m.Channel != channel || !sha256Re.MatchString(m.SHA256) || m.Size == nil || *m.Size <= 0 || !ValidVersion(m.Version) {
+	if m.App != app || m.Channel != channel || (m.Target != "" && m.Target != target) ||
+		!sha256Re.MatchString(m.SHA256) || m.Size == nil || *m.Size <= 0 || !ValidVersion(m.Version) {
 		return Release{}, ErrVerify
 	}
-	return Release{Version: m.Version, Channel: m.Channel, FileName: m.FileName, Size: *m.Size, SHA256: m.SHA256, Notes: m.Notes, Date: m.Date}, nil
+	return Release{Version: m.Version, Channel: m.Channel, Target: m.Target, FileName: m.FileName, Size: *m.Size, SHA256: m.SHA256, Notes: m.Notes, Date: m.Date}, nil
 }
 
 // ProgressFunc reports bytes downloaded so far and the total.
@@ -256,7 +296,12 @@ func (c *Client) Download(ctx context.Context, r Release, dest string, progress 
 		if have > 0 {
 			h.Set("Range", "bytes="+strconv.FormatInt(have, 10)+"-")
 		}
-		resp, err := c.request(ctx, "/v1/releases/"+url.PathEscape(r.Channel)+"/"+url.PathEscape(r.Version)+"/download", h)
+		path := "/v1/releases/" + url.PathEscape(r.Channel) + "/" + url.PathEscape(r.Version) + "/download"
+		if r.Target != "" {
+			// Exactly the build the manifest describes (there is no fallback here).
+			path += "?" + url.Values{"target": {r.Target}}.Encode()
+		}
+		resp, err := c.request(ctx, path, h)
 		if err != nil {
 			return err
 		}

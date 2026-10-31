@@ -68,9 +68,10 @@ type server struct {
 	pub      ed25519.PublicKey
 	mu       sync.Mutex
 	keys     map[string]bool
-	latest   map[string]string // channel -> manifest
+	latest   map[string]string // channel + "/" + target -> manifest ("" target: any platform)
 	sigs     map[string]string
-	files    map[string][]byte // version -> file
+	files    map[string][]byte // version + "/" + target -> file
+	queries  []string          // the target asked for on each request
 	ranges   []string
 	breakAt  int // the download is cut after this many bytes (0: never)
 	enrolled int
@@ -87,15 +88,25 @@ func newServer(t *testing.T) (*server, *httptest.Server) {
 }
 
 func (s *server) publish(app, channel, version string, file []byte, tamper func(string) string) {
+	s.publishFor(app, channel, "", version, "Prem-dl-Setup.exe", file, tamper)
+}
+
+// publishFor publishes a build for target ("" for any platform), as the server serves it: the
+// manifest only has "target" when the build has one.
+func (s *server) publishFor(app, channel, target, version, fileName string, file []byte, tamper func(string) string) {
 	sum := sha256.Sum256(file)
-	m := fmt.Sprintf(`{"app":%q,"channel":%q,"date":"2026-10-31T12:00:00Z","file_name":"Prem-dl-Setup.exe","notes":"Fixes","sha256":%q,"size":%d,"version":%q}`,
-		app, channel, hex.EncodeToString(sum[:]), len(file), version)
+	tf := ""
+	if target != "" {
+		tf = fmt.Sprintf(`,"target":%q`, target)
+	}
+	m := fmt.Sprintf(`{"app":%q,"channel":%q,"date":"2026-10-31T12:00:00Z","file_name":%q,"notes":"Fixes","sha256":%q,"size":%d%s,"version":%q}`,
+		app, channel, fileName, hex.EncodeToString(sum[:]), len(file), tf, version)
 	sig := base64.StdEncoding.EncodeToString(ed25519.Sign(s.priv, []byte(m)))
 	if tamper != nil {
 		m = tamper(m)
 	}
 	s.mu.Lock()
-	s.latest[channel], s.sigs[channel], s.files[version] = m, sig, file
+	s.latest[channel+"/"+target], s.sigs[channel+"/"+target], s.files[version+"/"+target] = m, sig, file
 	s.mu.Unlock()
 }
 
@@ -120,18 +131,25 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	target := r.URL.Query().Get("target")
+	s.queries = append(s.queries, target)
 	switch {
 	case r.URL.Path == "/v1/ping":
 		_, _ = w.Write([]byte(`{}`))
 	case len(parts) == 4 && parts[1] == "releases" && parts[3] == "latest":
-		m, ok := s.latest[parts[2]]
+		// The target's own build, or else the build for any platform; without a target, only that.
+		k := parts[2] + "/" + target
+		if _, ok := s.latest[k]; !ok || target == "" {
+			k = parts[2] + "/"
+		}
+		m, ok := s.latest[k]
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		_ = json.NewEncoder(w).Encode(map[string]string{"manifest": m, "signature": s.sigs[parts[2]]})
+		_ = json.NewEncoder(w).Encode(map[string]string{"manifest": m, "signature": s.sigs[k]})
 	case len(parts) == 5 && parts[1] == "releases" && parts[4] == "download":
-		file, ok := s.files[parts[3]]
+		file, ok := s.files[parts[3]+"/"+target] // no fallback: exactly the build asked for
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -215,7 +233,7 @@ func TestRefusesWhatDoesntVerify(t *testing.T) {
 		"another app": func() { s.publish("other-app", "stable", "0.1.3", []byte("x"), nil) },
 		"another channel": func() {
 			s.publish(App, "beta", "0.1.3", []byte("x"), nil)
-			s.latest["stable"], s.sigs["stable"] = s.latest["beta"], s.sigs["beta"]
+			s.latest["stable/"], s.sigs["stable/"] = s.latest["beta/"], s.sigs["beta/"]
 		},
 		"signed by another key": func() {
 			_, other, _ := ed25519.GenerateKey(rand.Reader)
@@ -240,7 +258,7 @@ func TestDownloadMustMatchTheManifest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.files["0.1.3"] = []byte("a swapped installer!") // the same length, other bytes
+	s.files["0.1.3/"] = []byte("a swapped installer!") // the same length, other bytes
 	dest := filepath.Join(t.TempDir(), "setup.exe")
 	if err := c.Download(ctx, r, dest, nil); err == nil {
 		t.Fatal("a file that doesn't match the manifest was kept")
@@ -270,5 +288,58 @@ func TestPingSaysWhenTheKeyIsGone(t *testing.T) {
 func TestEmbeddedPublicKeyDecodes(t *testing.T) {
 	if _, err := PublicKeyOf(ReleasePublicKey); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A build asks for its own target: it gets its own build where the version has one, else the
+// build for any platform, and never another target's.
+func TestTargets(t *testing.T) {
+	s, srv := newServer(t)
+	ctx := context.Background()
+	key, _ := Enrol(ctx, srv.Client(), srv.URL, testSecret, "", "")
+	deb := &Client{Base: srv.URL, App: App, Target: TargetDeb, Key: key, PublicKey: s.pub, HTTP: srv.Client()}
+	s.publishFor(App, Channel, "", "0.1.4", "Prem-dl-Setup.exe", []byte("bridge"), nil)
+	s.publishFor(App, Channel, TargetDeb, "0.1.4", "prem-dl_0.1.4_amd64.deb", []byte("the deb"), nil)
+	r, err := deb.Latest(ctx, Channel)
+	if err != nil || r.Target != TargetDeb || r.FileName != "prem-dl_0.1.4_amd64.deb" {
+		t.Fatalf("own build: %+v %v", r, err)
+	}
+	dest := filepath.Join(t.TempDir(), "x.deb")
+	if err := deb.Download(ctx, r, dest, nil); err != nil {
+		t.Fatalf("download: %v", err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != "the deb" {
+		t.Errorf("downloaded %q", got)
+	}
+	if q := s.queries[len(s.queries)-1]; q != TargetDeb {
+		t.Errorf("the download asked for target %q", q)
+	}
+
+	// Another target's build is refused even when the server hands it over.
+	appimage := &Client{Base: srv.URL, App: App, Target: TargetAppImage, Key: key, PublicKey: s.pub, HTTP: srv.Client()}
+	s.latest[Channel+"/"+TargetAppImage], s.sigs[Channel+"/"+TargetAppImage] = s.latest[Channel+"/"+TargetDeb], s.sigs[Channel+"/"+TargetDeb]
+	if _, err := appimage.Latest(ctx, Channel); !errors.Is(err, ErrVerify) {
+		t.Errorf("another target's build: %v", err)
+	}
+	// One without a build of its own gets the any-platform build; whether its file fits is
+	// FileFits' call (app_update.go doesn't offer an .exe to an AppImage).
+	delete(s.latest, Channel+"/"+TargetAppImage)
+	r, err = appimage.Latest(ctx, Channel)
+	if err != nil || r.Target != "" || FileFits(TargetAppImage, r.FileName) || !FileFits(TargetWindows, r.FileName) {
+		t.Errorf("any-platform fallback: %+v %v", r, err)
+	}
+}
+
+func TestBuildTarget(t *testing.T) {
+	old := buildTarget
+	defer func() { buildTarget = old }()
+	for in, want := range map[string]string{"": "", TargetDeb: TargetDeb, "Bad Target": ""} {
+		buildTarget = in
+		if got := BuildTarget(); got != want {
+			t.Errorf("BuildTarget(%q) = %q", in, got)
+		}
+	}
+	if !FileFits(TargetAppImage, "Prem-dl-x86_64.AppImage") || FileFits(TargetDeb, "Prem-dl-Setup.exe") || FileFits("", "x.exe") {
+		t.Error("FileFits")
 	}
 }
