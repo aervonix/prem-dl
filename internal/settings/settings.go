@@ -487,10 +487,16 @@ func Open(dir string) (*Store, error) {
 		st.readErr = err
 	default:
 		loaded := Default()
+		// Saved presets are decoded on their own: decoded over the starter presets, json would
+		// fill each one's missing fields from the starter in the same position.
+		loaded.Presets = nil
 		if json.Unmarshal(raw, &loaded) != nil {
 			// Keep the unreadable file so the user can recover values from it.
 			_ = os.Rename(st.path(), st.path()+".corrupt")
 			break
+		}
+		if loaded.Presets == nil {
+			loaded.Presets = StarterPresets() // a file from before presets
 		}
 		if loaded.Validate() != nil {
 			// A hand-edited file with bad values must not stop the app from starting. Keep a copy,

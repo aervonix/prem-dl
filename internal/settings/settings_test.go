@@ -186,6 +186,27 @@ func TestOldSettingsGetStarterPresets(t *testing.T) {
 	}
 }
 
+// A saved preset missing a field that was added later gets that field's zero value, not the
+// value of the starter preset that happens to sit in the same position.
+func TestSavedPresetsDontInheritStarterFields(t *testing.T) {
+	dir := t.TempDir()
+	raw := `{"presets":[{"name":"Mine","options":{"preset":"720","container":"mp4"}}]}`
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	st, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := st.Get().Presets
+	if len(got) != 1 || got[0].Name != "Mine" {
+		t.Fatalf("presets %+v", got)
+	}
+	if starter := StarterPresets()[0].Options; starter.EmbedThumbnail && got[0].Options.EmbedThumbnail {
+		t.Errorf("Mine took the Music preset's thumbnail choice: %+v", got[0].Options)
+	}
+}
+
 func TestRepairKeepsTheGoodPresets(t *testing.T) {
 	dir := t.TempDir()
 	s := Default()
