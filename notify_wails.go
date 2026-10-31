@@ -31,6 +31,7 @@ func (a *App) initNotifications(ctx context.Context) {
 }
 
 func (a *App) sendNotification(ctx context.Context, n wr.NotificationOptions) error {
+	n.Title, n.Subtitle, n.Body = toastText(n.Title), toastText(n.Subtitle), toastText(n.Body)
 	if n.CategoryID != "" {
 		return wr.SendNotificationWithActions(ctx, n)
 	}

@@ -182,3 +182,10 @@ func TestScriptsDir(t *testing.T) {
 		t.Errorf("ScriptsDir = %q, want %q", got, solver)
 	}
 }
+
+func TestWorkerEnvKeepsNoSecrets(t *testing.T) {
+	got := workerEnv([]string{"PATH=/bin", "GITHUB_TOKEN=x", "NODE_OPTIONS=--require=/tmp/x.js", "SystemRoot=C:\\Windows", "HTTPS_PROXY=http://u:p@h"})
+	if strings.Join(got, ";") != "PATH=/bin;SystemRoot=C:\\Windows" {
+		t.Errorf("workerEnv = %v", got)
+	}
+}

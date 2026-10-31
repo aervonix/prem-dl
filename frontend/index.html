@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8"/>
     <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <!-- A second wall behind the escaping: a script in this page can call every Go method. Video
+         titles and thumbnails come from the sites; images may load from any https host. The
+         websocket is Vite's live reload in wails dev. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data: blob:; font-src 'self' data:; connect-src 'self' ws://localhost:* ws://127.0.0.1:* ws://wails.localhost:*; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"/>
     <title>Prem-dl</title>
 </head>
 <body>

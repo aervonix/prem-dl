@@ -124,6 +124,7 @@ func (s *Solver) startLocked(ctx context.Context) error {
 	}
 	// Like yt-dlp's own runs: no file system, network or child processes for the player's code.
 	cmd := exec.Command(s.node, append(args, "-e", workerJS)...)
+	cmd.Env = workerEnv(os.Environ())
 	sys.Quiet(cmd)
 	in, err := cmd.StdinPipe()
 	if err != nil {
@@ -241,4 +242,19 @@ func (l *limitedWriter) Write(p []byte) (int, error) {
 		l.n -= k
 	}
 	return len(p), nil
+}
+
+// workerEnv is what the worker keeps of Prem-dl's environment. Node needs next to nothing, and
+// the rest can hold secrets (tokens, proxy passwords) that the player's code has no business
+// seeing. NODE_OPTIONS could also load code ahead of the permission flags.
+func workerEnv(env []string) []string {
+	var out []string
+	for _, kv := range env {
+		name, _, _ := strings.Cut(kv, "=")
+		switch strings.ToUpper(name) {
+		case "PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL":
+			out = append(out, kv)
+		}
+	}
+	return out
 }

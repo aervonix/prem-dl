@@ -33,7 +33,7 @@ func InstallPlugin(dir string) error {
 	if old, err := os.ReadFile(path); err == nil && string(old) == string(plugin) {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	tmp := path + ".tmp"

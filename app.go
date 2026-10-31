@@ -119,7 +119,11 @@ func NewApp(launch launchArgs) *App {
 		store, err = settings.Open(dir)
 	}
 	if err != nil {
-		dir = filepath.Join(os.TempDir(), settings.ConfigDirName)
+		// A new private folder each time: a fixed name in a shared /tmp could be made first by
+		// another user, with settings or tools of their choosing.
+		if dir, err = os.MkdirTemp("", "prem-dl-"); err != nil {
+			dir = filepath.Join(os.TempDir(), settings.ConfigDirName)
+		}
 		store, _ = settings.Open(dir)
 	}
 	a := &App{
@@ -187,6 +191,7 @@ func (a *App) startup(ctx context.Context) {
 	a.feeds.Start()
 	a.applyTheme(a.store.Get().Theme)
 	a.detectOnce.Do(func() { go a.detectTools() })
+	go removeStaleTemp()
 	go a.appUpdateLoop()
 	go a.startBackground(ctx)
 }
@@ -766,6 +771,9 @@ func (a *App) jobFile(id string) (string, error) {
 	}
 	if j.OutputFile == "" {
 		return "", errors.New("this download has no file yet")
+	}
+	if !openable(j.OutputFile, j.Options.OutputDir, a.store.Get().DownloadDir) {
+		return "", errors.New("this download's file isn't in its download folder")
 	}
 	if _, err := os.Stat(j.OutputFile); err != nil {
 		return "", errors.New("the file has been moved or deleted")

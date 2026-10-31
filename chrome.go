@@ -121,7 +121,7 @@ func (a *App) writeChromeHelper() (string, error) {
 			return err
 		}
 		dst := filepath.Join(dir, filepath.FromSlash(p[len("chromehelper/"):]))
-		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
 			return err
 		}
 		return os.WriteFile(dst, data, 0o644)

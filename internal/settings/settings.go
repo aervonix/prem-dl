@@ -476,7 +476,7 @@ type Store struct {
 // Open loads settings from dir (creating it if needed). A missing or corrupt file yields
 // defaults; a file with some invalid values keeps the valid ones.
 func Open(dir string) (*Store, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	st := &Store{dir: dir, data: Default()}
