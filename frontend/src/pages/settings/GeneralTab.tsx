@@ -6,14 +6,8 @@ import {systemWords} from '../../platform'
 import {useApp} from '../../store'
 import type {ArchiveInfo, Settings} from '../../types'
 import type {TabProps} from './tab'
+import {TEMPLATES, templateProblem} from '../../templates'
 
-const TEMPLATES = [
-  {value: '%(title)s.%(ext)s', label: 'Title  (default)'},
-  {value: '%(title)s [%(id)s].%(ext)s', label: 'Title [id]  (two videos with one title both save)'},
-  {value: '%(uploader)s - %(title)s.%(ext)s', label: 'Uploader - Title'},
-  {value: '%(upload_date>%Y-%m-%d)s %(title)s.%(ext)s', label: 'Date Title'},
-  {value: '%(channel)s/%(title)s.%(ext)s', label: 'Channel folder / Title'},
-]
 
 /** How many videos "Remember downloaded videos" knows, with the file and a way to forget them. */
 function ArchiveRow() {
@@ -120,10 +114,25 @@ export function GeneralTab({draft, upd}: TabProps) {
             label="File name template"
             hint={
               <>
-                Uses the <button type="button" className="link" onClick={() => void api.openExternal('https://github.com/yt-dlp/yt-dlp#output-template')}>output template</button> syntax and must end with <code>.%(ext)s</code>.
+                {templateProblem(draft.filenameTemplate) ? (
+                  <span style={{color: 'var(--danger)'}}>{templateProblem(draft.filenameTemplate)}</span>
+                ) : (
+                  <>
+                    Uses the <button type="button" className="link" onClick={() => void api.openExternal('https://github.com/yt-dlp/yt-dlp#output-template')}>output template</button> syntax and must end with{' '}
+                    <code>.%(ext)s</code>. Presets can have their own.
+                  </>
+                )}
               </>
             }>
-            <input ref={templateInput} type="text" className="mono" value={draft.filenameTemplate} onChange={(e) => upd({filenameTemplate: e.target.value})} spellCheck={false} />
+            <input
+              ref={templateInput}
+              type="text"
+              className="mono"
+              value={draft.filenameTemplate}
+              aria-invalid={!!templateProblem(draft.filenameTemplate)}
+              onChange={(e) => upd({filenameTemplate: e.target.value})}
+              spellCheck={false}
+            />
           </Field>
 
           <div className="grid2">

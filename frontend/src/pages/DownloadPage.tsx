@@ -29,7 +29,8 @@ function splitLinks(text: string): string[] {
  * the extension is shown only when a container or an audio format fixes it.
  */
 function plannedName(v: VideoInfo, o: DownloadOptions): string {
-  if (!v.fileName) return ''
+  // The analysis names the file with Settings' template; a preset's own isn't known until then.
+  if (!v.fileName || o.filenameTemplate) return ''
   const dot = v.fileName.lastIndexOf('.')
   const stem = dot > 0 ? v.fileName.slice(0, dot) : v.fileName
   const ext = o.preset === 'audio' ? (o.audioFormat === 'best' ? '' : o.audioFormat) : o.preset === 'custom' && o.formatAudioOnly ? '' : o.container
@@ -650,7 +651,7 @@ export function DownloadPage() {
 
   const saveAsDefaults = async () => {
     if (!settings || !opts) return
-    const res = await attempt(api.saveSettings({...settings, defaults: {...forNewVideo(opts, settings.defaults), outputDir: ''}}))
+    const res = await attempt(api.saveSettings({...settings, defaults: {...forNewVideo(opts, settings.defaults), outputDir: '', filenameTemplate: ''}}))
     if (!res) return
     if (res.error) return toast('error', res.error)
     setSettings(res.settings)

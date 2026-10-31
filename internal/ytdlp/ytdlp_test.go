@@ -1154,3 +1154,16 @@ func TestSquareCoverOnlyForEmbeddedAudioCovers(t *testing.T) {
 		}
 	}
 }
+
+func TestPresetTemplateNamesTheFile(t *testing.T) {
+	e := testEnv()
+	o := e.Settings.Defaults
+	o.FilenameTemplate = "%(upload_date>%Y-%m-%d)s %(title)s.%(ext)s"
+	if args := e.DownloadArgs(o, Target{URL: "https://example.com/v"}); !has(args, "--output="+o.FilenameTemplate) {
+		t.Errorf("preset template unused: %v", args)
+	}
+	o.FilenameTemplate = ""
+	if args := e.DownloadArgs(o, Target{URL: "https://example.com/v"}); !has(args, "--output="+e.Settings.FilenameTemplate) {
+		t.Errorf("global template unused: %v", args)
+	}
+}

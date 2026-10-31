@@ -25,6 +25,8 @@ export interface SubtitleOptions {
 
 export interface DownloadOptions {
   preset: Preset
+  /** Names the files instead of Settings' template; '' uses that one. */
+  filenameTemplate: string
   formatId: string
   /** The custom format is audio only; it is saved as an audio file in its own codec. */
   formatAudioOnly: boolean

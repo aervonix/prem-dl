@@ -958,6 +958,7 @@ export namespace settings {
 	    sectionEnd: string;
 	    chapters: string[];
 	    outputDir: string;
+	    filenameTemplate: string;
 	    playlistFolder: boolean;
 	    playlistNumbering: boolean;
 	    ignoreArchive: boolean;
@@ -993,6 +994,7 @@ export namespace settings {
 	        this.sectionEnd = source["sectionEnd"];
 	        this.chapters = source["chapters"];
 	        this.outputDir = source["outputDir"];
+	        this.filenameTemplate = source["filenameTemplate"];
 	        this.playlistFolder = source["playlistFolder"];
 	        this.playlistNumbering = source["playlistNumbering"];
 	        this.ignoreArchive = source["ignoreArchive"];

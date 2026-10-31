@@ -272,3 +272,17 @@ func TestPresetFor(t *testing.T) {
 		t.Errorf("FindPreset: %+v", p)
 	}
 }
+
+func TestOptionTemplateChecked(t *testing.T) {
+	o := Default().Defaults
+	for _, bad := range []string{"%(title)s", "-o x.%(ext)s"} {
+		o.FilenameTemplate = bad
+		if ValidateOptions(&o) == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+	o.FilenameTemplate = "  %(title)s [%(id)s].%(ext)s "
+	if err := ValidateOptions(&o); err != nil || o.FilenameTemplate != "%(title)s [%(id)s].%(ext)s" {
+		t.Errorf("%q, %v", o.FilenameTemplate, err)
+	}
+}

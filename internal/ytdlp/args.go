@@ -123,9 +123,13 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	if dir == "" {
 		dir = s.DownloadDir
 	}
-	out := OutputTemplate(s.FilenameTemplate, o, t)
+	base := s.FilenameTemplate
+	if o.FilenameTemplate != "" {
+		base = o.FilenameTemplate // the preset's own
+	}
+	out := OutputTemplate(base, o, t)
 	if len(o.Chapters) > 0 {
-		out = SectionTemplate(s.FilenameTemplate, o, t)
+		out = SectionTemplate(base, o, t)
 	}
 	a = append(a, "--paths="+dir, "--output="+out)
 	a = append(a, "--trim-filenames=180")
@@ -175,7 +179,7 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 		}
 	}
 	if o.SplitChapters {
-		a = append(a, "--split-chapters", "--output=chapter:"+ChapterTemplate(s.FilenameTemplate, o, t))
+		a = append(a, "--split-chapters", "--output=chapter:"+ChapterTemplate(base, o, t))
 	}
 	if o.LiveFromStart {
 		a = append(a, "--live-from-start")

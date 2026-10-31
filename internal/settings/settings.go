@@ -64,7 +64,10 @@ type DownloadOptions struct {
 	// time range.
 	Chapters []string `json:"chapters"`
 
-	OutputDir         string `json:"outputDir"` // "" uses Settings.DownloadDir
+	OutputDir string `json:"outputDir"` // "" uses Settings.DownloadDir
+	// FilenameTemplate names the files instead of Settings.FilenameTemplate (a preset for
+	// podcasts dated, one for archives with the ID); "" uses that one.
+	FilenameTemplate  string `json:"filenameTemplate"`
 	PlaylistFolder    bool   `json:"playlistFolder"`
 	PlaylistNumbering bool   `json:"playlistNumbering"`
 	// IgnoreArchive downloads the video even when the download archive lists it.
@@ -238,7 +241,24 @@ var (
 
 // ValidateOptions normalises the options in place and rejects values that would make
 // yt-dlp misbehave. The returned error message is shown to the user.
+// checkTemplate refuses a file name template that would lose the extension or read as a flag.
+func checkTemplate(t string) error {
+	if !strings.Contains(t, "%(ext)s") {
+		return errors.New("the filename template must end with %(ext)s so files keep their extension")
+	}
+	if strings.HasPrefix(t, "-") {
+		return errors.New("the filename template can't start with a dash")
+	}
+	return nil
+}
+
 func ValidateOptions(o *DownloadOptions) error {
+	o.FilenameTemplate = strings.TrimSpace(o.FilenameTemplate)
+	if o.FilenameTemplate != "" {
+		if err := checkTemplate(o.FilenameTemplate); err != nil {
+			return err
+		}
+	}
 	if !oneOf(o.Preset, "best", "2160", "1440", "1080", "720", "480", "360", "audio", "custom") {
 		o.Preset = "best"
 	}
@@ -342,11 +362,8 @@ func (s *Settings) Validate() error {
 	if s.FilenameTemplate == "" {
 		s.FilenameTemplate = def.FilenameTemplate
 	}
-	if !strings.Contains(s.FilenameTemplate, "%(ext)s") {
-		return errors.New("the filename template must end with %(ext)s so files keep their extension")
-	}
-	if strings.HasPrefix(s.FilenameTemplate, "-") {
-		return errors.New("the filename template can't start with a dash")
+	if err := checkTemplate(s.FilenameTemplate); err != nil {
+		return err
 	}
 	if s.MaxConcurrent < 1 || s.MaxConcurrent > 10 {
 		return errors.New("simultaneous downloads must be between 1 and 10")
