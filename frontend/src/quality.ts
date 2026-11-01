@@ -53,19 +53,22 @@ const isAvc = (f: FormatInfo) => (/^(avc|h264)/i.test(f.vcodec) ? 1 : 0)
 const isAac = (f: FormatInfo) => (/^(mp4a|aac)/i.test(f.acodec) ? 1 : 0)
 
 /**
- * The video stream "bv*[height<=h]" picks under ytdlp.QualitySort (res,fps,hdr:12,vbr), or with
- * compatible ytdlp.CompatibleSort (H.264 first). With no stream at or below h it takes those of
- * unknown height, as "<=?" does; 0 means no limit.
+ * The video stream a preset picks under ytdlp.QualitySort (res,fps,hdr:12,vbr), or with
+ * compatible ytdlp.CompatibleSort (H.264 first): "bv*[height<=h]", the best at or below h, else
+ * the fallback "bv*" under "height:h" (ytdlp.heightSort), the nearest height above h with
+ * unknown heights last. 0 means no limit.
  */
 export function pickVideo(formats: FormatInfo[], maxHeight = 0, compatible = false): FormatInfo | undefined {
   const video = formats.filter((f) => f.hasVideo)
-  let pool = maxHeight > 0 ? video.filter((f) => f.height > 0 && f.height <= maxHeight) : video
-  if (pool.length === 0 && maxHeight > 0) pool = video.filter((f) => !f.height)
   const codec = (a: FormatInfo, b: FormatInfo) => (compatible ? isAvc(b) - isAvc(a) : 0)
   const audio = (a: FormatInfo, b: FormatInfo) => (compatible ? isAac(b) - isAac(a) : 0)
-  return [...pool].sort(
-    (a, b) => codec(a, b) || b.height - a.height || b.fps - a.fps || audio(a, b) || hdrRank(b) - hdrRank(a) || (b.vbr || b.tbr) - (a.vbr || a.tbr),
-  )[0]
+  const rest = (a: FormatInfo, b: FormatInfo) => b.fps - a.fps || audio(a, b) || hdrRank(b) - hdrRank(a) || (b.vbr || b.tbr) - (a.vbr || a.tbr)
+  const highest = (pool: FormatInfo[]) => [...pool].sort((a, b) => codec(a, b) || b.height - a.height || rest(a, b))[0]
+  if (maxHeight <= 0) return highest(video)
+  const under = video.filter((f) => f.height > 0 && f.height <= maxHeight)
+  if (under.length > 0) return highest(under)
+  const above = (f: FormatInfo) => (f.height > 0 ? f.height - maxHeight : Number.MAX_SAFE_INTEGER)
+  return [...video].sort((a, b) => codec(a, b) || above(a) - above(b) || rest(a, b))[0]
 }
 
 /**

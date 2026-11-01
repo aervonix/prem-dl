@@ -36,9 +36,23 @@ describe('pickVideo', () => {
     const fs = [v('a', 1080, 'vp9', 5000, 1), v('b', 1080, 'vp9', 1000, 1, {fps: 60}), v('c', 1080, 'vp9', 900, 1, {fps: 60, dynamicRange: 'HDR10'})]
     expect(pickVideo(fs)?.id).toBe('c')
   })
-  it('falls back to streams of unknown height, like "<=?"', () => {
+  it('falls back to the nearest height above, then to streams of unknown height', () => {
     expect(pickVideo([v('x', 0, 'avc1', 500, 1)], 720)?.id).toBe('x')
-    expect(pickVideo([v('x', 0, 'avc1', 500, 1), v('y', 1080, 'avc1', 500, 1)], 720)?.id).toBe('x')
+    expect(pickVideo([v('x', 0, 'avc1', 500, 1), v('y', 1080, 'avc1', 500, 1), v('z', 1440, 'avc1', 900, 1)], 720)?.id).toBe('y')
+  })
+  it('never takes TikTok\'s watermarked copy below its lowest stream', () => {
+    // Checked with yt-dlp on a post whose streams start at 576p: 480p took "download" (the
+    // watermarked copy, no height) under "<=?"; now the 576p H.265 one, and with Most
+    // compatible the only H.264 one, 720p.
+    const tiktok = [
+      v('download', 0, 'h264', 0, 0, {acodec: 'aac', hasAudio: true}),
+      v('bytevc1_540p_222800-0', 576, 'h265', 0, 534_000, {tbr: 222, acodec: 'aac', hasAudio: true}),
+      v('h264_720p_461863-0', 720, 'h264', 0, 1_107_000, {tbr: 461, acodec: 'aac', hasAudio: true}),
+      v('bytevc1_720p_270254-0', 720, 'h265', 0, 648_000, {tbr: 270, acodec: 'aac', hasAudio: true}),
+    ]
+    expect(pickVideo(tiktok, 480)?.id).toBe('bytevc1_540p_222800-0')
+    expect(pickVideo(tiktok, 360)?.id).toBe('bytevc1_540p_222800-0')
+    expect(pickVideo(tiktok, 480, true)?.id).toBe('h264_720p_461863-0')
   })
   it('finds nothing without video streams', () => {
     expect(pickVideo([a('251', 'opus', 129, 1)])).toBeUndefined()

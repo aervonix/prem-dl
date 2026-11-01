@@ -187,8 +187,14 @@ export function QualityPicker({
 function VideoTiles({value, video, maxHeight, onPick}: {value: DownloadOptions; video?: VideoInfo | null; maxHeight: number; onPick: (p: Preset) => void}) {
   const sized = !!video && video.formats.length > 0
   // A resolution as high as the video's top one is what Best gets anyway, so only lower ones
-  // are offered; one already chosen (from saved options) stays so it can be seen.
-  const heights = PRESET_HEIGHTS.filter((h) => !maxHeight || h < maxHeight || String(h) === value.preset)
+  // are offered. Below its lowest one every tile gets that lowest (TikTok starts at 576p), so
+  // only the first is offered, tagged with it. One already chosen (from saved options) stays
+  // so it can be seen.
+  const minHeight = video && video.heights.length > 0 ? video.heights[video.heights.length - 1] : 0
+  const below = PRESET_HEIGHTS.find((h) => minHeight && h < minHeight)
+  const heights = PRESET_HEIGHTS.filter(
+    (h) => ((!maxHeight || h < maxHeight) && (!minHeight || h >= minHeight || h === below)) || String(h) === value.preset,
+  )
   const tiles = [
     {preset: 'best' as Preset, name: 'Best'},
     ...heights.map((h) => ({preset: String(h) as Preset, name: resolutionLabel(h)})),
@@ -197,7 +203,7 @@ function VideoTiles({value, video, maxHeight, onPick}: {value: DownloadOptions; 
     const f = est.format
     const tags: string[] = []
     if (f && t.preset === 'best') tags.push(resolutionLabel(f.height, f.fps))
-    else if (f && f.height < Number(t.preset)) tags.push(`${f.height}p`)
+    else if (f && f.height && f.height !== Number(t.preset)) tags.push(`${f.height}p`)
     else if (f && f.fps > 30) tags.push(`${Math.round(f.fps)} fps`)
     if (f && f.dynamicRange && f.dynamicRange !== 'SDR') tags.push('HDR')
     if (t.preset === 'best' && video?.bestPremium) tags.push('Premium')

@@ -420,7 +420,7 @@ func TestAudioLanguage(t *testing.T) {
 	// and an unknown language falls back to the default track.
 	cases := map[string]string{
 		"best":  "--format=bv*+ba[language^=de]/bv*+ba/b",
-		"720":   "--format=bv*[height<=720]+ba[language^=de]/bv*[height<=720]+ba/b[height<=720]/bv*[height<=?720]+ba/b[height<=?720]",
+		"720":   "--format=bv*[height<=720]+ba[language^=de]/bv*[height<=720]+ba/b[height<=720]/bv*+ba/b",
 		"audio": "--format=ba[language^=de]/ba/b",
 	}
 	for preset, want := range cases {
@@ -520,7 +520,12 @@ func TestFormatPresets(t *testing.T) {
 		want []string
 	}{
 		{"720", settings.DownloadOptions{Preset: "720"},
-			[]string{"--format=bv*[height<=720]+ba/b[height<=720]/bv*[height<=?720]+ba/b[height<=?720]", "--format-sort=res,fps,hdr:12,vbr", "--merge-output-format=mp4"}},
+			[]string{"--format=bv*[height<=720]+ba/b[height<=720]/bv*+ba/b", "--format-sort=height:720,res,fps,hdr:12,vbr", "--merge-output-format=mp4"}},
+		// Checked against yt-dlp on a TikTok post whose lowest stream is 576p: 480p took the
+		// watermarked copy (no height) with "<=?"; now the 576p stream, and with Most compatible
+		// its only H.264 stream, 720p. On YouTube every height picks what it did.
+		{"480 compatible", settings.DownloadOptions{Preset: "480", Compatible: true},
+			[]string{"--format=bv*[height<=480]+ba/b[height<=480]/bv*+ba/b", "--format-sort=+vcodec:avc,height:480,res,fps,+acodec:m4a,hdr:12,vbr", "--merge-output-format=mp4"}},
 		// Observed (ulLBRyVrI1Y, signed in): default ranking picked the 0.4 Mbps AV1 "1080p Premium"
 		// stream over the 2.8 Mbps VP9 one. Bitrate now outranks codec at equal resolution.
 		{"best ranks bitrate above codec", settings.DownloadOptions{Preset: "best"},
@@ -1115,9 +1120,9 @@ func TestCompatibleSortsH264First(t *testing.T) {
 	e := testEnv()
 	o := e.Settings.Defaults
 	o.Compatible = true
-	for _, preset := range []string{"best", "720"} {
+	for preset, sort := range map[string]string{"best": CompatibleSort, "720": heightSort(CompatibleSort, "720")} {
 		o.Preset = preset
-		if args := e.DownloadArgs(o, Target{URL: "https://example.com/v"}); !has(args, "--format-sort="+CompatibleSort) {
+		if args := e.DownloadArgs(o, Target{URL: "https://example.com/v"}); !has(args, "--format-sort="+sort) {
 			t.Errorf("%s: no compatible sort in %v", preset, args)
 		}
 	}

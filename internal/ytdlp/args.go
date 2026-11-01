@@ -344,6 +344,13 @@ func sortFor(o settings.DownloadOptions) string {
 	return QualitySort
 }
 
+// heightSort is a sort with a height preset h put just ahead of resolution: the largest height
+// up to h first, else the smallest above it. Behind the codec in CompatibleSort, as H.264 is
+// there ahead of resolution. quality.ts's pickVideo mirrors it.
+func heightSort(sort, h string) string {
+	return strings.Replace(sort, "res,", "height:"+h+",res,", 1)
+}
+
 // FormatArgs maps the quality preset onto yt-dlp's format selection flags.
 func FormatArgs(o settings.DownloadOptions) []string {
 	var a []string
@@ -368,9 +375,13 @@ func FormatArgs(o settings.DownloadOptions) []string {
 		a = append(a, "--format="+withAudioLang("bv*+ba/b", o.AudioLang), "--format-sort="+sortFor(o))
 	default:
 		h := o.Preset
-		// "<=?" also admits formats whose height is unknown (some sites don't report it).
-		expr := fmt.Sprintf("bv*[height<=%[1]s]+ba/b[height<=%[1]s]/bv*[height<=?%[1]s]+ba/b[height<=?%[1]s]", h)
-		a = append(a, "--format="+withAudioLang(expr, o.AudioLang), "--format-sort="+sortFor(o))
+		// The best at or below h; failing that, whatever the sort puts first, and "height:h" puts
+		// the nearest height above h there, with unknown heights last (some sites don't report
+		// any). It was "<=?", which skipped known heights above h for unknown ones: TikTok's
+		// watermarked copy, the only stream without a height, came at 480p and 360p, where
+		// TikTok has nothing that low.
+		expr := fmt.Sprintf("bv*[height<=%[1]s]+ba/b[height<=%[1]s]/bv*+ba/b", h)
+		a = append(a, "--format="+withAudioLang(expr, o.AudioLang), "--format-sort="+heightSort(sortFor(o), h))
 	}
 	switch o.Container {
 	case "":
