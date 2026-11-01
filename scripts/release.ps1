@@ -72,11 +72,14 @@ try {
             $s | go run ./cmd/buildsecret
         }
     }
+    if (-not $NoUpdates) {
+        # The update target (internal\selfupdate): the installer is what Windows copies update to.
+        Run 'Writing the update target' { go run ./cmd/buildsecret -target windows-x64 }
+    }
     # -trimpath keeps this PC's folders (and the user name in them) out of the exe.
-    # The update target (internal\selfupdate): the installer is what Windows copies update to.
-    Run 'Building Prem-dl.exe and Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis -ldflags '-X yt-dlp-gui/internal/selfupdate.buildTarget=windows-x64' }
+    Run 'Building Prem-dl.exe and Prem-dl-Setup.exe' { wails build -trimpath -tags bundled -nsis }
 } finally {
-    Remove-Item $secretFile -ErrorAction SilentlyContinue
+    Remove-Item $secretFile, (Join-Path $root 'internal\selfupdate\target_release.go') -ErrorAction SilentlyContinue
 }
 # The secret is in there XORed: its plain form must not be.
 # (The updater's own pattern for a secret, trb_[0-9A-Za-z]{12}_..., is in there too: look for a real one.)

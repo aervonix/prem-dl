@@ -53,8 +53,9 @@ const (
 	TargetDeb      = "linux-x64-deb"      // prem-dl_<v>_amd64.deb
 )
 
-// buildTarget is set by the release scripts (-ldflags "-X yt-dlp-gui/internal/selfupdate.buildTarget=...").
-// Built from source, a copy has none.
+// buildTarget is set by target_release.go, which the release scripts write for each build
+// (go run ./cmd/buildsecret -target ...) and delete after it; it is gitignored. Built from
+// source, a copy has none.
 var buildTarget string
 
 // BuildTarget is the kind of build this is, or "" when it was built from source.

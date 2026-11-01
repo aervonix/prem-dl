@@ -61,7 +61,8 @@ mkdir -p "$out"
 rm -f "$out"/prem-dl_*_amd64.deb "$out"/Prem-dl-x86_64.AppImage "$out"/SHA256SUMS-linux.txt
 stage=$(mktemp -d)
 secret_file="$root/internal/selfupdate/secret_release.go"
-trap 'rm -rf "$stage"; rm -f "$secret_file"' EXIT
+target_file="$root/internal/selfupdate/target_release.go"
+trap 'rm -rf "$stage"; rm -f "$secret_file" "$target_file"' EXIT
 
 if ! $skip_fetch || [ ! -f bundle/yt-dlp.zip ]; then
   step "Fetching yt-dlp and ffmpeg"
@@ -80,23 +81,23 @@ else
   step "Writing the build secret"
   (cd "$api" && uv run --project backend python scripts/project.py secret-file prem-dl --format raw --out -) | go run ./cmd/buildsecret
 fi
-# One binary per package: each carries its update target (internal/selfupdate), since a .deb and
-# an AppImage update differently. The second build reuses the first's frontend.
+# One binary per package: each carries its update target (internal/selfupdate, written into the
+# gitignored target_release.go), since a .deb and an AppImage update differently. The second
+# build reuses the first's frontend.
 build_for() {
   step "Building Prem-dl for $1"
+  if ! $no_updates; then go run ./cmd/buildsecret -target "$1"; fi
   # -trimpath keeps this machine's folders (and the user name in them) out of the binary.
-  wails build -tags "webkit2_41 bundled" -trimpath $2 -ldflags "-X yt-dlp-gui/internal/selfupdate.buildTarget=$1"
+  wails build -tags "webkit2_41 bundled" -trimpath $2
   [ -x "$bin" ] || fail "wails build made no build/bin/Prem-dl"
   # The secret is in there XORed: its plain form must not be.
   # (The updater's own pattern for a secret, trb_[0-9A-Za-z]{12}_..., is in there too: look for a real one.)
   if grep -aqE 'trb_[0-9A-Za-z]{12}_' "$bin"; then fail "the build secret is readable in build/bin/Prem-dl"; fi
-  # (Its name is in every build as a constant; the build info says which one this build was given.)
-  go version -m "$bin" | grep -q "selfupdate.buildTarget=$1" || fail "the $1 build doesn't carry its target"
   cp "$bin" "$stage/prem-dl-$1"
 }
 build_for linux-x64-deb ""
 build_for linux-x64-appimage -s
-rm -f "$secret_file"
+rm -f "$secret_file" "$target_file"
 
 # The desktop entry both packages carry. The .deb's Exec must read exactly as the app writes it
 # for /usr/bin/prem-dl (sys.SchemeCommand), or the app adds a user entry of its own.

@@ -60,8 +60,9 @@ fi
 # bundle/ is what the build embeds: Windows' tools go in for this build, and Linux's come back.
 host="$root/build/bundle-host"
 secret_file="$root/internal/selfupdate/secret_release.go"
+target_file="$root/internal/selfupdate/target_release.go"
 restore() {
-  rm -f "$secret_file"
+  rm -f "$secret_file" "$target_file"
   if [ -d "$host" ]; then
     rm -rf "$root/bundle"
     mv "$host" "$root/bundle"
@@ -83,12 +84,13 @@ else
   [ -f "$api/scripts/project.py" ] || fail "the TrueRip API repo isn't at $api (set TRUERIP_API), so the build can't get its build secret. --no-updates builds without it."
   step "Writing the build secret"
   (cd "$api" && uv run --project backend python scripts/project.py secret-file prem-dl --format raw --out -) | go run ./cmd/buildsecret
+  # The update target (internal/selfupdate): the installer is what Windows copies update to.
+  go run ./cmd/buildsecret -target windows-x64
 fi
 
 step "Building Prem-dl.exe and Prem-dl-Setup.exe"
 # -trimpath keeps this machine's folders (and the user name in them) out of the exe.
-# The update target (internal/selfupdate): the installer is what Windows copies update to.
-wails build -platform windows/amd64 -tags bundled -trimpath -nsis -ldflags "-X yt-dlp-gui/internal/selfupdate.buildTarget=windows-x64"
+wails build -platform windows/amd64 -tags bundled -trimpath -nsis
 restore
 trap - EXIT
 
@@ -98,7 +100,6 @@ setup="$root/build/bin/Prem-dl-Setup.exe"
 # The secret is in there XORed: its plain form must not be.
 # (The updater's own pattern for a secret, trb_[0-9A-Za-z]{12}_..., is in there too: look for a real one.)
 if grep -aqE 'trb_[0-9A-Za-z]{12}_' "$exe"; then fail "the build secret is readable in Prem-dl.exe"; fi
-go version -m "$exe" | grep -q 'selfupdate.buildTarget=windows-x64' || fail "Prem-dl.exe doesn't carry its update target"
 cp "$exe" "$setup" "$out/"
 (cd "$out" && sha256sum Prem-dl.exe Prem-dl-Setup.exe > SHA256SUMS.txt)
 
