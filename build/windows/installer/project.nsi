@@ -173,7 +173,7 @@ Section "uninstall"
 
     !insertmacro wails.deleteUninstaller
 
-    # The data folder kept its old name (CLAUDE.md). Kept by default, and in a silent uninstall.
+    # The data folder kept the app's old name, yt-dlp-gui. Kept by default, and in a silent uninstall.
     MessageBox MB_YESNO|MB_DEFBUTTON2|MB_ICONQUESTION "Also remove your ${INFO_PRODUCTNAME} settings, queue and followed channels, and its copies of yt-dlp and ffmpeg?$\n$\nYour downloaded videos are not touched." /SD IDNO IDNO keepData
         RMDir /r "$AppData\yt-dlp-gui"
     keepData:

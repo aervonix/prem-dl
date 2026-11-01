@@ -10,14 +10,15 @@
 # The build carries Prem-dl's build secret for the release server (internal\selfupdate): from
 # $env:PREMDL_BUILD_SECRET when set, else read with the TrueRip API repo's scripts\project.py
 # ($env:TRUERIP_API, default ~\Coding\API). It goes into a gitignored file for the build only.
-# Publish Prem-dl-Setup.exe on the "stable" channel afterwards (see CLAUDE.md, "Releases").
+# Publish it with the TrueRip API repo's scripts/project.py: one release on "stable" with a build
+# per target (windows-x64=Prem-dl-Setup.exe, linux-x64-appimage=..., linux-x64-deb=...).
 param([switch]$SkipFetch, [switch]$NoUpdates)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
-# New shells don't see tools installed since they started (CLAUDE.md).
+# New shells don't see tools installed since they started.
 $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' +
     [Environment]::GetEnvironmentVariable('Path', 'User') + ';' +
     "$env:USERPROFILE\go\bin;${env:ProgramFiles(x86)}\NSIS"

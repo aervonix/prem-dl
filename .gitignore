@@ -17,7 +17,7 @@ frontend/dist
 # Windows tools fetched on Linux (release-windows.sh), and this machine's while they are swapped out
 /build/bundle-windows/
 /build/bundle-host/
-# release notes drafted for a release (CLAUDE.md, "Releases")
+# release notes drafted for a release
 /build/notes/
 # notes for coding agents: kept on this machine, not published
 /CLAUDE.md

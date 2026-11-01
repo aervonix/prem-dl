@@ -13,8 +13,9 @@
 #
 # The build carries Prem-dl's build secret for the release server (internal/selfupdate), read
 # with the TrueRip API repo's scripts/project.py ($TRUERIP_API, default ~/Coding/API) and
-# written into a gitignored file for the build only. Publish the AppImage on the "linux"
-# channel afterwards (see CLAUDE.md, "Releases").
+# written into a gitignored file for the build only.
+# Publish it with the TrueRip API repo's scripts/project.py: one release on "stable" with a build
+# per target (windows-x64=Prem-dl-Setup.exe, linux-x64-appimage=..., linux-x64-deb=...).
 set -euo pipefail
 umask 022 # package files must not be group-writable, whatever this machine uses
 

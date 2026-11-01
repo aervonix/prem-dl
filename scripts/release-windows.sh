@@ -13,7 +13,8 @@
 # bundle/ for the build only; Linux's tools are put back afterwards. They can't be run here, so
 # the built-in-tools test that release.ps1 runs is left to a Windows machine: start the new
 # Prem-dl.exe there once before publishing. The build secret is read like release.sh does.
-# Publish Prem-dl-Setup.exe on the "stable" channel afterwards (CLAUDE.md, "Releases").
+# Publish it with the TrueRip API repo's scripts/project.py: one release on "stable" with a build
+# per target (windows-x64=Prem-dl-Setup.exe, linux-x64-appimage=..., linux-x64-deb=...).
 set -euo pipefail
 umask 022
 
