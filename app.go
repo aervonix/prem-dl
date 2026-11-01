@@ -148,7 +148,7 @@ func NewApp(launch launchArgs) *App {
 	a.q = queue.New(queue.Deps{
 		Settings: store.Get,
 		Env:      a.buildEnv,
-		Info:     a.infos.Take,
+		Info:     a.savedInfo,
 		Emit:     a.emit,
 		Observe: func(changed []queue.Job, removed []string) {
 			a.act.observe(changed, removed)
@@ -479,6 +479,10 @@ func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist, stream bo
 		}
 	}
 	gen := a.infos.Gen()
+	if res, ok := a.readTikTok(ctx, link); ok {
+		a.infos.PutFrom(gen, link, res)
+		return ProbeResponse{Result: res}
+	}
 	env, cleanup, err := a.buildEnv(ctx)
 	if err != nil {
 		return ProbeResponse{Error: toAppError(err)}

@@ -263,7 +263,10 @@ func (a *App) quickDownload(raw, preset string) error {
 		item := queue.NewJob{URL: link}
 		gen := a.infos.Gen()
 		if env, cleanup, err := a.buildEnv(ctx); err == nil {
-			res, err := ytdlp.Probe(ctx, env, link, true)
+			res, ok := a.readTikTok(ctx, link)
+			if !ok {
+				res, err = ytdlp.Probe(ctx, env, link, true)
+			}
 			cleanup()
 			switch {
 			case ctx.Err() != nil:

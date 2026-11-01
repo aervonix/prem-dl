@@ -80,6 +80,10 @@ type VideoInfo struct {
 	ReleaseTimestamp int64 `json:"releaseTimestamp"`
 	// Chapters are the video's chapters in order; empty when it has none.
 	Chapters []Chapter `json:"chapters"`
+	// Photos is a photo post's number of pictures (TikTok, internal/tiktok), 0 for anything else.
+	// It downloads as the pictures and the sound, or the sound alone with an audio preset;
+	// Formats then lists only the sound.
+	Photos int `json:"photos"`
 }
 
 // Chapter is one chapter of a video; times are in seconds.
@@ -135,6 +139,19 @@ type ProbeResult struct {
 	Playlist *PlaylistInfo `json:"playlist"`
 	// info is yt-dlp's JSON for a video, kept for InfoCache.
 	info []byte
+}
+
+// FromInfo reads a video's JSON written as yt-dlp's -J would (internal/tiktok), keeping it so
+// a download can start from it (InfoCache, --load-info-json). FileName is left empty.
+func FromInfo(data []byte) (*ProbeResult, error) {
+	res, err := ParseProbe(data)
+	if err != nil {
+		return nil, err
+	}
+	if res.Video != nil {
+		res.info = data
+	}
+	return res, nil
 }
 
 // NormalizeURL trims the input, adds a scheme when it was left off, and rejects anything yt-dlp
@@ -226,6 +243,7 @@ type rawInfo struct {
 	Subtitles         map[string][]rawSub `json:"subtitles"`
 	AutomaticCaptions map[string][]rawSub `json:"automatic_captions"`
 	Entries           []json.RawMessage   `json:"entries"`
+	PhotoCount        int                 `json:"photo_count"` // a TikTok photo post's (internal/tiktok)
 }
 
 func (r *rawInfo) uploader() string {
@@ -299,6 +317,12 @@ func ParseProbe(data []byte) (*ProbeResult, error) {
 	var raw rawInfo
 	if err := decodeInfo(data, &raw); err != nil {
 		return nil, fmt.Errorf("couldn't read yt-dlp's answer: %w", err)
+	}
+	if raw.PhotoCount > 0 {
+		// A photo post: one thing to download, its pictures and sound (the entries).
+		v := buildVideo(&raw)
+		v.Photos = raw.PhotoCount
+		return &ProbeResult{Kind: "video", Video: v}, nil
 	}
 	if raw.Type == "playlist" || raw.Type == "multi_video" || (raw.Type == "" && len(raw.Entries) > 0) {
 		pl := &PlaylistInfo{ID: raw.ID, Title: raw.Title, URL: raw.WebpageURL, Uploader: raw.uploader()}

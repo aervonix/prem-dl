@@ -59,6 +59,8 @@ export function OptionsPanel({
 
   // The download is an audio file: "Audio only", or an audio format picked from the list.
   const audioFile = value.preset === 'audio' || (value.preset === 'custom' && value.formatAudioOnly)
+  // A photo post's pictures and sound are saved as they are: nothing to embed, cut or convert.
+  const pictures = mode === 'download' && !!video && video.photos > 0 && !audioFile
 
   return (
     <div>
@@ -66,108 +68,111 @@ export function OptionsPanel({
       <QualityPicker value={value} onChange={onChange} video={video} mode={mode} />
 
       {/* ---- subtitles ---- */}
-      <div className="optgroup">
-        <div className="opt-head">
-          Subtitles
-        </div>
-        <Segmented
-          label="Subtitles"
-          value={sub.mode}
-          options={[
-            {value: 'none', label: 'Off'},
-            {value: 'files', label: 'Save as file'},
-            {value: 'embed', label: 'Embed in video'},
-            {value: 'both', label: 'Both'},
-          ]}
-          onChange={(v: SubMode) => setSub({mode: v})}
-        />
-        {audioFile && (sub.mode === 'embed' || sub.mode === 'both') && (
-          <div className="hint">
-            {sub.mode === 'embed'
-              ? "Audio files don't get embedded subtitles, so none are downloaded. Choose Save as file to keep them."
-              : "Audio files don't get embedded subtitles, so they're only saved as files."}
+      {!pictures && (
+        <div className="optgroup">
+          <div className="opt-head">
+            Subtitles
           </div>
-        )}
-        {sub.mode !== 'none' && (
-          <div className="stack">
-            <div>
-              <div className="hint" style={{marginBottom: 6}}>
-                {sub.langs.length === 0 ? 'Pick at least one language.' : 'Languages to download (click to remove):'}
-              </div>
-              <div className="chips">
-                {sub.langs.map((l) => (
-                  <Chip key={l} onClick={() => toggleLang(l)} title="Remove" removes={langLabel(l)}>
-                    {langLabel(l)} <Icon name="x" size={12} />
-                  </Chip>
-                ))}
-              </div>
+          <Segmented
+            label="Subtitles"
+            value={sub.mode}
+            options={[
+              {value: 'none', label: 'Off'},
+              {value: 'files', label: 'Save as file'},
+              {value: 'embed', label: 'Embed in video'},
+              {value: 'both', label: 'Both'},
+            ]}
+            onChange={(v: SubMode) => setSub({mode: v})}
+          />
+          {audioFile && (sub.mode === 'embed' || sub.mode === 'both') && (
+            <div className="hint">
+              {sub.mode === 'embed'
+                ? "Audio files don't get embedded subtitles, so none are downloaded. Choose Save as file to keep them."
+                : "Audio files don't get embedded subtitles, so they're only saved as files."}
             </div>
-            <div>
-              <div className="hint" style={{marginBottom: 6}}>
-                {video ? (manualLangs.length > 0 ? 'Available for this video:' : 'This video has no uploaded subtitles.') : 'Common languages:'}
-              </div>
-              <div className="chips">
-                {(video ? manualLangs.map((t) => t.lang) : COMMON_LANGS).map((l) => (
-                  <Chip key={l} pressed={sub.langs.includes(l)} onClick={() => toggleLang(l)} title={langLabel(l)}>
-                    {video ? langLabel(l) : l}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-            <div className="row wrap">
-              <div className="grow" style={{minWidth: 200, maxWidth: 320}}>
-                <input
-                  type="text"
-                  placeholder="Add a language code (pt-BR, en.*, all) ↵"
-                  value={langDraft}
-                  onChange={(e) => setLangDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ',') {
-                      e.preventDefault()
-                      addLang(langDraft)
-                    }
-                  }}
-                  onBlur={() => langDraft && addLang(langDraft)}
-                  aria-label="Add subtitle language code"
-                />
-              </div>
-              {video && sub.auto && autoLangs.length > 0 && (
-                <select
-                  style={{width: 240}}
-                  value=""
-                  aria-label="Add an auto-generated caption language"
-                  onChange={(e) => e.target.value && toggleLang(e.target.value)}>
-                  <option value="">Add auto-caption language…</option>
-                  {autoLangs.map((t) => (
-                    <option key={t.lang} value={t.lang}>
-                      {t.name} ({t.lang})
-                    </option>
+          )}
+          {sub.mode !== 'none' && (
+            <div className="stack">
+              <div>
+                <div className="hint" style={{marginBottom: 6}}>
+                  {sub.langs.length === 0 ? 'Pick at least one language.' : 'Languages to download (click to remove):'}
+                </div>
+                <div className="chips">
+                  {sub.langs.map((l) => (
+                    <Chip key={l} onClick={() => toggleLang(l)} title="Remove" removes={langLabel(l)}>
+                      {langLabel(l)} <Icon name="x" size={12} />
+                    </Chip>
                   ))}
-                </select>
-              )}
+                </div>
+              </div>
+              <div>
+                <div className="hint" style={{marginBottom: 6}}>
+                  {video ? (manualLangs.length > 0 ? 'Available for this video:' : 'This video has no uploaded subtitles.') : 'Common languages:'}
+                </div>
+                <div className="chips">
+                  {(video ? manualLangs.map((t) => t.lang) : COMMON_LANGS).map((l) => (
+                    <Chip key={l} pressed={sub.langs.includes(l)} onClick={() => toggleLang(l)} title={langLabel(l)}>
+                      {video ? langLabel(l) : l}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+              <div className="row wrap">
+                <div className="grow" style={{minWidth: 200, maxWidth: 320}}>
+                  <input
+                    type="text"
+                    placeholder="Add a language code (pt-BR, en.*, all) ↵"
+                    value={langDraft}
+                    onChange={(e) => setLangDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ',') {
+                        e.preventDefault()
+                        addLang(langDraft)
+                      }
+                    }}
+                    onBlur={() => langDraft && addLang(langDraft)}
+                    aria-label="Add subtitle language code"
+                  />
+                </div>
+                {video && sub.auto && autoLangs.length > 0 && (
+                  <select
+                    style={{width: 240}}
+                    value=""
+                    aria-label="Add an auto-generated caption language"
+                    onChange={(e) => e.target.value && toggleLang(e.target.value)}>
+                    <option value="">Add auto-caption language…</option>
+                    {autoLangs.map((t) => (
+                      <option key={t.lang} value={t.lang}>
+                        {t.name} ({t.lang})
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="grid2">
+                <Switch
+                  checked={sub.auto}
+                  onChange={(v) => setSub({auto: v})}
+                  label="Include auto-generated captions"
+                  description={video ? `${autoLangs.length} languages available (machine-generated or translated)` : 'Used when a language has no uploaded subtitles'}
+                />
+                <Field label="Convert to">
+                  <select value={sub.format} onChange={(e) => setSub({format: e.target.value as DownloadOptions['subtitles']['format']})}>
+                    <option value="">Keep original format</option>
+                    <option value="srt">SRT</option>
+                    <option value="vtt">VTT</option>
+                    <option value="ass">ASS</option>
+                  </select>
+                </Field>
+              </div>
             </div>
-            <div className="grid2">
-              <Switch
-                checked={sub.auto}
-                onChange={(v) => setSub({auto: v})}
-                label="Include auto-generated captions"
-                description={video ? `${autoLangs.length} languages available (machine-generated or translated)` : 'Used when a language has no uploaded subtitles'}
-              />
-              <Field label="Convert to">
-                <select value={sub.format} onChange={(e) => setSub({format: e.target.value as DownloadOptions['subtitles']['format']})}>
-                  <option value="">Keep original format</option>
-                  <option value="srt">SRT</option>
-                  <option value="vtt">VTT</option>
-                  <option value="ass">ASS</option>
-                </select>
-              </Field>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+
+      )}
 
       {/* ---- part of the video ---- */}
-      {mode === 'download' && !playlist && <PartPicker value={value} onChange={onChange} video={video} />}
+      {mode === 'download' && !playlist && !pictures && <PartPicker value={value} onChange={onChange} video={video} />}
 
       {/* ---- extras ---- */}
       <div className="optgroup">
@@ -181,81 +186,85 @@ export function OptionsPanel({
         </button>
         {extrasOpen && (
           <div className="stack" style={{marginTop: 4}}>
-            <div className="grid2">
-              <Switch checked={value.embedMetadata} onChange={(v) => set('embedMetadata', v)} label="Embed metadata" description="Title, artist, date and description inside the file" />
-              <Switch checked={value.embedChapters} onChange={(v) => set('embedChapters', v)} label="Embed chapters" description="Chapter markers where the video has them" />
-              <Switch
-                checked={value.embedThumbnail && !(value.container === 'webm' && !audioFile)}
-                disabled={value.container === 'webm' && !audioFile}
-                onChange={(v) => set('embedThumbnail', v)}
-                label="Embed cover art"
-                description={value.container === 'webm' && !audioFile ? "WebM files can't hold cover art. Pick Auto, MP4 or MKV." : "Thumbnail as the file's cover image"}
-              />
-              {audioFile && value.embedThumbnail && (
-                <Switch
-                  checked={value.squareCover}
-                  onChange={(v) => set('squareCover', v)}
-                  label="Square cover art"
-                  description="Crops the middle out of the 16:9 thumbnail, where YouTube puts the album art"
-                />
-              )}
-              <Switch checked={value.writeThumbnail} onChange={(v) => set('writeThumbnail', v)} label="Save thumbnail file" />
-              <Switch checked={value.writeDescription} onChange={(v) => set('writeDescription', v)} label="Save description (.description)" />
-              <Switch checked={value.writeInfoJson} onChange={(v) => set('writeInfoJson', v)} label="Save info (.info.json)" />
-            </div>
-
-            <div>
-              <div className="section-title">Skip sections with SponsorBlock</div>
-              <div className="chips">
-                {SPONSOR_CATEGORIES.map((c) => (
-                  <Chip
-                    key={c.id}
-                    pressed={value.sponsorBlock.includes(c.id)}
-                    onClick={() =>
-                      set('sponsorBlock', value.sponsorBlock.includes(c.id) ? value.sponsorBlock.filter((x) => x !== c.id) : [...value.sponsorBlock, c.id])
-                    }>
-                    {c.label}
-                  </Chip>
-                ))}
-              </div>
-              {value.sponsorBlock.length > 0 && (
-                <div style={{marginTop: 8}}>
-                  <Segmented
-                    label="What to do with them"
-                    value={value.sponsorBlockMark ? 'mark' : 'cut'}
-                    onChange={(v) => set('sponsorBlockMark', v === 'mark')}
-                    options={[
-                      {value: 'cut', label: 'Cut out'},
-                      {value: 'mark', label: 'Mark as chapters'},
-                    ]}
+            {!pictures && (
+              <>
+                <div className="grid2">
+                  <Switch checked={value.embedMetadata} onChange={(v) => set('embedMetadata', v)} label="Embed metadata" description="Title, artist, date and description inside the file" />
+                  <Switch checked={value.embedChapters} onChange={(v) => set('embedChapters', v)} label="Embed chapters" description="Chapter markers where the video has them" />
+                  <Switch
+                    checked={value.embedThumbnail && !(value.container === 'webm' && !audioFile)}
+                    disabled={value.container === 'webm' && !audioFile}
+                    onChange={(v) => set('embedThumbnail', v)}
+                    label="Embed cover art"
+                    description={value.container === 'webm' && !audioFile ? "WebM files can't hold cover art. Pick Auto, MP4 or MKV." : "Thumbnail as the file's cover image"}
                   />
+                  {audioFile && value.embedThumbnail && (
+                    <Switch
+                      checked={value.squareCover}
+                      onChange={(v) => set('squareCover', v)}
+                      label="Square cover art"
+                      description="Crops the middle out of the 16:9 thumbnail, where YouTube puts the album art"
+                    />
+                  )}
+                  <Switch checked={value.writeThumbnail} onChange={(v) => set('writeThumbnail', v)} label="Save thumbnail file" />
+                  <Switch checked={value.writeDescription} onChange={(v) => set('writeDescription', v)} label="Save description (.description)" />
+                  <Switch checked={value.writeInfoJson} onChange={(v) => set('writeInfoJson', v)} label="Save info (.info.json)" />
                 </div>
-              )}
-              <div className="hint" style={{marginTop: 6}}>
-                {value.sponsorBlockMark
-                  ? 'Adds the selected segments as chapters, so players can skip them; the video stays whole. YouTube only.'
-                  : 'Cuts the selected segments out of the video. YouTube only; needs ffmpeg and re-encodes at cut points.'}
-              </div>
-            </div>
 
-            <div className="grid2">
-              {value.chapters.length === 0 && (
-                <Switch
-                  checked={value.splitChapters}
-                  onChange={(v) => set('splitChapters', v)}
-                  label="Also save each chapter as its own file"
-                  description="In a folder named after the video, as “01 - Chapter title”. Needs ffmpeg."
-                />
-              )}
-              {mode === 'download' && video?.isLive && (
-                <Switch
-                  checked={value.liveFromStart}
-                  onChange={(v) => set('liveFromStart', v)}
-                  label="Record from the start"
-                  description="Downloads the stream from its beginning instead of from now."
-                />
-              )}
-            </div>
+                <div>
+                  <div className="section-title">Skip sections with SponsorBlock</div>
+                  <div className="chips">
+                    {SPONSOR_CATEGORIES.map((c) => (
+                      <Chip
+                        key={c.id}
+                        pressed={value.sponsorBlock.includes(c.id)}
+                        onClick={() =>
+                          set('sponsorBlock', value.sponsorBlock.includes(c.id) ? value.sponsorBlock.filter((x) => x !== c.id) : [...value.sponsorBlock, c.id])
+                        }>
+                        {c.label}
+                      </Chip>
+                    ))}
+                  </div>
+                  {value.sponsorBlock.length > 0 && (
+                    <div style={{marginTop: 8}}>
+                      <Segmented
+                        label="What to do with them"
+                        value={value.sponsorBlockMark ? 'mark' : 'cut'}
+                        onChange={(v) => set('sponsorBlockMark', v === 'mark')}
+                        options={[
+                          {value: 'cut', label: 'Cut out'},
+                          {value: 'mark', label: 'Mark as chapters'},
+                        ]}
+                      />
+                    </div>
+                  )}
+                  <div className="hint" style={{marginTop: 6}}>
+                    {value.sponsorBlockMark
+                      ? 'Adds the selected segments as chapters, so players can skip them; the video stays whole. YouTube only.'
+                      : 'Cuts the selected segments out of the video. YouTube only; needs ffmpeg and re-encodes at cut points.'}
+                  </div>
+                </div>
+
+                <div className="grid2">
+                  {value.chapters.length === 0 && (
+                    <Switch
+                      checked={value.splitChapters}
+                      onChange={(v) => set('splitChapters', v)}
+                      label="Also save each chapter as its own file"
+                      description="In a folder named after the video, as “01 - Chapter title”. Needs ffmpeg."
+                    />
+                  )}
+                  {mode === 'download' && video?.isLive && (
+                    <Switch
+                      checked={value.liveFromStart}
+                      onChange={(v) => set('liveFromStart', v)}
+                      label="Record from the start"
+                      description="Downloads the stream from its beginning instead of from now."
+                    />
+                  )}
+                </div>
+              </>
+            )}
 
             {feed ? (
               <Switch

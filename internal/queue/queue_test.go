@@ -476,16 +476,16 @@ func TestRemoveRunningJob(t *testing.T) {
 // the fake URL as, and counts how often one was handed out.
 func (h *harness) withInfo(t *testing.T, path, as string) *atomic.Int32 {
 	var taken atomic.Int32
-	h.m.deps.Info = func(url string) (string, func()) {
+	h.m.deps.Info = func(url string) (ytdlp.Saved, func()) {
 		if url != "https://fake.test"+path {
-			return "", func() {}
+			return ytdlp.Saved{}, func() {}
 		}
 		taken.Add(1)
 		f := filepath.Join(t.TempDir(), "info.json")
 		if err := os.WriteFile(f, []byte("https://fake.test"+as), 0o600); err != nil {
 			t.Error(err)
 		}
-		return f, func() { os.Remove(f) }
+		return ytdlp.Saved{Path: f}, func() { os.Remove(f) }
 	}
 	return &taken
 }

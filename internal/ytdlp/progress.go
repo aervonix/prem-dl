@@ -234,6 +234,10 @@ type Tracker struct {
 	// Sections is how many cuts one run downloads (chosen chapters), one file after another,
 	// each reported 0-100% on its own; 0 or 1 for a single cut.
 	Sections int
+	// Files is how many files a photo post's run downloads (PhotoFiles): the sound, then the
+	// pictures, each reported 0-100% on its own. Pictures count, though they look like
+	// thumbnails. 0 or 1 for anything else.
+	Files int
 
 	streams   []Stream
 	planTotal int64
@@ -331,7 +335,7 @@ func (t *Tracker) stageLabel() string {
 
 // Update ingests a progress report. ok is false for reports that should be ignored.
 func (t *Tracker) Update(p Progress) (Snapshot, bool) {
-	if isSideFile(p.Filename) {
+	if isSideFile(p.Filename) && t.Files <= 1 {
 		return Snapshot{}, false
 	}
 	if t.sawStream && p.Filename != t.lastFile {
@@ -352,6 +356,9 @@ func (t *Tracker) Update(p Progress) (Snapshot, bool) {
 	t.allDone = p.Status == "finished" && (len(t.streams) <= 1 || t.idx >= len(t.streams)-1 || merged)
 	if t.Cut && t.Sections > 1 {
 		t.allDone = p.Status == "finished" && t.idx >= t.Sections-1
+	}
+	if t.Files > 1 {
+		t.allDone = p.Status == "finished" && t.idx >= t.Files-1
 	}
 
 	snap := Snapshot{
@@ -377,6 +384,19 @@ func (t *Tracker) Update(p Progress) (Snapshot, bool) {
 			snap.Percent += min(float64(p.Downloaded)/float64(cs), 1) / float64(t.Sections) * 100
 		}
 		snap.Stage = fmt.Sprintf("Downloading chapter %d of %d", min(t.idx, t.Sections-1)+1, t.Sections)
+	}
+	if t.Files > 1 {
+		// Only the file in flight has a size: count each as an equal share.
+		n := min(t.idx, t.Files-1)
+		snap.Total = t.doneBytes + max(p.Total, p.TotalEstimate)
+		snap.Percent = float64(n) / float64(t.Files) * 100
+		if cs := max(p.Total, p.TotalEstimate); cs > 0 {
+			snap.Percent += min(float64(p.Downloaded)/float64(cs), 1) / float64(t.Files) * 100
+		}
+		snap.Stage = "Downloading the sound"
+		if n > 0 {
+			snap.Stage = fmt.Sprintf("Downloading picture %d of %d", n, t.Files-1)
+		}
 	}
 	if n := len(t.streams); n > 1 && !t.Cut && !merged && !t.sizesKnown() {
 		// Only the stream in flight has a size: count each stream as an equal share, so the bar

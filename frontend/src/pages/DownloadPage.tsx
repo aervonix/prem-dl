@@ -876,6 +876,7 @@ export function DownloadPage() {
                     {video.uploadDate && <span>{uploadDate(video.uploadDate)}</span>}
                     {video.viewCount > 0 && <span>{compactCount(video.viewCount)} views</span>}
                     {video.heights.length > 0 && <span>up to {video.heights[0]}p</span>}
+                    {video.photos > 0 && <span>{plural(video.photos, 'picture')} and a sound</span>}
                     <span>{hostOf(video.url || probedUrl)}</span>
                   </div>
                   {video.isLive && (
@@ -1033,6 +1034,12 @@ export function DownloadPage() {
                   'Tick the videos you want, or Select all'
                 ) : (
                   `${plural(selectedEntries.length, 'video')} will be added to the queue`
+                )
+              ) : video && video.photos > 0 ? (
+                opts.preset === 'audio' || (opts.preset === 'custom' && opts.formatAudioOnly) ? (
+                  'Saves the post’s sound'
+                ) : (
+                  `${plural(video.photos, 'picture')} and the sound, in a folder named after the post`
                 )
               ) : video && opts.chapters.length > 0 ? (
                 `${plural(opts.chapters.length, 'chapter')}, each saved as its own file`

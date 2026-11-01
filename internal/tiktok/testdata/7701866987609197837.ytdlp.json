@@ -1,0 +1,113 @@
+{
+ "id": "7701866987609197837",
+ "formats": [
+  {
+   "format_id": "audio",
+   "url": "https://sf16-music.tiktokcdn-eu.com/obj/tos-alisg-ve-2774/osWGyxQwgMAEzas8kfXAZuZUEffetrVbMKfN7u",
+   "ext": "m4a",
+   "acodec": "aac",
+   "vcodec": "none",
+   "protocol": "https",
+   "audio_ext": "m4a",
+   "video_ext": "none",
+   "vbr": 0,
+   "abr": null,
+   "tbr": null,
+   "resolution": "audio only",
+   "aspect_ratio": null,
+   "filesize_approx": null,
+   "format": "audio - audio only"
+  }
+ ],
+ "subtitles": {},
+ "channel": "NASA",
+ "channel_id": "MS4wLjABAAAAU9BRVzC8oCaegVnia8IbqWhPb_-dbU7s00Y3wS1_Nx8g5RUaYvyXrpejgjdxTwd6",
+ "uploader": "nasa",
+ "uploader_id": "7664638705177150477",
+ "channel_url": "https://www.tiktok.com/@MS4wLjABAAAAU9BRVzC8oCaegVnia8IbqWhPb_-dbU7s00Y3wS1_Nx8g5RUaYvyXrpejgjdxTwd6",
+ "uploader_url": "https://www.tiktok.com/@nasa",
+ "track": "City Nights - Instrumental",
+ "album": "City Nights - Instrumental",
+ "artists": [
+  "DRYVE"
+ ],
+ "duration": 60,
+ "title": "The core stage of our Artemis III rocket is officially stacked! Teams...",
+ "description": "The core stage of our Artemis III rocket is officially stacked! Teams at NASA Kennedy lifted and positioned the 212-foot stage between its two solid rocket boosters, bringing the mission another step closer to launch. Artemis III will test how Orion and commercial lunar landers meet and dock in space to help prepare for future astronaut Moon landings. 📷 NASA/Sean Cannon",
+ "timestamp": 1793230665,
+ "view_count": 104000,
+ "like_count": 11500,
+ "repost_count": 572,
+ "comment_count": 353,
+ "save_count": 1182,
+ "thumbnails": [
+  {
+   "id": "cover",
+   "url": "https://p16-common-sign.tiktokcdn-eu.com/tos-maliva-i-photomode-us/b20cf730de5c4ccaabdb7301ab3ff57a~tplv-photomode-image.jpeg?dr=10375&x-expires=1793664000&x-signature=byP%2BBo%2FQDvPU%2BK10Y1nl%2BQSKkNQ%3D&t=4d5b0474&ps=13740610&shp=81f88b70&shcp=9b759fb9&idc=useast2b&ftpl=1",
+   "preference": -1
+  },
+  {
+   "id": "originCover",
+   "url": "https://p16-common-sign.tiktokcdn-eu.com/tos-maliva-i-photomode-us/b20cf730de5c4ccaabdb7301ab3ff57a~tplv-photomode-image.jpeg?dr=10375&x-expires=1793664000&x-signature=byP%2BBo%2FQDvPU%2BK10Y1nl%2BQSKkNQ%3D&t=4d5b0474&ps=13740610&shp=81f88b70&shcp=9b759fb9&idc=useast2b&ftpl=1",
+   "preference": -1
+  }
+ ],
+ "webpage_url": "https://www.tiktok.com/@nasa/video/7701866987609197837",
+ "original_url": "https://www.tiktok.com/@nasa/video/7701866987609197837",
+ "webpage_url_basename": "7701866987609197837",
+ "webpage_url_domain": "tiktok.com",
+ "extractor": "TikTok",
+ "extractor_key": "TikTok",
+ "playlist": null,
+ "playlist_index": null,
+ "thumbnail": "https://p16-common-sign.tiktokcdn-eu.com/tos-maliva-i-photomode-us/b20cf730de5c4ccaabdb7301ab3ff57a~tplv-photomode-image.jpeg?dr=10375&x-expires=1793664000&x-signature=byP%2BBo%2FQDvPU%2BK10Y1nl%2BQSKkNQ%3D&t=4d5b0474&ps=13740610&shp=81f88b70&shcp=9b759fb9&idc=useast2b&ftpl=1",
+ "display_id": "7701866987609197837",
+ "fulltitle": "The core stage of our Artemis III rocket is officially stacked! Teams...",
+ "duration_string": "1:00",
+ "upload_date": "20261028",
+ "release_year": null,
+ "artist": "DRYVE",
+ "requested_subtitles": null,
+ "_has_drm": null,
+ "epoch": 1793494324,
+ "requested_downloads": [
+  {
+   "format_id": "audio",
+   "url": "https://sf16-music.tiktokcdn-eu.com/obj/tos-alisg-ve-2774/osWGyxQwgMAEzas8kfXAZuZUEffetrVbMKfN7u",
+   "ext": "m4a",
+   "acodec": "aac",
+   "vcodec": "none",
+   "protocol": "https",
+   "audio_ext": "m4a",
+   "video_ext": "none",
+   "vbr": 0,
+   "resolution": "audio only",
+   "format": "audio - audio only",
+   "_filename": "The core stage of our Artemis III rocket is officially stacked! Teams... [7701866987609197837].m4a",
+   "filename": "The core stage of our Artemis III rocket is officially stacked! Teams... [7701866987609197837].m4a",
+   "__write_download_archive": false
+  }
+ ],
+ "format_id": "audio",
+ "url": "https://sf16-music.tiktokcdn-eu.com/obj/tos-alisg-ve-2774/osWGyxQwgMAEzas8kfXAZuZUEffetrVbMKfN7u",
+ "ext": "m4a",
+ "acodec": "aac",
+ "vcodec": "none",
+ "protocol": "https",
+ "audio_ext": "m4a",
+ "video_ext": "none",
+ "vbr": 0,
+ "abr": null,
+ "tbr": null,
+ "resolution": "audio only",
+ "aspect_ratio": null,
+ "filesize_approx": null,
+ "format": "audio - audio only",
+ "_type": "video",
+ "_version": {
+  "version": "2026.10.26",
+  "current_git_head": null,
+  "release_git_head": null,
+  "repository": "yt-dlp/yt-dlp"
+ }
+}

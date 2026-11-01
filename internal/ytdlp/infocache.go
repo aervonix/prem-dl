@@ -15,10 +15,11 @@ import (
 // can load it (--load-info-json) instead of reading the video's page again: that is the
 // webpage, the player API and the JavaScript challenge, about 2.5 s before any bytes flow.
 //
-// Only YouTube videos are kept. Their stream links last 6 hours from the analysis (the
-// "expire" parameter) and are tied to the IP address that asked; other sites' links can
-// expire within minutes. Live and upcoming streams are left out: they have to be read when
-// they start. Each entry is used once, so a retry reads the page as before.
+// Only YouTube videos and TikTok posts are kept. YouTube's stream links last 6 hours from the
+// analysis (the "expire" parameter) and are tied to the IP address that asked; TikTok's last
+// 48 hours. Other sites' links can expire within minutes. Live and upcoming streams are left
+// out: they have to be read when they start. Each entry is used once, so a retry reads the page
+// as before.
 type InfoCache struct {
 	mu    sync.Mutex
 	items map[string]*cachedInfo
@@ -27,8 +28,15 @@ type InfoCache struct {
 }
 
 type cachedInfo struct {
-	gz    []byte // the JSON, gzipped: about 40 KB rather than 700 KB for a YouTube video
-	added time.Time
+	gz     []byte // the JSON, gzipped: about 40 KB rather than 700 KB for a YouTube video
+	added  time.Time
+	photos int // VideoInfo.Photos
+}
+
+// Saved is a recent analysis to download from: yt-dlp loads Path with --load-info-json.
+type Saved struct {
+	Path   string // "" when there is none
+	Photos int    // a photo post's number of pictures (Target.Photos)
 }
 
 const (
@@ -62,7 +70,7 @@ func (c *InfoCache) PutFrom(gen uint64, link string, res *ProbeResult) {
 		return
 	}
 	v := res.Video
-	if v.Extractor != "Youtube" || v.IsLive || v.Upcoming {
+	if (v.Extractor != "Youtube" && v.Extractor != "TikTok") || v.IsLive || v.Upcoming {
 		return
 	}
 	var buf bytes.Buffer
@@ -70,7 +78,7 @@ func (c *InfoCache) PutFrom(gen uint64, link string, res *ProbeResult) {
 	if _, err := zw.Write(res.info); err != nil || zw.Close() != nil {
 		return
 	}
-	item := &cachedInfo{gz: buf.Bytes(), added: c.now()}
+	item := &cachedInfo{gz: buf.Bytes(), added: c.now(), photos: v.Photos}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if gen != c.gen {
@@ -88,8 +96,8 @@ func (c *InfoCache) PutFrom(gen uint64, link string, res *ProbeResult) {
 }
 
 // Take removes the analysis of link and writes it to a private temp file for
-// --load-info-json. It returns "" when there is none, or it is too old. done deletes the file.
-func (c *InfoCache) Take(link string) (path string, done func()) {
+// --load-info-json. Its Path is "" when there is none, or it is too old. done deletes the file.
+func (c *InfoCache) Take(link string) (Saved, func()) {
 	k := infoKey(link)
 	c.mu.Lock()
 	c.pruneLocked()
@@ -103,12 +111,22 @@ func (c *InfoCache) Take(link string) (path string, done func()) {
 	}
 	c.mu.Unlock()
 	if item == nil {
-		return "", func() {}
+		return Saved{}, func() {}
 	}
 	zr, err := gzip.NewReader(bytes.NewReader(item.gz))
 	if err != nil {
-		return "", func() {}
+		return Saved{}, func() {}
 	}
+	path, done := WriteInfo(zr)
+	if path == "" {
+		return Saved{}, done
+	}
+	return Saved{Path: path, Photos: item.photos}, done
+}
+
+// WriteInfo writes an analysis to a private temp file for --load-info-json; path is "" if that
+// failed. done deletes the file.
+func WriteInfo(r io.Reader) (path string, done func()) {
 	// It holds cookies and signed stream links: CreateTemp makes it readable by the user only.
 	tmp, err := os.CreateTemp("", "ytgui-info-*.json")
 	if err != nil {
@@ -116,7 +134,7 @@ func (c *InfoCache) Take(link string) (path string, done func()) {
 	}
 	name := tmp.Name()
 	done = func() { os.Remove(name) }
-	_, err = io.Copy(tmp, zr)
+	_, err = io.Copy(tmp, r)
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}

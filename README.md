@@ -30,6 +30,10 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
   with filters for type (videos, channels, playlists), upload date and length. Tick videos to
   download them with your default options, or open them on the Download page to choose. Ticks are
   kept across searches, so you can collect videos from several.
+- **TikTok posts and photo posts.** A TikTok link is read straight from its page, faster than
+  through yt-dlp, with the size of every quality, including the full-size file of an edit that
+  yt-dlp lists without one. Photo posts (slideshows), which yt-dlp can't download, save as their
+  pictures and their sound in a folder named after the post, or just the sound.
 - **Lots of links at once.** Paste several links, one per line, and they're all queued. Playlists are
   expanded for you. You can also drop links, or a `.txt` file of them, anywhere on the window.
 - **Send links from Chrome.** With the helper extension, click its toolbar button, or right-click a

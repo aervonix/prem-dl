@@ -27,7 +27,8 @@ func TestInfoCacheGivesTheAnalysisOnce(t *testing.T) {
 	c.Put("youtu.be/abc", res)
 
 	// Queued under the video's own URL, which is not the link that was pasted.
-	path, done := c.Take("https://www.youtube.com/watch?v=abc")
+	saved, done := c.Take("https://www.youtube.com/watch?v=abc")
+	path := saved.Path
 	if path == "" {
 		t.Fatal("no analysis for the video's URL")
 	}
@@ -41,7 +42,7 @@ func TestInfoCacheGivesTheAnalysisOnce(t *testing.T) {
 	}
 	// Used up under every link it was stored under: a retry reads the page.
 	for _, link := range []string{"https://www.youtube.com/watch?v=abc", "https://youtu.be/abc"} {
-		if p, _ := c.Take(link); p != "" {
+		if p, _ := c.Take(link); p.Path != "" {
 			t.Errorf("%s given out twice", link)
 		}
 	}
@@ -57,7 +58,7 @@ func TestInfoCacheKeepsOnlyReusableVideos(t *testing.T) {
 	for name, res := range cases {
 		c := NewInfoCache()
 		c.Put("https://www.youtube.com/watch?v=abc", res)
-		if p, _ := c.Take("https://www.youtube.com/watch?v=abc"); p != "" {
+		if p, _ := c.Take("https://www.youtube.com/watch?v=abc"); p.Path != "" {
 			t.Errorf("%s was kept", name)
 		}
 	}
@@ -69,13 +70,13 @@ func TestInfoCacheExpiresAndClears(t *testing.T) {
 	c.now = func() time.Time { return at }
 	c.Put("https://www.youtube.com/watch?v=abc", probed(t, "Youtube", nil))
 	at = at.Add(InfoTTL + time.Second)
-	if p, _ := c.Take("https://www.youtube.com/watch?v=abc"); p != "" {
+	if p, _ := c.Take("https://www.youtube.com/watch?v=abc"); p.Path != "" {
 		t.Error("an analysis older than InfoTTL was used")
 	}
 
 	c.Put("https://www.youtube.com/watch?v=abc", probed(t, "Youtube", nil))
 	c.Clear()
-	if p, _ := c.Take("https://www.youtube.com/watch?v=abc"); p != "" {
+	if p, _ := c.Take("https://www.youtube.com/watch?v=abc"); p.Path != "" {
 		t.Error("Clear kept an analysis")
 	}
 }
@@ -92,10 +93,11 @@ func TestInfoCacheIsBounded(t *testing.T) {
 	if len(c.items) > maxInfos {
 		t.Errorf("%d entries kept", len(c.items))
 	}
-	if p, _ := c.Take("https://www.youtube.com/watch?v=x"); p != "" {
+	if p, _ := c.Take("https://www.youtube.com/watch?v=x"); p.Path != "" {
 		t.Error("the oldest entry should have gone first")
 	}
-	p, done := c.Take("https://www.youtube.com/watch?v=" + strings.Repeat("x", maxInfos+5))
+	saved, done := c.Take("https://www.youtube.com/watch?v=" + strings.Repeat("x", maxInfos+5))
+	p := saved.Path
 	defer done()
 	if p == "" {
 		t.Error("the newest entry is missing")

@@ -109,8 +109,8 @@ type Deps struct {
 	// Env prepares the environment for one run. The cleanup func releases per-run resources.
 	Env func(ctx context.Context) (ytdlp.Env, func(), error)
 	// Info, if set, returns a file holding a recent analysis of url to download from
-	// (ytdlp.InfoCache.Take), or "". done removes it.
-	Info func(url string) (path string, done func())
+	// (ytdlp.InfoCache.Take), or a zero Saved. done removes it.
+	Info func(url string) (saved ytdlp.Saved, done func())
 	// Emit delivers an event to the UI.
 	Emit func(event string, payload any)
 	// Observe, if set, gets the same changes as the UI: jobs that changed and IDs removed. It is
@@ -801,9 +801,9 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, e *entry) 
 	m.mu.Unlock()
 	// A stream being waited for, or recorded from its start, is read when it goes live.
 	if m.deps.Info != nil && !pageOnly && !job.Options.WaitForVideo && !job.Options.LiveFromStart {
-		path, done := m.deps.Info(job.URL)
+		saved, done := m.deps.Info(job.URL)
 		defer done()
-		target.InfoFile = path
+		target.InfoFile, target.Photos = saved.Path, saved.Photos
 	}
 	m.mu.Lock()
 	e.fromInfo = target.InfoFile != ""
@@ -844,6 +844,7 @@ func (m *Manager) run(ctx context.Context, cancel context.CancelFunc, e *entry) 
 	h := &lineHandler{m: m, e: e}
 	h.tracker.Cut = job.Options.SectionStart != "" || job.Options.SectionEnd != "" || len(job.Options.Chapters) > 0
 	h.tracker.Sections = len(job.Options.Chapters)
+	h.tracker.Files = ytdlp.PhotoFiles(opts, target.Photos)
 	var rw sync.WaitGroup
 	rw.Add(2)
 	go func() { defer rw.Done(); h.consume(stdout, false) }()

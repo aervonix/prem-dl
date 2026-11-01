@@ -286,6 +286,11 @@ export interface VideoInfo {
   /** When it is due, in Unix seconds; 0 when unknown. */
   releaseTimestamp: number
   chapters: Chapter[]
+  /**
+   * A TikTok photo post's number of pictures; 0 for anything else. It downloads as its pictures
+   * and its sound (into a folder named like the post), or the sound alone with an audio preset.
+   */
+  photos: number
 }
 
 /** A chapter of a video (ytdlp.Chapter); times in seconds. */

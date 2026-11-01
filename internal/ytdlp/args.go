@@ -89,7 +89,17 @@ type Target struct {
 	// InfoFile is a recent analysis of URL (InfoCache.Take). When set, yt-dlp downloads from it
 	// instead of reading the page again.
 	InfoFile string
+	// Photos is set when InfoFile is a photo post (VideoInfo.Photos): it downloads as the
+	// pictures and the sound (photoArgs), or the sound alone with an audio preset.
+	Photos int
 }
+
+// The fields of a photo post's JSON (internal/tiktok) that yt-dlp doesn't have: the number of
+// pictures, and each file's name in the post's folder ("01".."NN", "Sound").
+const (
+	PhotoCountField = "photo_count"
+	PhotoFileField  = "photo_file"
+)
 
 // WaitInterval is --wait-for-video's minimum, in seconds: how often a stream that is past its
 // scheduled time (or has none) is looked at again.
@@ -115,18 +125,13 @@ func customAudio(o settings.DownloadOptions) bool {
 
 // DownloadArgs builds the full yt-dlp command line (without the executable) for one download.
 func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
-	s := e.Settings
+	if t.InfoFile != "" && PhotoFiles(o, t.Photos) > 1 {
+		return e.photoArgs(o, t)
+	}
 	a := []string{"--newline", "--progress", "--no-playlist", "--no-quiet"}
 	a = append(a, e.CommonArgs()...)
 
-	dir := o.OutputDir
-	if dir == "" {
-		dir = s.DownloadDir
-	}
-	base := s.FilenameTemplate
-	if o.FilenameTemplate != "" {
-		base = o.FilenameTemplate // the preset's own
-	}
+	dir, base := e.outputDir(o), e.template(o)
 	out := OutputTemplate(base, o, t)
 	if len(o.Chapters) > 0 {
 		out = SectionTemplate(base, o, t)
@@ -217,6 +222,73 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 		a = append(a, "--download-sections=*"+start+"-"+end)
 	}
 
+	a = append(a, e.runArgs(o)...)
+	a = append(a, e.UserArgs()...)
+	if t.InfoFile != "" {
+		if t.Photos > 0 {
+			// A photo post with an audio preset: only its sound, the first entry. The entries
+			// are dropped from a loaded JSON unless it is left as it is.
+			a = append(a, "--no-clean-info-json", "--playlist-items=1")
+		}
+		return append(a, "--load-info-json="+t.InfoFile)
+	}
+	a = append(a, "--", t.URL)
+	return a
+}
+
+// PhotoFiles is how many files a photo post of photos pictures downloads as with o: its pictures
+// and its sound, or with an audio preset only the sound. 0 for anything else.
+func PhotoFiles(o settings.DownloadOptions, photos int) int {
+	switch {
+	case photos <= 0:
+		return 0
+	case o.Preset == "audio" || customAudio(o):
+		return 1
+	}
+	return photos + 1
+}
+
+// photoArgs downloads a photo post (Target.Photos): its sound and its pictures, into a folder
+// named like the post's file would be (as chosen chapters are), as "Sound.m4a", "01.jpg"...
+// Nothing is converted or embedded: the presets' formats, containers and tags are a video's.
+func (e Env) photoArgs(o settings.DownloadOptions, t Target) []string {
+	a := []string{"--newline", "--progress", "--no-quiet"}
+	a = append(a, e.CommonArgs()...)
+	a = append(a,
+		"--paths="+e.outputDir(o),
+		"--output="+videoFolder(e.template(o), o, t)+"/%("+PhotoFileField+")s.%(ext)s",
+		"--trim-filenames=180",
+		// Each entry has one format: "audio" for the sound, "picture" for a picture.
+		"--format=picture/audio",
+		// The entries are dropped from a loaded JSON unless it is left as it is.
+		"--no-clean-info-json",
+	)
+	a = append(a, e.runArgs(o)...)
+	a = append(a, e.UserArgs()...)
+	return append(a, "--load-info-json="+t.InfoFile)
+}
+
+// outputDir is where a download goes: its own folder, else Settings'.
+func (e Env) outputDir(o settings.DownloadOptions) string {
+	if o.OutputDir != "" {
+		return o.OutputDir
+	}
+	return e.Settings.DownloadDir
+}
+
+// template is a download's filename template: its preset's own, else Settings'.
+func (e Env) template(o settings.DownloadOptions) string {
+	if o.FilenameTemplate != "" {
+		return o.FilenameTemplate
+	}
+	return e.Settings.FilenameTemplate
+}
+
+// runArgs are a download's network, pacing and archive settings, and what it prints for the
+// queue to follow.
+func (e Env) runArgs(o settings.DownloadOptions) []string {
+	s := e.Settings
+	var a []string
 	if s.RateLimit != "" {
 		a = append(a, "--limit-rate="+s.RateLimit)
 	}
@@ -234,20 +306,13 @@ func (e Env) DownloadArgs(o settings.DownloadOptions, t Target) []string {
 	if s.UseArchive && e.ArchiveFile != "" && !o.IgnoreArchive {
 		a = append(a, "--download-archive="+e.ArchiveFile)
 	}
-
-	a = append(a,
+	return append(a,
 		"--progress-template=download:"+MarkProgress+"%(progress)j",
 		"--progress-template=postprocess:"+MarkPost+"%(progress.postprocessor)s|%(progress.status)s",
 		"--print=before_dl:"+MarkPlan+"%(.{id,title,uploader,thumbnail,duration,filesize,filesize_approx})j",
 		"--print=before_dl:"+MarkStreams+"%(requested_formats.:.{filesize,filesize_approx,vcodec,acodec})j",
 		"--print=after_move:"+MarkFile+"%(filepath)s",
 	)
-	a = append(a, e.UserArgs()...)
-	if t.InfoFile != "" {
-		return append(a, "--load-info-json="+t.InfoFile)
-	}
-	a = append(a, "--", t.URL)
-	return a
 }
 
 // QualitySort ranks video streams by resolution, frame rate, HDR and then bitrate, ahead of

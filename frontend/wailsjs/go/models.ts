@@ -1504,6 +1504,7 @@ export namespace ytdlp {
 	    upcoming: boolean;
 	    releaseTimestamp: number;
 	    chapters: Chapter[];
+	    photos: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new VideoInfo(source);
@@ -1532,6 +1533,7 @@ export namespace ytdlp {
 	        this.upcoming = source["upcoming"];
 	        this.releaseTimestamp = source["releaseTimestamp"];
 	        this.chapters = this.convertValues(source["chapters"], Chapter);
+	        this.photos = source["photos"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -68,6 +68,8 @@ export function QualityPicker({
   const pickFormat = (formatId: string) => onChange({...value, preset: 'custom', formatId, formatAudioOnly: video && formatId ? isAudioFormat(video, formatId) : value.formatAudioOnly})
   const chooseExact = (audio: boolean) => onChange({...value, preset: 'custom', formatId: '', formatAudioOnly: audio})
 
+  // A photo post (TikTok) saves its pictures and its sound, or the sound alone.
+  const photos = mode === 'download' && !!video && video.photos > 0
   const maxHeight = video && video.heights.length > 0 ? video.heights[0] : 0
   const lossy = ['mp3', 'm4a', 'opus', 'aac'].includes(value.audioFormat)
   const audioHint = AUDIO_FORMATS.find((f) => f.value === value.audioFormat)?.hint
@@ -79,13 +81,15 @@ export function QualityPicker({
         label="Video or audio"
         value={audioKind ? 'audio' : 'video'}
         options={[
-          {value: 'video', label: <><Icon name="film" size={14} /> Video</>},
-          {value: 'audio', label: <><Icon name="music" size={14} /> Audio only</>},
+          {value: 'video', label: <><Icon name="film" size={14} /> {photos ? 'Pictures and sound' : 'Video'}</>},
+          {value: 'audio', label: <><Icon name="music" size={14} /> {photos ? 'Sound only' : 'Audio only'}</>},
         ]}
         onChange={setKind}
       />
 
-      {!audioKind && (
+      {!audioKind && photos && <div className="hint">Every picture at its full size, and the sound as TikTok has it.</div>}
+
+      {!audioKind && !photos && (
         <>
           <VideoTiles value={value} video={video} maxHeight={maxHeight} onPick={(p) => onChange({...value, preset: p, formatAudioOnly: false})} />
           {maxHeight > 0 && Number(value.preset) > maxHeight && <div className="hint">This video tops out at {maxHeight}p, so that's what it downloads.</div>}
@@ -152,7 +156,7 @@ export function QualityPicker({
       )}
       {custom && value.formatAudioOnly && <div className="hint">Saved as an audio file in its own format (.opus or .m4a), without converting it.</div>}
 
-      {!audioKind && (
+      {!audioKind && !photos && (
         <Field label="Container" hint="Auto saves as MP4 where it can. MP4 plays everywhere; MKV holds anything.">
           <Segmented
             label="Container"
@@ -167,7 +171,7 @@ export function QualityPicker({
           />
         </Field>
       )}
-      {!audioKind && !custom && value.container !== 'webm' && (
+      {!audioKind && !photos && !custom && value.container !== 'webm' && (
         <Switch
           checked={value.compatible}
           onChange={(v) => set('compatible', v)}
