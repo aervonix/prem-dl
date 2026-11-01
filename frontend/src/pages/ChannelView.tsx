@@ -27,6 +27,8 @@ interface Listing {
   listing: number
   /** The listing has reached the end of the tab. */
   done: boolean
+  /** Its thumbnails are portrait (a TikTok profile). */
+  portrait?: boolean
 }
 
 /**
@@ -66,6 +68,7 @@ export function ChannelView({feed, onBack}: {feed: Feed; onBack: () => void}) {
               error: res.error ?? (res.result?.kind === 'video' ? notAList : null),
               listing: res.listing,
               done: !res.listing && (limit === 0 || got.length < limit),
+              portrait: !!res.result?.playlist?.portrait,
             }
       } catch (e) {
         if (latest.current[t] !== id) return
@@ -243,7 +246,7 @@ export function ChannelView({feed, onBack}: {feed: Feed; onBack: () => void}) {
           {filter.trim() ? 'Only the videos listed so far are searched; show more to search further.' : 'This tab has no videos.'}
         </Empty>
       ) : (
-        <VideoGrid entries={entries} selected={selected} setSelected={setSelected} tall={tab === 'shorts'} uploader={!channel} status={status} />
+        <VideoGrid entries={entries} selected={selected} setSelected={setSelected} tall={tab === 'shorts'} square={!!current?.portrait} uploader={!channel} status={status} />
       )}
 
       {(more || (current?.loading && current.entries.length > 0)) && (

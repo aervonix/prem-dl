@@ -739,6 +739,69 @@ input[type='checkbox'] {
 .card-head .spacer {
   flex: 1;
 }
+
+/* An account's header above its videos (a TikTok profile). */
+.profile-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.profile-verified {
+  display: inline-grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.profile-avatar {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+}
+.profile-about {
+  min-width: 0;
+}
+.profile-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin: 0;
+}
+.profile-stats div {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.profile-stats dd {
+  order: 0;
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.profile-stats dt {
+  order: 1;
+  color: var(--muted);
+}
+.profile-bio {
+  margin: 6px 0 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 13px;
+  max-width: 62ch;
+}
 .field {
   display: flex;
   flex-direction: column;
@@ -1273,6 +1336,9 @@ input[type='checkbox'] {
 .vgrid.tall {
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
 }
+.vgrid.square {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
 .vgroup {
   grid-column: 1 / -1;
   padding: 10px 2px 2px;
@@ -1334,6 +1400,9 @@ input[type='checkbox'] {
 }
 .vgrid.tall .vthumb {
   aspect-ratio: 9 / 16;
+}
+.vgrid.square .vthumb {
+  aspect-ratio: 1 / 1;
 }
 .vthumb img {
   position: absolute;

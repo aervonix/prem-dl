@@ -33,7 +33,10 @@ bitrate "Premium" streams where YouTube offers them, and tells you when it will.
 - **TikTok posts and photo posts.** A TikTok link is read straight from its page, faster than
   through yt-dlp, with the size of every quality, including the full-size file of an edit that
   yt-dlp lists without one. Photo posts (slideshows), which yt-dlp can't download, save as their
-  pictures and their sound in a folder named after the post, or just the sound.
+  pictures and their sound in a folder named after the post, or just the sound. A TikTok profile
+  opens the way TikTok shows it: picture, follower counts and bio above a grid of its posts,
+  newest first, with the first ones on screen in about a second. Follow a profile to have new
+  posts downloaded as they appear.
 - **Lots of links at once.** Paste several links, one per line, and they're all queued. Playlists are
   expanded for you. You can also drop links, or a `.txt` file of them, anywhere on the window.
 - **Send links from Chrome.** With the helper extension, click its toolbar button, or right-click a

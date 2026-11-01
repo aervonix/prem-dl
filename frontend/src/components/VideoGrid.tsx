@@ -194,6 +194,7 @@ export const VideoGrid = memo(function VideoGrid({
   onOpen,
   onOpenVideo,
   tall,
+  square,
   uploader,
   status,
   reveal,
@@ -207,6 +208,8 @@ export const VideoGrid = memo(function VideoGrid({
   onOpenVideo?: (url: string) => void
   /** Portrait thumbnails, for Shorts. */
   tall?: boolean
+  /** Square thumbnails, for a TikTok profile. */
+  square?: boolean
   /** Show each video's uploader (a playlist mixes channels; a channel page doesn't need it). */
   uploader?: boolean
   /** A word about each video, such as "Downloaded", or ''. */
@@ -256,7 +259,7 @@ export const VideoGrid = memo(function VideoGrid({
 
   let lastGroup = ''
   return (
-    <div className={`vgrid${tall ? ' tall' : ''}${selected.size > 0 ? ' selecting' : ''}`} role="group" aria-label="Videos">
+    <div className={`vgrid${tall ? ' tall' : square ? ' square' : ''}${selected.size > 0 ? ' selecting' : ''}`} role="group" aria-label="Videos">
       {shown.map((e) => {
         const header = e.group && e.group !== lastGroup ? (
           <div key={`g-${e.index}`} className="vgroup">

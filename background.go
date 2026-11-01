@@ -14,6 +14,7 @@ import (
 	"yt-dlp-gui/internal/queue"
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
+	"yt-dlp-gui/internal/tiktok"
 	"yt-dlp-gui/internal/ytdlp"
 	"yt-dlp-gui/internal/ytweb"
 )
@@ -254,8 +255,8 @@ func (a *App) quickDownload(raw, preset string) error {
 	} else if p := settings.PresetFor(link, s.Presets); p != nil {
 		opts = p.Options
 	}
-	if ytweb.Handles(link) {
-		return a.openLink(link) // a YouTube channel or playlist
+	if ytweb.Handles(link) || tiktok.IsProfile(link) {
+		return a.openLink(link) // a YouTube channel or playlist, a TikTok profile
 	}
 	go func() {
 		ctx, cancel := context.WithTimeout(a.root, 2*time.Minute)

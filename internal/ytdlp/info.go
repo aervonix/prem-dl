@@ -130,7 +130,31 @@ type PlaylistInfo struct {
 	// Channel is set for a channel's uploads (or one of its tabs) rather than a playlist someone
 	// put together: nothing is ticked up front, since that would mean everything it ever posted.
 	Channel bool `json:"channel"`
+	// Profile is the account's header, where the listing gives one (a TikTok profile); nil
+	// otherwise.
+	Profile *ChannelProfile `json:"profile"`
+	// Portrait is set when the entries' thumbnails are portrait (a TikTok profile).
+	Portrait bool `json:"portrait"`
 }
+
+// ChannelProfile is an account's header: what its page shows above its videos.
+type ChannelProfile struct {
+	Name      string `json:"name"`   // display name
+	Handle    string `json:"handle"` // without the @
+	Avatar    string `json:"avatar"`
+	Bio       string `json:"bio"`
+	Verified  bool   `json:"verified"`
+	Followers int64  `json:"followers"`
+	Following int64  `json:"following"`
+	Likes     int64  `json:"likes"`
+	Videos    int64  `json:"videos"` // as the account says; the listing may hold fewer
+}
+
+// The fields of a listing's JSON (internal/tiktok) that yt-dlp's doesn't have.
+const (
+	ProfileField  = "premdl_profile"
+	PortraitField = "premdl_portrait"
+)
 
 // ProbeResult is what the UI shows after analysing a link.
 type ProbeResult struct {
@@ -244,6 +268,8 @@ type rawInfo struct {
 	AutomaticCaptions map[string][]rawSub `json:"automatic_captions"`
 	Entries           []json.RawMessage   `json:"entries"`
 	PhotoCount        int                 `json:"photo_count"` // a TikTok photo post's (internal/tiktok)
+	Profile           *ChannelProfile     `json:"premdl_profile"`
+	Portrait          bool                `json:"premdl_portrait"`
 }
 
 func (r *rawInfo) uploader() string {
@@ -325,7 +351,7 @@ func ParseProbe(data []byte) (*ProbeResult, error) {
 		return &ProbeResult{Kind: "video", Video: v}, nil
 	}
 	if raw.Type == "playlist" || raw.Type == "multi_video" || (raw.Type == "" && len(raw.Entries) > 0) {
-		pl := &PlaylistInfo{ID: raw.ID, Title: raw.Title, URL: raw.WebpageURL, Uploader: raw.uploader()}
+		pl := &PlaylistInfo{ID: raw.ID, Title: raw.Title, URL: raw.WebpageURL, Uploader: raw.uploader(), Profile: raw.Profile, Portrait: raw.Portrait}
 		if pl.URL == "" {
 			pl.URL = raw.URL
 		}

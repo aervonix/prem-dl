@@ -332,6 +332,25 @@ export interface PlaylistInfo {
   entries: PlaylistEntry[]
   /** A channel's uploads rather than a playlist: it opens with nothing ticked. */
   channel: boolean
+  /** The account's header where the listing gives one (a TikTok profile); null otherwise. */
+  profile?: ChannelProfile | null
+  /** The thumbnails are portrait (a TikTok profile). */
+  portrait: boolean
+}
+
+/** An account's header (ytdlp.ChannelProfile): what its page shows above its videos. */
+export interface ChannelProfile {
+  name: string
+  /** Without the @. */
+  handle: string
+  avatar: string
+  bio: string
+  verified: boolean
+  followers: number
+  following: number
+  likes: number
+  /** As the account says; the listing may hold fewer. */
+  videos: number
 }
 
 export interface ProbeResult {

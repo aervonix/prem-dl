@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"yt-dlp-gui/internal/ytdlp"
-	"yt-dlp-gui/internal/ytweb"
 )
 
 // A channel or playlist analysed on the Download page is shown as soon as its first page is
@@ -117,8 +116,8 @@ func (a *App) startListing(ctx context.Context, cancel context.CancelFunc, link 
 
 // readListing starts reading link into l, and returns its first page; see startListing.
 func (a *App) readListing(ctx context.Context, cancel context.CancelFunc, link string, l *listing) (res *ytdlp.ProbeResult, ok bool) {
-	s := a.store.Get()
-	if s.ExtraArgs != "" || !ytweb.Handles(link) {
+	list, ok := a.nativeLister(link)
+	if !ok {
 		return nil, false
 	}
 
@@ -126,7 +125,7 @@ func (a *App) readListing(ctx context.Context, cancel context.CancelFunc, link s
 	failed := make(chan struct{})
 	go func() {
 		started := false
-		_, err := a.lister.List(ctx, ytweb.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, link, 0, func(p *ytdlp.ProbeResult) {
+		_, err := list(ctx, 0, func(p *ytdlp.ProbeResult) {
 			if !started {
 				started = true
 				if p.Playlist != nil {

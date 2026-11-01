@@ -3,8 +3,8 @@
 //
 // Following a feed first notes every video already there (the baseline), so only uploads that
 // appear after that are queued. Each later check lists the feed again and queues the videos it
-// hasn't seen. YouTube channel tabs list the newest first, so a check reads only the top of them;
-// playlists and other sites are read in full.
+// hasn't seen. YouTube channel tabs and TikTok profiles list the newest first, so a check reads
+// only the top of them; playlists and other sites are read in full.
 package follow
 
 import (
@@ -25,6 +25,7 @@ import (
 	"yt-dlp-gui/internal/apperr"
 	"yt-dlp-gui/internal/queue"
 	"yt-dlp-gui/internal/settings"
+	"yt-dlp-gui/internal/tiktok"
 	"yt-dlp-gui/internal/ytdlp"
 )
 
@@ -668,7 +669,7 @@ func (m *Manager) check(id string) {
 
 	added := 0
 	if len(fresh) > 0 {
-		added, err = m.deps.Enqueue(jobsFor(f, fresh, len(f.Tabs) > 0), f.Options)
+		added, err = m.deps.Enqueue(jobsFor(f, fresh, newestFirstLink(f.URL)), f.Options)
 	}
 	var liveErr error
 	if len(live) > 0 && err == nil {
@@ -677,7 +678,7 @@ func (m *Manager) check(id string) {
 		o.WaitForVideo, o.LiveFromStart = true, true
 		// A failure here leaves the uploads above queued: they are noted all the same, and only
 		// the streams are tried again next time.
-		if n, lerr := m.deps.Enqueue(jobsFor(f, live, len(f.Tabs) > 0), o); lerr == nil {
+		if n, lerr := m.deps.Enqueue(jobsFor(f, live, newestFirstLink(f.URL)), o); lerr == nil {
 			added += n
 			fresh = append(fresh, live...)
 		} else {
@@ -764,7 +765,7 @@ func (m *Manager) listFeed(f Feed, newTabs []string) (out []item, name string, e
 		tabs = []string{""}
 	}
 	limit := 0
-	if _, tab, ok := ytdlp.YoutubeChannel(f.URL); ok && newestFirst(tab) {
+	if newestFirstLink(f.URL) {
 		limit = checkLimit
 		if !f.Ready {
 			limit = baselineLimit
@@ -851,6 +852,15 @@ func (r *record) trim() {
 }
 
 // ---- links ----
+
+// newestFirstLink reports whether a feed lists the newest uploads first: a YouTube channel (its
+// tabs) or a TikTok profile.
+func newestFirstLink(link string) bool {
+	if _, tab, ok := ytdlp.YoutubeChannel(link); ok && newestFirst(tab) {
+		return true
+	}
+	return tiktok.IsProfile(link)
+}
 
 // newestFirst reports whether a channel tab lists the newest uploads first.
 func newestFirst(tab string) bool {

@@ -1,9 +1,7 @@
 package tiktok
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -147,19 +145,13 @@ func read(ctx context.Context, tr http.RoundTripper, site, link string) (*Post, 
 
 // parsePage finds the post's itemStruct in a page.
 func parsePage(body []byte, id string) (map[string]any, error) {
-	m := rehydration.FindSubmatch(body)
-	if m == nil {
-		// A page without the payload is a challenge page or a block, which yt-dlp knows how to
-		// get past (its _solve_challenge_and_set_cookies).
-		return nil, errors.New("TikTok's page carried no post data")
+	// A page without the payload is a challenge page or a block, which yt-dlp knows how to get
+	// past (its _solve_challenge_and_set_cookies).
+	scope, err := pageScope(body)
+	if err != nil {
+		return nil, err
 	}
-	dec := json.NewDecoder(bytes.NewReader(m[1]))
-	dec.UseNumber() // IDs and counts as they are, never rounded through float64
-	var data map[string]any
-	if err := dec.Decode(&data); err != nil {
-		return nil, fmt.Errorf("TikTok's post data didn't parse: %w", err)
-	}
-	detail := obj(obj(data, "__DEFAULT_SCOPE__"), "webapp.video-detail")
+	detail := obj(scope, "webapp.video-detail")
 	item := obj(obj(detail, "itemInfo"), "itemStruct")
 	if code := num(detail, "statusCode"); code != 0 || len(item) == 0 {
 		msg := str(detail, "statusMsg")

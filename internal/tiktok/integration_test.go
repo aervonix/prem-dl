@@ -3,6 +3,7 @@ package tiktok
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +56,63 @@ func TestIntegrationMatchesYtdlp(t *testing.T) {
 			}
 			t.Logf("native %v, yt-dlp %v", native.Round(time.Millisecond), time.Since(start).Round(time.Millisecond))
 			compareVideos(t, ours.Video, theirs.Video)
+		})
+	}
+}
+
+// A profile listed here and by yt-dlp's tiktok:user: the same posts in the same order, with
+// what the grid shows of each. A photo post's link is its /photo/ one here (yt-dlp: /video/).
+//
+//	YTGUI_INTEGRATION=1 YTGUI_FORCE_IPV4=1 YTGUI_YTDLP=$PWD/yt-dlp go test ./internal/tiktok -run IntegrationProfile -v
+func TestIntegrationProfileMatchesYtdlp(t *testing.T) {
+	bin := os.Getenv("YTGUI_YTDLP")
+	if os.Getenv("YTGUI_INTEGRATION") != "1" || bin == "" {
+		t.Skip("set YTGUI_INTEGRATION=1 and YTGUI_YTDLP=<path to yt-dlp> to run")
+	}
+	st := settings.Default()
+	st.ForceIPv4 = os.Getenv("YTGUI_FORCE_IPV4") == "1"
+	env := ytdlp.Env{Bin: bin, Settings: st}
+	for _, link := range []string{"https://www.tiktok.com/@nasa", "https://www.tiktok.com/@tyke.ae"} {
+		t.Run(link, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+			defer cancel()
+			const limit = 30
+			start := time.Now()
+			var first time.Duration
+			ours, err := ListProfile(ctx, Options{IPv4: st.ForceIPv4}, link, limit, func(*ytdlp.ProbeResult) {
+				if first == 0 {
+					first = time.Since(start)
+				}
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			native := time.Since(start)
+			start = time.Now()
+			theirs, err := ytdlp.List(ctx, env, link, limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Logf("native: first page %v, %d posts %v; yt-dlp %v", first.Round(time.Millisecond), limit, native.Round(time.Millisecond), time.Since(start).Round(time.Millisecond))
+			a, b := ours.Playlist, theirs.Playlist
+			if a.ID != b.ID || a.Title != b.Title || !a.Channel || a.Profile == nil || a.Profile.Handle == "" {
+				t.Errorf("listing: ours %+v\nyt-dlp's %+v", a, b)
+			}
+			t.Logf("profile: %+v", *a.Profile)
+			if len(a.Entries) != len(b.Entries) {
+				t.Fatalf("%d entries, yt-dlp has %d", len(a.Entries), len(b.Entries))
+			}
+			for i, e := range a.Entries {
+				y := b.Entries[i]
+				yURL := y.URL
+				if strings.Contains(e.URL, "/photo/") {
+					yURL = strings.Replace(yURL, "/video/", "/photo/", 1)
+				}
+				if e.ID != y.ID || e.URL != yURL || e.Title != y.Title || e.Duration != y.Duration ||
+					e.Timestamp != y.Timestamp || e.Index != y.Index || e.Thumbnail == "" {
+					t.Errorf("entry %d:\n ours   %+v\n yt-dlp %+v", i, e, y)
+				}
+			}
 		})
 	}
 }

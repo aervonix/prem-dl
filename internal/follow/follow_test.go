@@ -234,6 +234,26 @@ func TestBaselineThenNewUploads(t *testing.T) {
 	}
 }
 
+func TestTikTokProfilesAreReadNewestFirst(t *testing.T) {
+	const profile = "https://www.tiktok.com/@someone"
+	fk := newFake()
+	m := New(fk.deps(""))
+	fk.set(profile, "b", "a") // newest first, like a channel tab
+	f := follow(t, m, NewFeed{URL: profile})
+	m.check(f.ID)
+	if fk.limits[profile] != baselineLimit {
+		t.Errorf("baseline listed %d entries, want %d", fk.limits[profile], baselineLimit)
+	}
+	fk.set(profile, "d", "c", "b", "a")
+	m.check(f.ID)
+	if fk.limits[profile] != checkLimit {
+		t.Errorf("check listed %d entries, want %d", fk.limits[profile], checkLimit)
+	}
+	if q := fk.lastQueued(); !reflect.DeepEqual(q, []string{"c", "d"}) {
+		t.Errorf("queued %v, want the two new ones oldest first", q)
+	}
+}
+
 func TestPlaylistsAreReadInFull(t *testing.T) {
 	fk := newFake()
 	m := New(fk.deps(""))

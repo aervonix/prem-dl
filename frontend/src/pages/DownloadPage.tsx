@@ -11,7 +11,7 @@ import {compactCount, duration, hostOf, plural, startsAt, uploadDate} from '../f
 import {Icon} from '../icons'
 import {forPreset, parseSites, presetFor, presetOptions, sameOptions, switchTo} from '../presets'
 import {useApp} from '../store'
-import type {AppError, BulkLink, DownloadOptions, NamedPreset, NewJob, Peek, PlaylistEntry, ProbeResult, VideoInfo} from '../types'
+import type {AppError, BulkLink, ChannelProfile, DownloadOptions, NamedPreset, NewJob, Peek, PlaylistEntry, ProbeResult, VideoInfo} from '../types'
 
 type Phase = 'idle' | 'analyzing' | 'ready' | 'error'
 
@@ -196,6 +196,7 @@ export function DownloadPage() {
   const {state, go, toast, attempt, setSettings} = useApp()
   const settings = state.settings
   const [text, setText] = useState('')
+  const root = useRef<HTMLDivElement>(null)
   const [phase, setPhase] = useState<Phase>('idle')
   const [result, setResult] = useState<ProbeResult | null>(null)
   const [probedUrl, setProbedUrl] = useState('')
@@ -430,6 +431,10 @@ export function DownloadPage() {
   )
 
   const reset = useCallback(() => {
+    // Back to the top before the page shrinks to the link box. WebKitGTK can leave a page
+    // scrolled with the wheel showing where it was, below everything, once its content is
+    // gone: the window went blank after downloading from far down a long profile.
+    root.current?.closest('.page')?.scrollTo(0, 0)
     requestId.current++
     void api.cancelProbe()
     setPhase('idle')
@@ -717,7 +722,7 @@ export function DownloadPage() {
   let lastGroup = ''
 
   return (
-    <div className="content">
+    <div className="content" ref={root}>
       <div className="page-head">
         <h1>Download</h1>
       </div>
@@ -908,10 +913,11 @@ export function DownloadPage() {
 
           {playlist && (
             <Card
-              title={playlist.title || 'Playlist'}
+              title={playlist.profile ? <ProfileName profile={playlist.profile} /> : playlist.title || 'Playlist'}
               sub={
                 <>
-                  {`${plural(available.length, 'video')}${nestedCount ? ` · ${plural(nestedCount, 'playlist')} (open one to pick its videos)` : ''}${playlist.uploader ? ` · ${playlist.uploader}` : ''}${available.length + nestedCount < playlist.entries.length ? ` · ${playlist.entries.length - available.length - nestedCount} unavailable` : ''}`}
+                  {playlist.profile && `@${playlist.profile.handle} · `}
+                  {`${playlist.profile ? plural(available.length, 'post') : plural(available.length, 'video')}${playlist.profile && playlist.profile.videos > available.length ? ` of ${compactCount(playlist.profile.videos)}` : ''}${nestedCount ? ` · ${plural(nestedCount, 'playlist')} (open one to pick its videos)` : ''}${playlist.uploader && !playlist.profile ? ` · ${playlist.uploader}` : ''}${available.length + nestedCount < playlist.entries.length ? ` · ${playlist.entries.length - available.length - nestedCount} unavailable` : ''}`}
                   {reading && (
                     <span className="reading-more">
                       {' · '}
@@ -932,6 +938,7 @@ export function DownloadPage() {
                   </Button>
                 )
               }>
+              {playlist.profile && <ProfileHeader profile={playlist.profile} />}
               {isVideoInPlaylist(probedUrl) && (
                 <div className="banner info" style={{marginBottom: 12}}>
                   <span className="ic">
@@ -984,7 +991,7 @@ export function DownloadPage() {
                   {rows.length === 0 ? (
                     <div className="empty" style={{padding: 24}}>{filter.trim() ? `No videos match “${filter.trim()}”.` : 'This playlist is empty.'}</div>
                   ) : (
-                    <VideoGrid entries={rows} selected={selected} setSelected={setSelected} onOpen={openNested} uploader={mixed} />
+                    <VideoGrid entries={rows} selected={selected} setSelected={setSelected} onOpen={openNested} uploader={mixed} square={playlist.portrait} />
                   )}
                 </div>
               ) : (
@@ -1069,6 +1076,51 @@ export function DownloadPage() {
       {savingPreset && opts && (
         <SavePresetDialog presets={presets} initialName={presetName} host={probedUrl && !bulk ? hostOf(probedUrl) : ''} onClose={() => setSavingPreset(false)} onSave={savePreset} />
       )}
+    </div>
+  )
+}
+
+/** An account's name as its page shows it, with the verified mark. */
+function ProfileName({profile}: {profile: ChannelProfile}) {
+  return (
+    <span className="profile-name">
+      {profile.name || `@${profile.handle}`}
+      {profile.verified && (
+        <span className="profile-verified" title="Verified account" aria-label="Verified account">
+          <Icon name="check" size={10} />
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** What an account's page shows above its videos: picture, counts and bio. */
+function ProfileHeader({profile}: {profile: ChannelProfile}) {
+  const [broken, setBroken] = useState(false)
+  return (
+    <div className="profile-head">
+      {profile.avatar && !broken ? (
+        <img className="profile-avatar" src={profile.avatar} alt="" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+      ) : (
+        <div className="profile-avatar" aria-hidden="true" />
+      )}
+      <div className="profile-about">
+        <dl className="profile-stats">
+          {(
+            [
+              [profile.followers, 'Followers'],
+              [profile.following, 'Following'],
+              [profile.likes, 'Likes'],
+            ] as const
+          ).map(([n, label]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{compactCount(n)}</dd>
+            </div>
+          ))}
+        </dl>
+        {profile.bio && <p className="profile-bio">{profile.bio}</p>}
+      </div>
     </div>
   )
 }

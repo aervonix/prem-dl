@@ -23,6 +23,7 @@ import (
 	"yt-dlp-gui/internal/queue"
 	"yt-dlp-gui/internal/settings"
 	"yt-dlp-gui/internal/sys"
+	"yt-dlp-gui/internal/tiktok"
 	"yt-dlp-gui/internal/ytdlp"
 	"yt-dlp-gui/internal/ytweb"
 )
@@ -500,16 +501,17 @@ func (a *App) probe(slot *context.CancelFunc, link string, noPlaylist, stream bo
 	return ProbeResponse{Result: res}
 }
 
-// listNative lists a YouTube channel tab, channel or playlist without yt-dlp (internal/ytweb),
-// as yt-dlp's -J --flat-playlist with --playlist-end=limit would (0 for all). ok is false when
-// yt-dlp has to: another kind of link, a page it handles differently (a missing tab, an error
-// YouTube shows), or extra yt-dlp arguments that could change how it reads the page.
+// listNative lists a YouTube channel tab, channel or playlist (internal/ytweb) or a TikTok
+// profile (internal/tiktok) without yt-dlp, as yt-dlp's -J --flat-playlist with
+// --playlist-end=limit would (0 for all). ok is false when yt-dlp has to: another kind of link,
+// a page it handles differently (a missing tab, an error YouTube shows, a private account), or
+// extra yt-dlp arguments that could change how it reads the page.
 func (a *App) listNative(ctx context.Context, link string, limit int) (*ytdlp.ProbeResult, bool) {
-	s := a.store.Get()
-	if s.ExtraArgs != "" || !ytweb.Handles(link) {
+	list, ok := a.nativeLister(link)
+	if !ok {
 		return nil, false
 	}
-	res, err := a.lister.List(ctx, ytweb.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, link, limit, nil)
+	res, err := list(ctx, limit, nil)
 	if err != nil {
 		if ctx.Err() == nil {
 			a.warn("listing without yt-dlp failed, so yt-dlp lists it instead: " + err.Error())
@@ -517,6 +519,25 @@ func (a *App) listNative(ctx context.Context, link string, limit int) (*ytdlp.Pr
 		return nil, false
 	}
 	return res, true
+}
+
+// nativeLister is how link is listed without yt-dlp, if it can be: the listing, at most limit
+// entries (0 for all), handed to progress in parts as it is read when progress isn't nil.
+func (a *App) nativeLister(link string) (func(ctx context.Context, limit int, progress func(*ytdlp.ProbeResult)) (*ytdlp.ProbeResult, error), bool) {
+	s := a.store.Get()
+	switch {
+	case s.ExtraArgs != "":
+		return nil, false
+	case ytweb.Handles(link):
+		return func(ctx context.Context, limit int, progress func(*ytdlp.ProbeResult)) (*ytdlp.ProbeResult, error) {
+			return a.lister.List(ctx, ytweb.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, link, limit, progress)
+		}, true
+	case tiktok.IsProfile(link):
+		return func(ctx context.Context, limit int, progress func(*ytdlp.ProbeResult)) (*ytdlp.ProbeResult, error) {
+			return tiktok.ListProfile(ctx, tiktok.Options{Proxy: s.Proxy, IPv4: s.ForceIPv4}, link, limit, progress)
+		}, true
+	}
+	return nil, false
 }
 
 // PeekResponse is a YouTube video's title and thumbnail, to show while it's analysed.

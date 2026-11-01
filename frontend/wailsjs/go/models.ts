@@ -1236,6 +1236,34 @@ export namespace ytdlp {
 	        this.version = source["version"];
 	    }
 	}
+	export class ChannelProfile {
+	    name: string;
+	    handle: string;
+	    avatar: string;
+	    bio: string;
+	    verified: boolean;
+	    followers: number;
+	    following: number;
+	    likes: number;
+	    videos: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ChannelProfile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.handle = source["handle"];
+	        this.avatar = source["avatar"];
+	        this.bio = source["bio"];
+	        this.verified = source["verified"];
+	        this.followers = source["followers"];
+	        this.following = source["following"];
+	        this.likes = source["likes"];
+	        this.videos = source["videos"];
+	    }
+	}
 	export class Chapter {
 	    title: string;
 	    start: number;
@@ -1433,6 +1461,8 @@ export namespace ytdlp {
 	    uploader: string;
 	    entries: PlaylistEntry[];
 	    channel: boolean;
+	    profile?: ChannelProfile;
+	    portrait: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new PlaylistInfo(source);
@@ -1446,6 +1476,8 @@ export namespace ytdlp {
 	        this.uploader = source["uploader"];
 	        this.entries = this.convertValues(source["entries"], PlaylistEntry);
 	        this.channel = source["channel"];
+	        this.profile = this.convertValues(source["profile"], ChannelProfile);
+	        this.portrait = source["portrait"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
