@@ -1151,6 +1151,7 @@ export namespace settings {
 	    checkAppUpdates: boolean;
 	    theme: string;
 	    notifySound: boolean;
+	    typingSound: boolean;
 	    notifyPopup: boolean;
 	    notifySystem: boolean;
 	    closeToTray: boolean;
@@ -1185,6 +1186,7 @@ export namespace settings {
 	        this.checkAppUpdates = source["checkAppUpdates"];
 	        this.theme = source["theme"];
 	        this.notifySound = source["notifySound"];
+	        this.typingSound = source["typingSound"];
 	        this.notifyPopup = source["notifyPopup"];
 	        this.notifySystem = source["notifySystem"];
 	        this.closeToTray = source["closeToTray"];

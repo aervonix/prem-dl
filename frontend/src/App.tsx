@@ -13,6 +13,7 @@ import {FollowingPage} from './pages/FollowingPage'
 import {QueuePage} from './pages/QueuePage'
 import {SearchPage} from './pages/SearchPage'
 import {SettingsPage} from './pages/SettingsPage'
+import {setTypingSound} from './sound'
 import {AppProvider, useApp, useJobs} from './store'
 import type {Page} from './store'
 
@@ -71,6 +72,9 @@ function Sidebar() {
 
 function Shell() {
   const {state, go, openLinks} = useApp()
+
+  const typingSound = state.settings?.typingSound ?? false
+  useEffect(() => setTypingSound(typingSound), [typingSound])
 
   // Ctrl+1 to 5 jump between pages. Ctrl+V outside a text box pastes links to the Download page,
   // from wherever the focus is (read through the backend: WebKitGTK sends no paste event there).

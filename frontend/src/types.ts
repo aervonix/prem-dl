@@ -110,6 +110,8 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark'
   /** A click when a download finishes. */
   notifySound: boolean
+  /** Soft key sounds while typing in text boxes. */
+  typingSound: boolean
   /** A card in the corner when a download finishes. */
   notifyPopup: boolean
   /** A Windows notification when a download finishes while the app is in the background. */

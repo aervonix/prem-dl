@@ -132,6 +132,7 @@ type Settings struct {
 	CheckAppUpdates     bool            `json:"checkAppUpdates"`  // look for new Prem-dl releases
 	Theme               string          `json:"theme"`            // system | light | dark
 	NotifySound         bool            `json:"notifySound"`      // a click when a download finishes
+	TypingSound         bool            `json:"typingSound"`      // soft key sounds while typing in text boxes
 	NotifyPopup         bool            `json:"notifyPopup"`      // a card in the corner when one finishes
 	NotifySystem        bool            `json:"notifySystem"`     // a Windows notification when one finishes while the app is in the background
 	CloseToTray         bool            `json:"closeToTray"`      // closing the window keeps the app running in the tray
@@ -158,6 +159,7 @@ func Default() Settings {
 		CheckAppUpdates:     true,
 		Theme:               "system",
 		NotifySound:         true,
+		TypingSound:         true,
 		NotifyPopup:         true,
 		NotifySystem:        true,
 		KeepAwake:           true,

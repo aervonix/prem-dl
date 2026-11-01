@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import {api, errMessage} from '../../api'
 import {Button, Card, Field, Switch} from '../../components/ui'
 import {plural} from '../../format'
+import {playKey} from '../../sound'
 import {systemWords} from '../../platform'
 import {useApp} from '../../store'
 import type {ArchiveInfo, Settings} from '../../types'
@@ -169,6 +170,15 @@ export function GeneralTab({draft, upd}: TabProps) {
               onChange={(v) => upd({notifySystem: v})}
               label={words.notifications}
               description="When a download finishes while you're in another app, with Open and Show in folder buttons."
+            />
+            <Switch
+              checked={draft.typingSound}
+              onChange={(v) => {
+                upd({typingSound: v})
+                if (v) playKey()
+              }}
+              label="Typing sounds"
+              description="Soft, muffled key presses, like a foam keyboard, as you type in Prem-dl's text boxes."
             />
           </div>
         </div>
