@@ -21,3 +21,5 @@ frontend/dist
 /build/notes/
 # notes for coding agents: kept on this machine, not published
 /CLAUDE.md
+# Wails's own fingerprint of package.json (decides whether to run npm install); differs per machine
+/frontend/package.json.md5
