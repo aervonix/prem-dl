@@ -28,7 +28,7 @@ import (
 	"yt-dlp-gui/internal/ytweb"
 )
 
-const appVersion = "0.1.4"
+const appVersion = "0.1.5"
 
 // App is bound to the frontend: every exported method is callable from TypeScript.
 type App struct {

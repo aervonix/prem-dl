@@ -9,7 +9,7 @@
   "info": {
     "companyName": "",
     "productName": "Prem-dl",
-    "productVersion": "0.1.4",
+    "productVersion": "0.1.5",
     "copyright": "",
     "comments": "A desktop downloader built on yt-dlp"
   },
