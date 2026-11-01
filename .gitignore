@@ -19,3 +19,5 @@ frontend/dist
 /build/bundle-host/
 # release notes drafted for a release (CLAUDE.md, "Releases")
 /build/notes/
+# notes for coding agents: kept on this machine, not published
+/CLAUDE.md
