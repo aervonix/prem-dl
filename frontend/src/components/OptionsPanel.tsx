@@ -1,5 +1,6 @@
 import {useState} from 'react'
 import {api} from '../api'
+import {useApp} from '../store'
 import {parseTime} from '../format'
 import {Icon} from '../icons'
 import type {DownloadOptions, SubMode, VideoInfo} from '../types'
@@ -168,11 +169,13 @@ export function OptionsPanel({
             </div>
           )}
         </div>
-
       )}
 
       {/* ---- part of the video ---- */}
       {mode === 'download' && !playlist && !pictures && <PartPicker value={value} onChange={onChange} video={video} />}
+
+      {/* ---- where it goes ---- */}
+      {mode !== 'defaults' && <SaveTo value={value.outputDir} onChange={(d) => set('outputDir', d)} preset={mode === 'preset'} />}
 
       {/* ---- extras ---- */}
       <div className="optgroup">
@@ -293,25 +296,6 @@ export function OptionsPanel({
               </div>
             ) : null}
 
-            {mode !== 'defaults' && (
-              <Field label="Save to" hint="Leave empty to use your default download folder.">
-                <div className="row">
-                  <input type="text" className="grow" value={value.outputDir} placeholder="Default download folder" onChange={(e) => set('outputDir', e.target.value)} />
-                  <Button
-                    onClick={async () => {
-                      const dir = await api.pickDirectory('Choose a download folder', value.outputDir)
-                      if (dir) set('outputDir', dir)
-                    }}>
-                    Browse…
-                  </Button>
-                  {value.outputDir && (
-                    <Button variant="ghost" onClick={() => set('outputDir', '')}>
-                      Reset
-                    </Button>
-                  )}
-                </div>
-              </Field>
-            )}
             {mode !== 'defaults' && <TemplateField value={value.filenameTemplate} onChange={(t) => set('filenameTemplate', t)} />}
             {mode === 'download' && archiveOn && (
               <Switch
@@ -381,5 +365,52 @@ function TemplateField({value, onChange}: {value: string; onChange: (t: string) 
         )}
       </div>
     </Field>
+  )
+}
+
+/**
+ * The folder a download (or a preset's downloads) goes to. It shows the download folder from
+ * Settings until another is chosen, and saves "" for that, so a change in Settings still applies.
+ */
+function SaveTo({value, onChange, preset}: {value: string; onChange: (dir: string) => void; preset: boolean}) {
+  const {state} = useApp()
+  const fallback = state.settings?.downloadDir ?? ''
+  // What is being typed, so emptying the box to type another path doesn't snap back.
+  const [draft, setDraft] = useState<string | null>(null)
+  const pick = (dir: string) => onChange(dir.trim() === fallback ? '' : dir)
+  return (
+    <div className="optgroup">
+      <Field
+        label="Save to"
+        hint={value ? (preset ? 'Only for this preset. Reset goes back to your download folder.' : 'Only for this download. Reset goes back to your download folder.') : 'Your download folder, set in Settings → General.'}>
+        <div className="row">
+          <input
+            type="text"
+            className="grow"
+            aria-label="Save to"
+            value={draft ?? (value || fallback)}
+            placeholder="Download folder"
+            spellCheck={false}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              pick(e.target.value)
+            }}
+            onBlur={() => setDraft(null)}
+          />
+          <Button
+            onClick={async () => {
+              const dir = await api.pickDirectory('Choose a download folder', value || fallback)
+              if (dir) pick(dir)
+            }}>
+            Browse…
+          </Button>
+          {value && (
+            <Button variant="ghost" onClick={() => onChange('')}>
+              Reset
+            </Button>
+          )}
+        </div>
+      </Field>
+    </div>
   )
 }

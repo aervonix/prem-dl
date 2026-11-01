@@ -146,12 +146,8 @@ type Settings struct {
 
 // Default returns first-run settings.
 func Default() Settings {
-	dir, _ := os.UserHomeDir()
-	if dir != "" {
-		dir = filepath.Join(dir, "Downloads")
-	}
 	return Settings{
-		DownloadDir:         dir,
+		DownloadDir:         DownloadsFolder(),
 		FilenameTemplate:    DefaultTemplate,
 		MaxConcurrent:       2,
 		ConcurrentFragments: 4,
